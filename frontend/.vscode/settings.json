@@ -1,0 +1,24 @@
+{
+  "python.defaultInterpreterPath": "c:\\web developing\\foodie\\.locust_env\\Scripts\\python",
+  "github.copilot.chat.mcpServers": {
+    "mcp-locust": {
+      "command": "c:\\web developing\\foodie\\.locust_env\\Scripts\\python",
+      "args": [
+        "-u",
+        "c:\\Users\\ybali\\.antigravity-ide\\extensions\\locust.locust-vscode-extension-0.1.70-universal\\mcp\\server.py"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  },
+  "github.copilot.experimental.mcpServers": {
+    "mcp-locust": {
+      "command": "c:\\web developing\\foodie\\.locust_env\\Scripts\\python",
+      "args": [
+        "-u",
+        "c:\\Users\\ybali\\.antigravity-ide\\extensions\\locust.locust-vscode-extension-0.1.70-universal\\mcp\\server.py"
+      ],
+      "cwd": "${workspaceFolder}"
+    }
+  },
+  "locust.autoSetup": "never"
+}
