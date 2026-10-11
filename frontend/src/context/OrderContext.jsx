@@ -109,12 +109,13 @@ export const OrderProvider = ({ children }) => {
   // stays slow and pauses for a minute after a 5xx so a down database is not stampeded.
   useEffect(() => {
     const pollInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
       const isStaff = currentPath.includes('/admin') || currentPath.includes('/employee');
       if (isStaff && staffHasSession()) {
         fetchOrdersSilently();
       }
-    }, 30000);
+    }, 5000);
 
     return () => clearInterval(pollInterval);
   }, []);

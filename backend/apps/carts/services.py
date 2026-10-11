@@ -10,6 +10,7 @@ from django.db import IntegrityError, transaction
 from apps.accounts.models import User
 from apps.branches.models import DiningTable
 from apps.coupons.models import Coupon
+from apps.menu.images import display_image
 from apps.orders.pricing import MAX_QTY_PER_LINE, Line, PricingError, price_order, public_breakdown
 
 from .models import Cart, CartItem
@@ -103,8 +104,9 @@ def set_quantity(item, quantity):
     return item
 
 
-def set_context(cart, order_type, qr_code=None):
-    """Dine-In needs a valid scanned table of this branch; Takeaway never has a table."""
+def set_context(cart, order_type, qr_code=None, table_id=None):
+    """Dine-In needs a table of this branch: the scanned QR, or a table that is currently available.
+    Takeaway never has a table."""
     if order_type == Cart.OrderType.TAKEAWAY:
         cart.order_type, cart.table = order_type, None
     else:
@@ -114,8 +116,14 @@ def set_context(cart, order_type, qr_code=None):
                                                qr_is_active=True).first()
             if table is None:
                 raise CartError("Invalid or inactive QR code for this branch.", "qr_invalid")
+        elif table_id is not None:
+            table = DiningTable.objects.filter(
+                pk=table_id, branch=cart.branch, is_active=True, qr_is_active=True,
+                status=DiningTable.Status.AVAILABLE).first()
+            if table is None:
+                raise CartError("That table is not available for dine-in.", "table_unavailable")
         elif cart.table_id is None:
-            raise CartError("Scan the table QR code to order Dine-In.", "qr_required")
+            raise CartError("Choose an available table, or scan the table QR code.", "qr_required")
         cart.order_type = order_type
         if table:
             cart.table = table
@@ -166,11 +174,7 @@ def evaluate(cart, request=None, code_override=None):
 
     issues, rows, valid = [], [], []
     for item in items:
-        img = None
-        imgs = list(item.food.images.all())
-        if imgs and request is not None:
-            img = request.build_absolute_uri(imgs[0].image.url)
-        info = _line_info(item, img)
+        info = _line_info(item, display_image(item.food, request))
         line = Line(item.food_id, item.quantity, [o.pk for o in item.options.all()], item.special_instructions)
         try:
             price_order(cart.branch, [line], cart.order_type, None, [])

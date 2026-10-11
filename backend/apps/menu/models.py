@@ -44,6 +44,9 @@ class Food(models.Model):
     protein_grams = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField(default=True)       # soft delete / hidden from menu
     is_sold_out = models.BooleanField(default=False)    # manual sold-out flag; stock status comes from inventory
+    # External image chosen by the admin. When set it is the dish's display image; uploading a new primary
+    # FoodImage clears it so the most recent choice wins.
+    image_url = models.URLField(max_length=1000, blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

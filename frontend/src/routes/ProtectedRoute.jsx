@@ -15,7 +15,9 @@ export const ProtectedRoute = ({ children }) => {
     );
   }
 
-  if (!isAuthenticated) {
+  const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1'
+    && sessionStorage.getItem('foodie_staff_access');
+  if (!isAuthenticated && !staffOrdering) {
     if (location.pathname.startsWith('/customer/')) {
       return <Navigate to="/customer/login" state={{ from: location.pathname }} replace />;
     }

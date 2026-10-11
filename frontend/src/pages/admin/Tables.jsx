@@ -54,6 +54,7 @@ export const Tables = () => {
   };
 
   useEffect(() => {
+    sessionStorage.removeItem('foodie_staff_ordering');
     loadViews();
   }, []);
 
@@ -208,66 +209,37 @@ export const Tables = () => {
     }
   };
 
-  const handleTakeOrder = async (table) => {
-    if (user?.role === 'employee') {
-      window.alert('Assisted ordering is not available. The server places orders from a customer cart only. Update the table status here, then work the order from the kitchen queue.');
-      return;
+  const startStaffOrder = async ({ orderType, table }) => {
+    const { currentBranchId } = await import('../../services/adminApi');
+    const { staffJson } = await import('../../services/staffClient');
+    const { setOrderType, setSelectedTableId } = await import('../../utils/orderContext');
+    const branchId = table?.branch || await currentBranchId();
+    sessionStorage.setItem('foodie_staff_ordering', '1');
+    sessionStorage.setItem('foodie_public_branch', String(branchId));
+    sessionStorage.setItem('foodie_branch_source', 'chosen');
+    sessionStorage.removeItem('foodie_cart');
+    setOrderType(orderType);
+    const body = { branch: Number(branchId), order_type: orderType };
+    if (orderType === 'DINE_IN') {
+      setSelectedTableId(table.id);
+      body.table = table.id;
+    } else {
+      setSelectedTableId(null);
     }
-    let currentDishes = [];
-    let currentCats = [];
-    try {
-      const [dishes, cats] = await Promise.all([
-        productService.getProducts(true).catch(() => []),
-        menuService.getMenus().catch(() => [])
-      ]);
-      currentDishes = dishes || [];
-      currentCats = cats || [];
-    } catch (e) {}
-    
-    if (!currentCats || currentCats.length === 0 || !currentDishes || currentDishes.length === 0) {
-      alert("Cannot take order: no categories or items available in the menu.");
-      return;
-    }
-
-    const rawNum = table.number || table.table_number || table.id;
-    const cleanNum = tableService.getCanonicalTableNumber(rawNum);
-    const tableInfo = { tableNumber: cleanNum, tableId: table.id, diners: table.capacity || 2, orderType: 'DINE_IN' };
-    
-    // Clear any existing cart before starting a new order
-    if (typeof clearCart === 'function') {
-      await clearCart();
-    }
-    
-    setTable(tableInfo);
-    try {
-      sessionStorage.setItem('foodie_table', JSON.stringify(tableInfo));
-      localStorage.setItem('foodie_table', JSON.stringify(tableInfo));
-      sessionStorage.setItem('foodie_order_type', 'DINE_IN');
-      localStorage.setItem('foodie_order_type', 'DINE_IN');
-      
-      if (user) {
-        const id = user.phone ? String(user.phone).replace(/\D/g, '').slice(-10) : (user.id || user.email || 'user');
-        const tId = tableInfo.tableId || tableInfo.tableNumber || 'default';
-        sessionStorage.removeItem(`foodie_cart_${id}_table_${tId}`);
-        sessionStorage.removeItem(`foodie_cart_${id}`);
-      }
-      sessionStorage.removeItem('foodie_cart');
-      sessionStorage.removeItem('foodie_guest_cart_unmerged');
-      localStorage.removeItem('foodie_guest_cart_unmerged');
-      sessionStorage.removeItem('foodie_guest_cart');
-      localStorage.removeItem('foodie_guest_cart');
-      sessionStorage.removeItem('foodie_guest_cart_temp');
-      localStorage.removeItem('foodie_guest_cart_temp');
-    } catch (e) {}
-    
-    // Mark table occupied in background without blocking immediate navigation
-    if (table.status !== 'Occupied') {
-      tableService.updateTableStatus(table.id, 'Occupied').catch((e) => {
-        console.error("Failed to mark table as occupied:", e);
-      });
-    }
-
+    await staffJson('/cart/context/', { method: 'PUT', body: JSON.stringify(body) });
     navigate('/customer/home');
+  };
+
+  const handleTakeOrder = async (table) => {
+    if (String(table.status || '').toLowerCase().startsWith('occup')) {
+      window.alert('This table already has an active order.');
+      return;
+    }
+    try {
+      await startStaffOrder({ orderType: 'DINE_IN', table });
+    } catch (err) {
+      window.alert(err.message || 'This table cannot be used for a new order.');
+    }
   };
 
   const filteredTables = tables.filter((t) => {
@@ -277,7 +249,8 @@ export const Tables = () => {
       if (!isAvail) return false;
     }
     if (activeArea === 'All') return true;
-    return (t.area || '') === activeArea;
+    const view = views.find((item) => item.name === activeArea);
+    return (view && t.tableViewId === view.id) || (t.area || '') === activeArea;
   });
 
   if (loading && (!tables || tables.length === 0)) {
@@ -288,16 +261,12 @@ export const Tables = () => {
     );
   }
 
-  const handleTakeawayOrder = () => {
-    const takeawayInfo = { tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: 'TAKEAWAY' };
-    setTable(takeawayInfo);
+  const handleTakeawayOrder = async () => {
     try {
-      sessionStorage.setItem('foodie_table', JSON.stringify(takeawayInfo));
-      localStorage.setItem('foodie_table', JSON.stringify(takeawayInfo));
-      sessionStorage.setItem('foodie_order_type', 'TAKEAWAY');
-      localStorage.setItem('foodie_order_type', 'TAKEAWAY');
-    } catch (e) {}
-    navigate('/customer/home');
+      await startStaffOrder({ orderType: 'TAKEAWAY' });
+    } catch (err) {
+      window.alert(err.message || 'Takeaway ordering could not be started.');
+    }
   };
 
   if (!loading && (!tables || tables.length === 0)) {
@@ -308,15 +277,13 @@ export const Tables = () => {
           showBackButton
           actions={
             <div className="d-flex align-items-center gap-2">
-              {user?.role !== 'employee' && (
-            <Button 
+              <Button 
                 onClick={handleTakeawayOrder} 
                 variant="outline" 
                 className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs"
               >
                 <FiShoppingCart /> Takeaway Order
               </Button>
-            )}
               {isAdmin && (
                 <Button 
                   onClick={() => setIsAddOpen(true)} 
@@ -356,7 +323,6 @@ export const Tables = () => {
         showBackButton
         actions={
           <div className="d-flex align-items-center gap-2">
-            {user?.role !== 'employee' && (
             <Button 
               onClick={handleTakeawayOrder} 
               variant="outline" 
@@ -364,7 +330,6 @@ export const Tables = () => {
             >
               <FiShoppingCart /> Takeaway Order
             </Button>
-            )}
             {isAdmin && (
               <Button 
                 onClick={() => setIsAddOpen(true)} 
@@ -426,10 +391,11 @@ export const Tables = () => {
             if (!name) return;
             try {
               const { createTableView } = await import('../../services/adminApi');
-              await createTableView(name);
+              const created = await createTableView(name);
               setNewViewName('');
               setViewError('');
               await loadViews();
+              if (created?.name) setActiveArea(created.name);
             } catch (err) {
               setViewError(err.message || 'Could not add that view.');
             }

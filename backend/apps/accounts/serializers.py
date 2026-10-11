@@ -58,10 +58,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source="user.email", required=False, allow_null=True, allow_blank=True)
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
     branch_name = serializers.CharField(source="branch.name", read_only=True, default=None)
+    user_id = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Employee
-        fields = ["id", "employee_code", "name", "phone", "email", "password", "branch", "branch_name", "role",
+        fields = ["id", "user_id", "employee_code", "name", "phone", "email", "password", "branch", "branch_name", "role",
                   "department", "job_title", "bill_access", "status", "created_at"]
         read_only_fields = ["id", "employee_code", "created_at"]
 

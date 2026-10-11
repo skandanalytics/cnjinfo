@@ -163,9 +163,12 @@ export const MenuEditor = () => {
         console.warn("Could not auto-create Combo Offer category:", e);
       }
     }
-    await productService.createProduct(finalData);
-    clearStaticProductCache();
-    await fetchDetails();
+    try {
+      await productService.createProduct(finalData);
+    } finally {
+      clearStaticProductCache();
+      await fetchDetails();
+    }
   };
 
   const handleEditDish = async (id, dishData) => {
@@ -178,9 +181,15 @@ export const MenuEditor = () => {
   const handleDeleteConfirm = async () => {
     if (!isAdmin) return;
     if (deletingDishId) {
-      await productService.deleteProduct(deletingDishId);
-      setDeletingDishId(null);
-      fetchDetails();
+      try {
+        await productService.deleteProduct(deletingDishId);
+        clearStaticProductCache();
+        await fetchDetails();
+      } catch (err) {
+        window.alert(err.message || 'The dish could not be deleted.');
+      } finally {
+        setDeletingDishId(null);
+      }
     }
   };
 
@@ -707,9 +716,13 @@ export const MenuEditor = () => {
                   onDelete={() => setDeletingDishId(dish.id)}
                   isAdmin={isAdmin}
                   onRestock={async (item, qty) => {
-                    const { setStock } = await import('../../services/adminApi');
-                    const current = Number(item.stock || 0);
-                    await setStock(item.id, current + qty);
+                    const { restockFood, explain } = await import('../../services/adminApi');
+                    try {
+                      await restockFood(item.id, qty);
+                    } catch (err) {
+                      throw new Error(explain(err));
+                    }
+                    clearStaticProductCache();
                     await fetchDetailsSilently();
                   }}
                 />
@@ -739,7 +752,7 @@ export const MenuEditor = () => {
       {isAdmin && isAddOpen && (
         <AddDishModal
           isOpen={isAddOpen}
-          defaultCategory={comboMode ? 'Combo Offer' : currentCategoryName}
+          defaultCategory={comboMode ? 'Combo Offer' : (isAllSelected ? '' : currentCategoryName)}
           onClose={() => setIsAddOpen(false)}
           onAdd={handleAddDish}
         />
@@ -786,7 +799,7 @@ export const MenuEditor = () => {
         <ConfirmModal
           isOpen={!!deletingDishId}
           title="Delete Dish"
-          message="Are you sure you want to delete this dish from the menu? This action cannot be undone."
+          message={`Delete "${(dishes.find((d) => d.id === deletingDishId) || {}).name || 'this dish'}" from the menu? Past orders that included it are kept. This does not change another dish's stock.`}
           onConfirm={handleDeleteConfirm}
           onClose={() => setDeletingDishId(null)}
         />

@@ -107,14 +107,6 @@ const mapProductToFrontend = (food, categories, inventory, images) => {
     ? 'Out of Stock' 
     : (stock <= 5 ? 'Low Stock' : 'In Stock');
 
-  // Check local saved image override first (from admin upload)
-  let savedImages = {};
-  try {
-    savedImages = JSON.parse(localStorage.getItem('foodie_dish_images') || '{}');
-  } catch (e) { }
-
-  const savedImg = savedImages[foodId] || savedImages[String(foodId)] || savedImages[Number(foodId)];
-
   // Check nested images array directly attached to food object (if any)
   let foodObjImg = null;
   if (Array.isArray(food.images) && food.images.length > 0) {
@@ -136,7 +128,8 @@ const mapProductToFrontend = (food, categories, inventory, images) => {
   const primaryImg = foodImgs.find(img => img.is_primary) || foodImgs[0];
   const dbImgUrl = primaryImg ? (primaryImg.image_url || primaryImg.image || primaryImg.image_path) : null;
 
-  let rawImage = dbImgUrl || foodObjImg || food.image || food.image_url || food.img || food.photo || savedImg || '';
+  // primary_image is the backend's display image (admin URL first, then the primary upload).
+  let rawImage = food.primary_image || food.image_url || food.image || dbImgUrl || foodObjImg || food.img || food.photo || '';
   if (typeof rawImage === 'string' && (rawImage === 'undefined' || rawImage === 'null' || rawImage === '[object Object]')) {
     rawImage = '';
   }
@@ -437,7 +430,7 @@ export const productService = {
         type: food.diet_type === 'VEGAN' ? 'vegan' : (food.diet_type === 'NON_VEG' ? 'non-veg' : 'veg'),
         is_available: food.is_orderable,
         stock: food.is_orderable === false || food.stock_status === 'OUT_OF_STOCK' ? 0 : (food.stock_status === 'LOW_STOCK' ? 5 : undefined),
-        image: food.primary_image,
+        image: food.primary_image || '',
         images: (food.images || []).map(i => ({ image_url: i.url, is_primary: i.is_primary })),
       }, categories, [], []));
       cachedMappedProducts = mapped;
@@ -514,7 +507,7 @@ export const productService = {
   createProduct: async (data) => {
     const { isStaffScreen, createFood, explain } = await import('./adminApi');
     if (isStaffScreen()) {
-      try { return await createFood(data); } catch (err) { throw new Error(explain(err)); }
+      try { return await createFood(data); } catch (err) { throw err.dishSaved ? err : new Error(explain(err)); }
     }
     // Resolve category name to ID
     const catList = await getCachedCategories();

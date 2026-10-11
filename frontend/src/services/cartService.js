@@ -1,4 +1,5 @@
 import api from './api';
+import { extractApiErrorMessage } from '../utils/errorUtils';
 
 const _isValidId = (id) => {
   if (id === undefined || id === null) return false;
@@ -219,16 +220,18 @@ export const cartService = {
 
   addItemToCart: async (cartId, foodId, quantity, price, extraOptions = {}) => {
     const branch = customerBranchId();
-    if (!branch || !_isValidNumericId(foodId)) return null;
+    if (!branch) throw new Error('Choose a restaurant before adding items.');
+    if (!_isValidNumericId(foodId)) throw new Error('This dish is not available.');
     try {
       const res = await api.post('/cart/items/', {
         branch: Number(branch), food: Number(foodId), quantity: parseInt(quantity, 10) || 1,
         options: extraOptions.optionIds || [], special_instructions: extraOptions.instructions || '',
       });
-      return res.data;
+      const line = [...(res.data?.items || [])].reverse().find((i) => Number(i.food_id) === Number(foodId));
+      return { ...res.data, cart_item_id: line?.item_id };
     } catch (e) {
       console.error("[CART SERVICE] addItemToCart error:", e.response?.data || e.message);
-      return null;
+      throw new Error(extractApiErrorMessage(e, 'This item could not be added to your cart.'));
     }
   },
 
@@ -298,21 +301,10 @@ export const cartService = {
     }
   },
 
-  clearCart: async (cartId) => {
-    if (!_isValidNumericId(cartId)) return false;
-    try {
-      const items = await cartService.getCartItems(cartId);
-      for (const item of items) {
-        if (_isValidNumericId(item.id)) {
-          try { await api.delete(`/orders/cart-items/${item.id}/`); } catch (e) { /* ignore */ }
-        }
-      }
-      try {
-        await api.patch(`/orders/carts/${cartId}/`, {
-          status: 'CHECKED_OUT'
-        });
-      } catch (e) { /* ignore */ }
-    } catch (e) { /* ignore */ }
+  clearCart: async () => {
+    const branch = customerBranchId();
+    if (!branch) return false;
+    await api.delete(`/cart/?branch=${branch}`);
     return true;
   }
 };

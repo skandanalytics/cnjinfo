@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
-import { getImageUrl } from '../../utils/imageUtils';
+import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 
 export const DishCard = ({
   dish,
@@ -54,7 +54,7 @@ export const DishCard = ({
             onError={(event) => {
               console.warn('Food image failed to load, applying fallback:', event.currentTarget.src);
               event.currentTarget.onerror = null;
-              event.currentTarget.src = 'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=600&auto=format&fit=crop&q=80';
+              event.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
             }}
           />
 

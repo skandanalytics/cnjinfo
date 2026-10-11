@@ -7,10 +7,9 @@ import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Badge from '../../components/common/Badge';
 import formatCurrency from '../../utils/formatCurrency';
-import { FiClock, FiChevronRight, FiDownload, FiFileText, FiEye } from 'react-icons/fi';
+import { FiClock, FiChevronRight, FiFileText, FiEye } from 'react-icons/fi';
 import Modal from '../../components/common/Modal';
 import BackButton from '../../components/common/BackButton';
-import { generateEBillPDF } from '../../utils/generateEBillPDF';
 import { normalizeFoodType } from '../../utils/filters';
 import { EBillModal } from '../../components/orders/EBillModal';
 
@@ -20,20 +19,7 @@ export const OrderHistory = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedOrder, setSelectedOrder] = useState(null);
-  const [downloadingPdfId, setDownloadingPdfId] = useState(null);
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
-
-  const handleDownloadEBill = async (e, ord) => {
-    if (e && e.stopPropagation) e.stopPropagation();
-    const targetId = ord.id || ord.order_id || ord.orderId;
-    setDownloadingPdfId(targetId);
-    try {
-      await generateEBillPDF(ord);
-    } catch (err) {
-      console.error("[E-BILL DOWNLOAD ERROR]", err);
-    }
-    setDownloadingPdfId(null);
-  };
 
   const fetchHistorySilently = async () => {
     try {
@@ -172,13 +158,12 @@ export const OrderHistory = () => {
                                 return (
                                   <button
                                     type="button"
-                                    onClick={(e) => handleDownloadEBill(e, ord)}
-                                    disabled={downloadingPdfId === (ord.id || ord.order_id || ord.orderId)}
+                                    onClick={(e) => { e.stopPropagation(); setViewingBillOrder(ord); }}
                                     className="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.5 d-flex align-items-center gap-1"
                                     style={{ fontSize: '11px' }}
-                                    title="Download E-Bill"
+                                    title="View E-Bill"
                                   >
-                                    <FiDownload size={11} />
+                                    <FiEye size={11} />
                                     <span>E-Bill</span>
                                   </button>
                                 );
@@ -263,13 +248,12 @@ export const OrderHistory = () => {
                           return (
                             <button
                               type="button"
-                              onClick={(e) => handleDownloadEBill(e, selectedOrder)}
-                              disabled={downloadingPdfId === (selectedOrder.id || selectedOrder.order_id || selectedOrder.orderId)}
+                              onClick={(e) => { e.stopPropagation(); setViewingBillOrder(selectedOrder); setSelectedOrder(null); }}
                               className="btn btn-sm btn-outline-danger fw-bold rounded-pill px-3 py-1.5 d-flex align-items-center gap-1"
                               style={{ fontSize: '12px' }}
                             >
-                              <FiDownload size={13} />
-                              <span>Download E-Bill</span>
+                              <FiEye size={13} />
+                              <span>View E-Bill</span>
                             </button>
                           );
                         }

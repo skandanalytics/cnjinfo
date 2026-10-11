@@ -1,4 +1,4 @@
-from django.http import FileResponse
+from django.http import HttpResponse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -6,6 +6,7 @@ from apps.accounts.permissions import IsStaffMember
 from apps.accounts.scoping import can_access_branch
 from apps.orders.models import Order
 
+from .pdf import render_invoice_pdf
 from .services import ensure_final_invoice, preview_bill
 
 
@@ -32,9 +33,9 @@ class InvoiceDownloadView(APIView):
                 status=409,
             )
         invoice = ensure_final_invoice(order)
-        handle = invoice.pdf_file.open("rb")
-        response = FileResponse(handle, content_type="application/pdf")
-        response["Content-Disposition"] = f'attachment; filename="{invoice.invoice_number}.pdf"'
+        # Render from the saved snapshot on each download, so a layout change does not need a new invoice.
+        response = HttpResponse(render_invoice_pdf(invoice), content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="Foodie-Invoice-{invoice.invoice_number}.pdf"'
         return response
 
 

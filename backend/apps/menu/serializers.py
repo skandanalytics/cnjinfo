@@ -5,10 +5,12 @@ from apps.accounts.mixins import BranchBoundSerializerMixin
 from apps.accounts.scoping import allowed_branch_id
 from apps.branches.models import Branch
 
+from .images import display_image, uploaded_url
 from .models import Category, CustomizationOption, DishDiscount, Food, FoodImage
 from .pricing_helpers import current_discount, is_orderable, money, stock_status
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_IMAGE_URL_SCHEMES = ("http", "https")
 
 
 class CategorySerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
@@ -86,6 +88,8 @@ class FoodImageSerializer(serializers.ModelSerializer):
         elif not siblings.exclude(pk=image.pk).filter(is_primary=True).exists():
             image.is_primary = True  # a dish always has a primary image once it has any image
             image.save(update_fields=["is_primary"])
+        if image.is_primary and image.food.image_url:
+            Food.objects.filter(pk=image.food_id).update(image_url="")  # the new upload replaces the URL
 
     def create(self, validated):
         image = super().create(validated)
@@ -145,8 +149,8 @@ class FoodSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
         model = Food
         fields = ["id", "branch", "category", "category_name", "name", "description", "ingredients", "diet_type",
                   "price", "original_price", "discounted_price", "current_discount", "calories", "protein_grams",
-                  "is_active", "is_sold_out", "stock_status", "is_orderable", "images", "primary_image",
-                  "customizations", "created_at", "updated_at"]
+                  "is_active", "is_sold_out", "stock_status", "is_orderable", "image_url", "images",
+                  "primary_image", "customizations", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
         validators = []
 
@@ -167,16 +171,18 @@ class FoodSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
     def get_is_orderable(self, obj):
         return is_orderable(obj)
 
-    def _url(self, img):
-        request = self.context.get("request")
-        return request.build_absolute_uri(img.image.url) if request else img.image.url
-
     def get_images(self, obj):
-        return [{"id": i.id, "url": self._url(i), "is_primary": i.is_primary} for i in obj.images.all()]
+        request = self.context.get("request")
+        return [{"id": i.id, "url": uploaded_url(request, i), "is_primary": i.is_primary} for i in obj.images.all()]
 
     def get_primary_image(self, obj):
-        imgs = list(obj.images.all())
-        return self._url(imgs[0]) if imgs else None  # ordering puts the primary first
+        return display_image(obj, self.context.get("request"))
+
+    def validate_image_url(self, value):
+        value = (value or "").strip()
+        if value and value.split(":", 1)[0].lower() not in ALLOWED_IMAGE_URL_SCHEMES:
+            raise serializers.ValidationError("Image URL must start with http:// or https://.")
+        return value
 
     def validate_price(self, value):
         if value < 0:

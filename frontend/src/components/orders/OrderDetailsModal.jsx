@@ -3,8 +3,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import formatCurrency from '../../utils/formatCurrency';
 import { useAuth } from '../../hooks/useAuth';
-import { FiDownload } from 'react-icons/fi';
-import { generateEBillPDF } from '../../utils/generateEBillPDF';
+import { FiEye } from 'react-icons/fi';
 
 export const OrderDetailsModal = ({
   isOpen,
@@ -59,7 +58,7 @@ export const OrderDetailsModal = ({
           className="btn btn-outline-danger fw-bold d-flex align-items-center gap-1.5 rounded-pill px-3 py-2"
           style={{ fontSize: '13px' }}
         >
-          <FiDownload size={15} />
+          <FiEye size={15} />
           <span>View E-Bill</span>
         </button>
 

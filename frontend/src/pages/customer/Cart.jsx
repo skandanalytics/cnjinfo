@@ -10,9 +10,13 @@ import BackButton from '../../components/common/BackButton';
 import useProducts from '../../hooks/useProducts';
 import { getProductSellingPrice } from '../../utils/pricing';
 import { couponService, mockCoupons, isFirstTimeCustomer } from '../../services/couponService';
-import { getImageUrl } from '../../utils/imageUtils';
+import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 import { useAuth } from '../../hooks/useAuth';
 import { normalizeFoodType } from '../../utils/filters';
+import api from '../../services/api';
+import { applyOrderContext, customerBranchId } from '../../services/customerCheckout';
+import { getOrderType } from '../../utils/orderContext';
+import ServerBillSummary from '../../components/customer/ServerBillSummary';
 
 export const Cart = () => {
   const navigate = useNavigate();
@@ -67,6 +71,25 @@ export const Cart = () => {
     return () => { isMounted = false; };
   }, [user]);
 
+  const isCustomer = (isAuthenticated && user?.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1';
+  const [serverCart, setServerCart] = useState(null);
+  useEffect(() => {
+    const branch = customerBranchId();
+    if (!isCustomer || !branch) return undefined;
+    let active = true;
+    // Cart edits reach the server asynchronously; wait briefly so the bill reflects the latest change.
+    const timer = setTimeout(() => {
+      const chosen = getOrderType();
+      const load = chosen
+        ? applyOrderContext(chosen).catch(() => api.get(`/cart/?branch=${branch}`, { bypassCache: true }).then((res) => res.data))
+        : api.get(`/cart/?branch=${branch}`, { bypassCache: true }).then((res) => res.data);
+      load
+        .then((view) => { if (active) setServerCart(view); })
+        .catch(() => { if (active) setServerCart(null); });
+    }, 700);
+    return () => { active = false; clearTimeout(timer); };
+  }, [isCustomer, cartItems, coupon]);
+
   const handleQuickApply = async (code) => {
     const res = await applyCoupon(code);
     setPromoMessage(res.message);
@@ -112,7 +135,8 @@ export const Cart = () => {
       sessionStorage.setItem('foodie_guest_cart_unmerged', JSON.stringify(cartItems));
     } catch (e) {}
 
-    if (isAuthenticated) {
+    const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
+    if (isAuthenticated || staffOrdering) {
       navigate('/customer/checkout');
     } else {
       navigate('/customer/login', { state: { from: '/customer/checkout' } });
@@ -268,7 +292,7 @@ export const Cart = () => {
                                 style={{ width: '40px', height: '40px', objectFit: 'cover' }}
                                 onError={(event) => {
                                   console.error('Failed to load food image:', event.currentTarget.src);
-                                  event.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&auto=format&fit=crop&q=80';
+                                  event.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
                                 }}
                               />
                               <div className="flex-grow-1 min-width-0">
@@ -501,8 +525,27 @@ export const Cart = () => {
 
           {/* Right Column: Invoice Details */}
           <div className="col-12 col-lg-4">
+            {isCustomer && serverCart ? (
+              <ServerBillSummary cart={serverCart}>
+                <div className="d-grid gap-2">
+                  <Button onClick={handleCheckout} variant="primary" className="py-2.5 fw-bold shadow-sm">
+                    Proceed to Checkout
+                  </Button>
+                  <Button
+                    onClick={() => navigate('/customer/home')}
+                    variant="outline-primary"
+                    className="py-2.5 fw-bold border-danger text-danger bg-white"
+                  >
+                    Save and Continue (Add More Items)
+                  </Button>
+                </div>
+              </ServerBillSummary>
+            ) : (
             <div className="card rounded-3 border-0 shadow-sm p-3 p-sm-4 bg-white mb-4">
-              <h5 className="fw-bold text-dark mb-3 border-bottom pb-2">Order Bill Details</h5>
+              <h5 className="fw-bold text-dark mb-1">Estimated Bill</h5>
+              <p className="text-secondary small border-bottom pb-2 mb-3">
+                The final bill, including the restaurant's tax and charges, is calculated at checkout after you sign in.
+              </p>
               
               <div className="d-flex align-items-center justify-content-between mb-2">
                 <span className="text-secondary small">Item Subtotal</span>
@@ -545,13 +588,13 @@ export const Cart = () => {
               )}
               
               <div className="d-flex align-items-center justify-content-between mb-2">
-                <span className="text-secondary small">GST Tax (5%)</span>
+                <span className="text-secondary small">Estimated Tax</span>
                 <span className="fw-bold text-dark">{formatCurrency(getTax())}</span>
               </div>
               
               <div className="d-flex align-items-center justify-content-between mb-2">
                 <div className="d-flex align-items-center gap-1.5">
-                  <span className="text-secondary small">Service Charge (2%)</span>
+                  <span className="text-secondary small">Estimated Service Charge</span>
                 </div>
                 <span className={`fw-bold ${isServiceChargeRemoved ? 'text-muted text-decoration-line-through' : 'text-dark'}`}>
                   {isServiceChargeRemoved ? '₹0' : formatCurrency(getServiceCharge())}
@@ -559,7 +602,7 @@ export const Cart = () => {
               </div>
               
               <div className="d-flex align-items-center justify-content-between my-3 pt-3 border-top fw-bold fs-5 text-dark">
-                <span>Grand Total</span>
+                <span>Estimated Total</span>
                 <span className="text-danger fw-bold fs-4">{formatCurrency(getGrandTotal())}</span>
               </div>
 
@@ -576,6 +619,7 @@ export const Cart = () => {
                 </Button>
               </div>
             </div>
+            )}
           </div>
         </div>
       </main>

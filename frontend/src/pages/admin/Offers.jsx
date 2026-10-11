@@ -14,7 +14,7 @@ import { FiPlus, FiTrash2, FiEdit2, FiTag, FiGift } from 'react-icons/fi';
 import couponService from '../../services/couponService';
 import { productService } from '../../services/productService';
 import formatCurrency from '../../utils/formatCurrency';
-import { getImageUrl } from '../../utils/imageUtils';
+import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 
 export const Offers = () => {
   const [activeTab, setActiveTab] = useState('dishes'); // 'dishes' | 'coupons'
@@ -404,7 +404,7 @@ export const Offers = () => {
                               className="rounded-3 shadow-sm"
                               style={{ width: '44px', height: '44px', objectFit: 'cover' }}
                               onError={(event) => {
-                                event.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&auto=format&fit=crop&q=80';
+                                event.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
                               }}
                             />
                             <div>

@@ -15,7 +15,12 @@ class Branch(models.Model):
     code = models.CharField(max_length=30, unique=True)
     address = models.TextField()
     contact_number = models.CharField(max_length=30, blank=True)
+    email = models.EmailField(max_length=254, blank=True, default="")
+    city = models.CharField(max_length=100, blank=True, default="")
     manager_name = models.CharField(max_length=255, blank=True)
+    opening_hours = models.CharField(max_length=100, blank=True, default="")
+    cover_image_url = models.URLField(max_length=1000, blank=True, default="")
+    is_primary = models.BooleanField(default=False)  # at most one branch is the main headquarters
     is_active = models.BooleanField(default=True)
 
     # Tax and charge configuration. The SRS gives no rates, so they default to 0 until configured by an admin.
@@ -31,6 +36,8 @@ class Branch(models.Model):
     class Meta:
         db_table = "branches"
         indexes = [models.Index(fields=["is_active", "name"])]
+        constraints = [models.UniqueConstraint(
+            fields=["is_primary"], condition=models.Q(is_primary=True), name="uq_one_primary_branch")]
 
     def __str__(self):
         return self.name

@@ -17,6 +17,7 @@ class BillingError(Exception):
 def breakdown(order):
     """The same money fields already stored on the order. Nothing is repriced."""
     branch = order.branch
+    placed = order.created_at.strftime("%d %b %Y, %H:%M") if order.created_at else ""
     items = [{
         "name": item.food_name,
         "quantity": item.quantity,
@@ -26,7 +27,11 @@ def breakdown(order):
     return {
         "order_id": order.id,
         "order_number": order.order_number,
-        "branch": {"id": branch.id, "name": branch.name, "code": branch.code},
+        "branch": {
+            "id": branch.id, "name": branch.name, "code": branch.code,
+            "address": branch.address, "city": branch.city, "phone": branch.contact_number, "email": branch.email,
+        },
+        "order_type": order.order_type, "table_label": order.table_label, "placed_at": placed,
         "status": order.status,
         "payment_status": order.payment_status,
         "items": items,

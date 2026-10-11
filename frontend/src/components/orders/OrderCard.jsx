@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import Badge from '../common/Badge';
 import formatCurrency from '../../utils/formatCurrency';
-import { FiClock, FiLayers, FiDownload } from 'react-icons/fi';
-import { generateEBillPDF } from '../../utils/generateEBillPDF';
+import { FiClock, FiLayers, FiEye } from 'react-icons/fi';
 
 export const OrderCard = ({
   order,
@@ -46,7 +45,7 @@ export const OrderCard = ({
               className="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold d-flex align-items-center gap-1"
               title="View E-Bill"
             >
-              <FiDownload size={13} />
+              <FiEye size={13} />
               <span>Show Bill</span>
             </button>
             <button 

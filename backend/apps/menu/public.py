@@ -13,14 +13,11 @@ from rest_framework.views import APIView
 from apps.branches.models import Branch
 from apps.coupons.models import Coupon
 
+from .images import display_image, uploaded_url
 from .models import Category, Food
 from .pricing_helpers import current_discount, is_orderable, money, stock_status
 
 MENU_SORTS = {"price", "-price", "discount", "name"}
-
-
-def image_url(request, img):
-    return request.build_absolute_uri(img.image.url)
 
 
 def public_food(food, request, now=None):
@@ -35,8 +32,8 @@ def public_food(food, request, now=None):
         "discount_percent": str(percent), "has_discount": disc is not None,
         "calories": food.calories, "protein_grams": None if food.protein_grams is None else str(food.protein_grams),
         "is_orderable": is_orderable(food), "stock_status": stock_status(food),
-        "primary_image": image_url(request, imgs[0]) if imgs else None,
-        "images": [{"id": i.id, "url": image_url(request, i), "is_primary": i.is_primary} for i in imgs],
+        "primary_image": display_image(food, request),
+        "images": [{"id": i.id, "url": uploaded_url(request, i), "is_primary": i.is_primary} for i in imgs],
         "customizations": [{"id": o.id, "name": o.name, "extra_price": str(o.extra_price)}
                            for o in food.customizations.all() if o.is_active],
     }

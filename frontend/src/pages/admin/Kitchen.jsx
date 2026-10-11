@@ -26,7 +26,7 @@ export const Kitchen = () => {
     /steward|waiter/i.test(String(user?.designation || '')) ||
     String(user?.department || '').toLowerCase().includes('dining')
   );
-  const [showAllOrders, setShowAllOrders] = useState(!isWaiter);
+  const [showAllOrders, setShowAllOrders] = useState(true);
 
   // Determine initial branch from user's assigned branch or fallback to main branch
   const userAssignedBranch = user?.branchId || user?.restaurant || user?.restaurant_id || null;
@@ -422,9 +422,13 @@ export const Kitchen = () => {
   const activeBranchFilteredOrders = allKitchenOrders.filter((ord) => {
     if (!ord || (!ord.id && !ord.order_id)) return false;
 
-    // Branch filtering
-    if (selectedBranch && selectedBranch !== 'ALL') {
-      const orderBranch = ord.restaurant || ord.restaurant_id || ord.restaurantId || ord.branch || ord.branch_id || ord.branchId;
+    // Branch filtering. A branch employee already receives only their branch from the API.
+    const staffUser = (() => {
+      try { return JSON.parse(sessionStorage.getItem('foodie_auth_admin') || '{}').user; } catch { return null; }
+    })();
+    const branchEmployee = staffUser?.role === 'employee' && staffUser?.branchId;
+    if (!branchEmployee && selectedBranch && selectedBranch !== 'ALL') {
+      const orderBranch = ord.branchId || ord.branch_id || ord.restaurant || ord.restaurant_id || ord.restaurantId;
       const selectedBranchObj = branches.find(b => String(b.id) === String(selectedBranch));
 
       if (orderBranch) {
@@ -444,13 +448,13 @@ export const Kitchen = () => {
       const empIdStr = String(user.id || '').trim();
       const empUsername = String(user.username || user.name || '').toLowerCase().trim();
       
-      let ordEmpId = '';
-      if (ord.takenBy && typeof ord.takenBy === 'object') {
+      let ordEmpId = String(ord.placedById || '');
+      if (!ordEmpId && ord.takenBy && typeof ord.takenBy === 'object') {
         ordEmpId = String(ord.takenBy.id || ord.takenBy.user || '');
-      } else if (ord.employee && typeof ord.employee === 'object') {
+      } else if (!ordEmpId && ord.employee && typeof ord.employee === 'object') {
         ordEmpId = String(ord.employee.id || ord.employee.user || '');
-      } else {
-        ordEmpId = String(ord.employee || ord.employee_id || ord.employeeId || ord.taken_by || ord.takenBy || ord.created_by || ord.createdBy || ord.operator || ord.server || ord.user || '');
+      } else if (!ordEmpId) {
+        ordEmpId = String(ord.placedByName || ord.employee || ord.employee_id || ord.taken_by || ord.takenBy || '');
       }
 
       const ordEmpStr = ordEmpId.toLowerCase().trim();
@@ -873,7 +877,7 @@ export const Kitchen = () => {
                         )}
                         <button
                           type="button"
-                          onClick={() => import('../../services/adminApi').then(({ downloadInvoice }) => downloadInvoice(ord))}
+                          onClick={() => setEBillOrder(ord)}
                           className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1.5 fw-bold btn btn-sm d-inline-flex align-items-center"
                           style={{ fontSize: '11px', cursor: 'pointer' }}
                         >

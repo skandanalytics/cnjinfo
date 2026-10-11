@@ -1,6 +1,6 @@
 import React from 'react';
 import QuantityControl from './QuantityControl';
-import { getImageUrl } from '../../utils/imageUtils';
+import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 
 export const CartItem = ({
   item,
@@ -22,7 +22,7 @@ export const CartItem = ({
             style={{ width: '80px', height: '80px', objectFit: 'cover' }}
             onError={(event) => {
               console.error('Failed to load food image:', event.currentTarget.src);
-              event.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&auto=format&fit=crop&q=80';
+              event.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
             }}
           />
         </div>

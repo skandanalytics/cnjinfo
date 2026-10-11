@@ -57,9 +57,15 @@ export const CustomerLogin = () => {
 
     setOtpLoading(true);
     try {
-      await sendOTP(phone);
+      const sent = await sendOTP(phone);
       setOtpSent(true);
-      setInfoMessage('OTP sent successfully! (Demo: use 123456)');
+      if (sent?.dev_otp) {
+        setOtp(String(sent.dev_otp));
+        setInfoMessage(`OTP sent. Your code is ${sent.dev_otp}`);
+      } else {
+        setOtp('');
+        setInfoMessage('OTP sent to your mobile.');
+      }
     } catch (err) {
       setError(err.message || 'Failed to send OTP. Please try again.');
     } finally {
@@ -211,8 +217,8 @@ export const CustomerLogin = () => {
 
               <Input
                 label="Enter 6-Digit OTP"
-                type="password"
-                placeholder="Enter 6-digit code (e.g. 123456)"
+                type="text"
+                placeholder="Enter the 6-digit code"
                 value={otp}
                 onChange={(e) => {
                   setOtp(e.target.value.replace(/\D/g, '').slice(0, 6));

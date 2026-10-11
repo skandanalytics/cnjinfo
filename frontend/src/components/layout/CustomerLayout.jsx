@@ -9,6 +9,7 @@ import { orderService, isOrderOwnedByCustomer } from '../../services/orderServic
 import formatCurrency from '../../utils/formatCurrency';
 import Toast from '../common/Toast';
 import { FiChevronRight } from 'react-icons/fi';
+import { getOrderType, hasDineInTable } from '../../utils/orderContext';
 
 export const CustomerLayout = ({ children }) => {
   const navigate = useNavigate();
@@ -82,10 +83,10 @@ export const CustomerLayout = ({ children }) => {
     <div className="d-flex flex-column min-vh-100 bg-light">
       {/* Table Context Overlay Banner */}
       {(() => {
-        const savedType = sessionStorage.getItem('foodie_order_type') || localStorage.getItem('foodie_order_type') || tableContext?.orderType;
-        const isTakeaway = savedType === 'TAKEAWAY' || tableContext?.tableNumber === 'Takeaway';
-        
-        if (!tableContext && !savedType) return null;
+        const savedType = getOrderType();
+        const isTakeaway = savedType === 'TAKEAWAY';
+
+        if (!savedType) return null;
 
         if (isTakeaway) {
           return (
@@ -99,9 +100,10 @@ export const CustomerLayout = ({ children }) => {
           );
         }
 
-        const tableDisplay = tableContext?.tableNumber && tableContext.tableNumber !== 'Takeaway' 
-          ? tableContext.tableNumber 
-          : 'T01';
+        if (!hasDineInTable()) return null;
+        const tableDisplay = tableContext?.tableNumber && tableContext.tableNumber !== 'Takeaway'
+          ? tableContext.tableNumber
+          : 'scanned table';
 
         return (
           <div 

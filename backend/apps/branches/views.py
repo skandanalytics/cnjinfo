@@ -28,7 +28,7 @@ class BranchViewSet(AuditedMixin, viewsets.ModelViewSet):
     queryset = Branch.objects.all().order_by("name")
     serializer_class = BranchSerializer
     filterset_fields = ["is_active"]
-    search_fields = ["name", "code", "address", "manager_name"]
+    search_fields = ["name", "code", "address", "city", "email", "manager_name"]
 
     def get_permissions(self):
         if self.action in ("create", "destroy"):
@@ -38,7 +38,8 @@ class BranchViewSet(AuditedMixin, viewsets.ModelViewSet):
         return [IsStaffMember()]
 
     def get_queryset(self):
-        qs = super().get_queryset()
+        qs = super().get_queryset().annotate(
+            tables_count=Count("tables", filter=Q(tables__is_active=True)))
         try:
             allowed = allowed_branch_id(self.request.user)
         except LookupError:
@@ -54,7 +55,8 @@ class BranchViewSet(AuditedMixin, viewsets.ModelViewSet):
             return Response({"detail": "This branch has active orders. Finish or cancel them first."},
                             status=status.HTTP_409_CONFLICT)
         branch.is_active = False
-        branch.save(update_fields=["is_active", "updated_at"])
+        branch.is_primary = False  # a closed branch cannot keep the single headquarters slot
+        branch.save(update_fields=["is_active", "is_primary", "updated_at"])
         self.audit("deactivate", branch)
         return Response({"detail": "Branch deactivated.", "deactivated": True})
 
@@ -185,5 +187,25 @@ class PublicBranchListView(APIView):
         branches = Branch.objects.filter(is_active=True).annotate(
             dish_count=Count("foods", filter=Q(foods__is_active=True))
         ).order_by("-dish_count", "name")
-        rows = [{"id": b.id, "name": b.name, "dish_count": b.dish_count} for b in branches]
+        rows = [{"id": b.id, "name": b.name, "dish_count": b.dish_count, "is_primary": b.is_primary,
+                 "city": b.city} for b in branches]
         return Response(rows)
+
+
+class PublicAvailableTablesView(APIView):
+    """Tables a customer may start a new dine-in order at. Availability is the live table status."""
+
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "public_menu"
+
+    def get(self, request, branch_id):
+        branch = Branch.objects.filter(pk=branch_id, is_active=True).first()
+        if branch is None:
+            return Response({"detail": "Branch not found."}, status=status.HTTP_404_NOT_FOUND)
+        tables = branch.tables.filter(
+            is_active=True, qr_is_active=True, status=DiningTable.Status.AVAILABLE
+        ).order_by("table_number")
+        return Response([{"id": t.id, "table_number": t.table_number, "location": t.location,
+                          "capacity": t.capacity} for t in tables])

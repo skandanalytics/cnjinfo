@@ -44,7 +44,7 @@ Lists are plain JSON arrays (no pagination yet; `?search=`, `?ordering=` and fie
 | Endpoint | Who | Notes |
 |---|---|---|
 | `GET /branches/`, `GET /branches/{id}/` | any active staff | filters `is_active`; search name, code, address, manager |
-| `POST /branches/` | owner-level (admin with no branch) | `name, address, contact_number, manager_name, gst_rate, service_charge_rate, takeaway_charge`; `code` is generated (`BR001`); name unique (case-insensitive) |
+| `POST /branches/` | owner-level (admin with no branch) | `name, address, city, contact_number, email, manager_name, opening_hours, cover_image_url, is_primary, gst_rate, service_charge_rate, takeaway_charge`; `code` is generated (`BR001`); name unique (case-insensitive). `email` is optional and must be a valid address when set. `cover_image_url` is optional and must be `http` or `https`. At most one branch has `is_primary`; saving a new headquarters clears the previous one in the same transaction. `tables_count` is read-only (active tables) |
 | `PATCH /branches/{id}/` | admin-level in scope | `is_active` can reactivate |
 | `DELETE /branches/{id}/` | owner-level | **Deactivates** (409 if it has unfinished orders). Staff of an inactive branch lose access; its QR codes stop resolving; history is untouched |
 | `/tables/` CRUD | read: staff; write: admin-level | `table_number, capacity, location, is_active, qr_is_active`; branch is forced to the caller's branch (owner must pass `branch`); number unique per branch (case-insensitive). `status` is read-only here |
@@ -52,6 +52,7 @@ Lists are plain JSON arrays (no pagination yet; `?search=`, `?ordering=` and fie
 | `GET /tables/{id}/qr/` (`?download=1`) | any staff | PNG of `<FRONTEND_BASE_URL>/customer/welcome?qr=<uuid>`; 409 if the table or QR is inactive |
 | `POST /tables/{id}/regenerate-qr/` | admin-level | New UUID; the old printed code stops working immediately |
 | `DELETE /tables/{id}/` | admin-level | Deleted if it never had orders, else deactivated; 409 if it has unfinished orders |
+| `GET /public/branches/{id}/tables/` | **public** | Active tables of that branch whose status is `AVAILABLE`. `{id, table_number, location, capacity}`. Occupied, reserved and inactive tables are omitted |
 | `GET /public/qr/{uuid}/` | **public** (throttled 60/min) | Returns `{branch:{id,name}, table:{id,table_number,location,capacity}}`. Malformed, unknown, inactive-table, inactive-QR and inactive-branch cases all return the same 404 `{"detail":"Invalid or inactive QR code.","code":"qr_invalid"}` |
 
 ## Menu (Phase 4, implemented and tested)
@@ -61,7 +62,7 @@ Read: any active staff (needed for assisted ordering). Write: admin-level only. 
 | Endpoint | Notes |
 |---|---|
 | `/categories/` CRUD | `name, description, display_order, is_active`; read-only `dish_count`; unique name per branch; filters `branch, is_active`; search. `DELETE` removes an unused category, otherwise deactivates it (200 with `deactivated: true`) |
-| `/foods/` CRUD | `category, name, description, ingredients, diet_type (VEG/NON_VEG/VEGAN), price, calories, protein_grams, is_active, is_sold_out`; response embeds `images`, `primary_image` (absolute URL) and `customizations`. `?category=<id>` returns only that category's dishes. Filters `diet_type, is_active, is_sold_out, branch`; search name/description/ingredients; ordering `price, name`. Category must be in the same branch. `DELETE` removes an unreferenced dish, otherwise deactivates it (dishes with order, cart or stock records) |
+| `/foods/` CRUD | `category, name, description, ingredients, diet_type (VEG/NON_VEG/VEGAN), price, calories, protein_grams, image_url, is_active, is_sold_out`; response embeds `images`, `primary_image` and `customizations`. `image_url` is an admin-supplied `http(s)` image address (other schemes are 400); `primary_image` is `image_url` when set, else the primary uploaded file (absolute URL), else `null`. Uploading a new primary file clears `image_url`, so the latest choice wins. The same `primary_image` is used by the public menu and cart lines. `?category=<id>` returns only that category's dishes. Filters `diet_type, is_active, is_sold_out, branch`; search name/description/ingredients; ordering `price, name`. Category must be in the same branch. `DELETE` removes an unreferenced dish, otherwise deactivates it (dishes with order, cart or stock records) |
 | `/food-images/` | `multipart`: `food, image, is_primary?, sort_order?`. JPEG/PNG/WebP, max 5 MB, validated by Pillow from the file content. First image is primary; setting another primary demotes the rest; deleting the primary promotes the next; the file is removed from disk. URLs are absolute and served from `/media/` |
 | `/customization-options/` CRUD | `food, name, extra_price (>=0), is_active`; unique per dish. Options used in carts are deactivated instead of deleted |
 
@@ -120,14 +121,14 @@ Cart owner is a logged-in **customer** (Bearer) or a **guest** (header `X-Guest-
 |---|---|
 | `POST /cart/guest-token/` | Returns `{guest_token}` (unguessable; only its SHA-256 is stored). 30/hour per IP |
 | `GET /cart/?branch=<id>` | Cart view (empty view if none): `items` with server prices and per-line `issue`, `pricing` (full breakdown, same as the quote), `issues`, `order_type`, `table`, `coupon_codes`, `can_checkout` |
-| `PUT /cart/context/` `{branch, order_type, qr?}` | Dine-In needs a valid scanned table of that branch (`qr` UUID, else 400 `qr_required`/`qr_invalid`); Takeaway removes any table |
+| `PUT /cart/context/` `{branch, order_type, qr?, table?}` | Dine-In needs either a scanned `qr` or `table` (an id returned by the available-tables list, which must still be `AVAILABLE` on this branch). Otherwise 400 `qr_required`, `qr_invalid` or `table_unavailable`. Takeaway removes any table. The table is claimed (occupied) only when the order is created, and a second order for a table that is already occupied is 409 |
 | `POST /cart/items/` `{branch, food, quantity, options[], special_instructions}` | Adds, or increases an identical line (same dish, same options, same trimmed instructions). Validated like a quote (availability, options, stock, max 99 per line) |
 | `PATCH /cart/items/{id}/` `{quantity}`, `DELETE /cart/items/{id}/` | Only the owner's items (others get 404) |
 | `DELETE /cart/?branch=` | Clear |
 | `POST /cart/coupon/` `{branch, code}`, `DELETE /cart/coupon/?branch=` | Applies one entered coupon after a dry-run; rejections return the reason (400) and nothing is stored |
 | `POST /cart/merge/` `{guest_token}` | Customer only. Folds the guest's carts into the customer's: quantities of identical lines add (cap 99), other lines move over, no duplicate active carts, guest context and coupon carry over, the guest cart is marked MERGED. Lines that became unavailable are kept and flagged, never dropped. Repeating it is harmless |
 | `POST /auth/otp/verify/` with optional `guest_token` | Does the same merge during login and returns `merged_cart_branches`. A merge problem never blocks login |
-| `POST /checkout/validate/` `{branch}` | Customers only (guest gets 401 `login_required`). Re-prices and revalidates everything. 409 `cart_invalid` with `issues` if anything is wrong; otherwise `{ready, cart, payment_methods[UPI, CARD, COUNTER], customer}`. Does **not** create an order or clear the cart (Phase 7) |
+| `POST /checkout/validate/` `{branch}` | Customers only (guest gets 401 `login_required`). Re-prices and revalidates everything. 409 `cart_invalid` with `issues` if anything is wrong; otherwise `{ready, cart, payment_methods, customer}`. `payment_methods` is `[UPI, CARD, COUNTER]` when Razorpay keys are configured and `[COUNTER]` otherwise. Does **not** create an order or clear the cart (Phase 7) |
 
 Cart-line problems (dish sold out, out of stock, deactivated, table deactivated, Dine-In without table) set `can_checkout=false` and are listed in `issues`.
 
@@ -170,7 +171,7 @@ The final invoice is created when staff move the order to `COMPLETED` (inside `c
 | `GET /orders/{id}/invoice/` | the customer who owns a **completed** order, or staff of that branch | PDF (`order number`, branch, items, quantities, price breakdown, total, invoice number, payment status). **409** `invoice_not_ready` when the order is not `COMPLETED` (no invoice is stored). Another customer or another branch: **404** |
 | `GET /orders/{id}/bill-preview/` | staff of that branch | Same breakdown as JSON with `final: false` and `invoice_number: null`. Not stored. Another branch: **404**. Works while the order is still in progress |
 
-`POST /checkout/validate/` still advertises `UPI`, `CARD` and `COUNTER`. `POST /orders/{id}/pay/` also accepts `NETBANKING` and `WALLET`.
+`POST /checkout/validate/` advertises `UPI` and `CARD` only when Razorpay keys are configured; `COUNTER` is always listed. `POST /orders/{id}/pay/` also accepts `NETBANKING` and `WALLET`.
 
 ## Admin client (Phase 9)
 

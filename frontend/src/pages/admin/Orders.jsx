@@ -75,41 +75,20 @@ export const Orders = () => {
     if (!o || (!o.id && !o.order_id)) return false;
 
     // Branch filter
-    if (branchFilter !== 'ALL') {
-      const orderBranch = o.restaurant || o.restaurant_id || o.restaurantId;
-      if (orderBranch && String(orderBranch) !== String(branchFilter)) {
-        return false;
-      }
+    if (branchFilter !== 'ALL' && String(o.branchId || o.branch_id || '') !== String(branchFilter)) {
+      return false;
     }
 
-    // Employee filter
     if (employeeFilter !== 'ALL') {
-      let ordEmpId = '';
-      if (o.takenBy && typeof o.takenBy === 'object') {
-        ordEmpId = String(o.takenBy.id || o.takenBy.user || '');
-      } else if (o.employee && typeof o.employee === 'object') {
-        ordEmpId = String(o.employee.id || o.employee.user || '');
-      } else {
-        ordEmpId = String(o.employee || o.employee_id || o.employeeId || o.taken_by || o.takenBy || o.created_by || o.createdBy || o.operator || o.server || o.user || '');
-      }
-      
-      const ordEmp = ordEmpId;
-      if (ordEmp !== String(employeeFilter) && !ordEmp.includes(employeeFilter)) {
-        // Also try to match by username if the filter is an ID
-        const selectedEmpObj = employees.find(e => String(e.id) === String(employeeFilter));
-        const selectedEmpName = selectedEmpObj ? String(selectedEmpObj.username || selectedEmpObj.name).toLowerCase().trim() : '';
-        const ordEmpLower = ordEmp.toLowerCase().trim();
-        
-        if (!selectedEmpName || (ordEmpLower !== selectedEmpName && !ordEmpLower.includes(selectedEmpName))) {
-          return false;
-        }
-      }
+      const selected = employees.find((emp) => String(emp.id) === String(employeeFilter));
+      const wantedUser = selected?.userId != null ? String(selected.userId) : String(employeeFilter);
+      if (String(o.placedById || '') !== wantedUser) return false;
     }
 
     const rawSearch = search.trim().toLowerCase();
     let matchesSearch = true;
     if (rawSearch) {
-      const orderIdStr = String(o.id || '').toLowerCase();
+      const orderIdStr = String(o.id || o.orderNumber || '').toLowerCase();
       const orderTableStr = String(o.table || '').toLowerCase();
 
       const cleanOrderTableDigits = orderTableStr.replace(/^(table\s*|t-?)/i, '').replace(/^0+/, '') || orderTableStr;
@@ -160,15 +139,8 @@ export const Orders = () => {
       }
     }
 
-    const pm = (o.paymentMethod || o.payment_method || o.payment || 'COD').toUpperCase();
-    const isUpi = pm === 'UPI' || pm.includes('UPI');
-    const isCard = pm === 'CARD' || pm === 'CREDIT_CARD' || pm === 'DEBIT_CARD' || pm.includes('CARD');
-    const isCod = pm === 'COD' || pm === 'CASH' || pm.includes('COD') || pm.includes('CASH');
-
-    const matchesPayment = paymentFilter === 'ALL' ||
-      (paymentFilter === 'COD' && isCod) ||
-      (paymentFilter === 'CARD' && isCard) ||
-      (paymentFilter === 'UPI' && isUpi);
+    const pay = String(o.paymentStatus || o.payment_status || '').toUpperCase();
+    const matchesPayment = paymentFilter === 'ALL' || pay === paymentFilter;
 
     return matchesSearch && matchesTab && matchesPayment;
   });
@@ -177,22 +149,6 @@ export const Orders = () => {
     return (
       <AdminLayout>
         <Loader />
-      </AdminLayout>
-    );
-  }
-
-  if (!loading && (!orders || orders.length === 0)) {
-    return (
-      <AdminLayout>
-        <PageHeader
-          title="Manage Orders & Bills"
-          showBackButton
-        />
-        <EmptyState
-          title="No Orders Found"
-          description="There are currently no placed orders."
-          icon="bi-basket2-fill"
-        />
       </AdminLayout>
     );
   }
@@ -229,9 +185,10 @@ export const Orders = () => {
                 aria-label="Filter by Payment Method"
               >
                 <option value="ALL">All Payments</option>
-                <option value="COD">Cash / COD</option>
-                <option value="CARD">Card Payment</option>
-                <option value="UPI">UPI Payment</option>
+                <option value="UNPAID">Unpaid</option>
+                <option value="PENDING">Payment pending</option>
+                <option value="PAID">Paid</option>
+                <option value="FAILED">Failed</option>
               </select>
               {user?.role !== 'employee' && (
               <select
@@ -297,7 +254,7 @@ export const Orders = () => {
               <OrderCard
                 order={order}
                 onViewDetails={(ord) => setSelectedOrder(ord)}
-                onViewEBill={(ord) => import('../../services/adminApi').then(({ downloadInvoice }) => downloadInvoice(ord))}
+                onViewEBill={(ord) => setEBillOrder(ord)}
               />
             </div>
           ))}
@@ -311,7 +268,7 @@ export const Orders = () => {
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
           onStatusChange={updateStatus}
-          onViewEBill={() => import('../../services/adminApi').then(({ downloadInvoice }) => downloadInvoice(selectedOrder))}
+          onViewEBill={() => setEBillOrder(selectedOrder)}
         />
       )}
 

@@ -6,7 +6,10 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.models import User
+from apps.accounts.permissions import get_active_employee
+from apps.accounts.scoping import can_access_branch
 from apps.branches.models import Branch
+from apps.payments.gateway import keys_configured
 
 from . import services
 from .models import Cart, CartItem
@@ -32,17 +35,19 @@ class GuestTokenView(APIView):
 
 
 class CartBase(APIView):
-    """Cart owner = logged-in customer (Bearer) or guest (X-Guest-Token). Staff identities are not cart owners."""
+    """Cart owner = logged-in customer, logged-in staff (assisted order), or guest (X-Guest-Token)."""
 
     permission_classes = [AllowAny]
 
     def identity(self, request):
         user = request.user
         if user.is_authenticated:
-            if user.user_type != User.UserType.CUSTOMER or not user.is_active:
-                return None, Response({"detail": "Carts are for customers and guests.", "code": "not_customer"},
-                                      status=status.HTTP_403_FORBIDDEN)
-            return Identity(user=user), None
+            if user.user_type == User.UserType.CUSTOMER and user.is_active:
+                return Identity(user=user), None
+            if get_active_employee(user) is not None:
+                return Identity(user=user), None
+            return None, Response({"detail": "Carts are for customers, staff, and guests.", "code": "not_customer"},
+                                  status=status.HTTP_403_FORBIDDEN)
         token = request.META.get(GUEST_HEADER, "")
         if len(token) < 20:
             return None, Response({"detail": "Guest token required (X-Guest-Token).", "code": "guest_token_required"},
@@ -54,7 +59,11 @@ class CartBase(APIView):
             bid = int(data.get("branch"))
         except (TypeError, ValueError):
             raise serializers.ValidationError({"branch": "Branch id is required."})
-        return get_object_or_404(Branch, pk=bid, is_active=True)
+        branch = get_object_or_404(Branch, pk=bid, is_active=True)
+        user = self.request.user
+        if user.is_authenticated and user.user_type != User.UserType.CUSTOMER and not can_access_branch(user, branch.id):
+            raise serializers.ValidationError({"branch": "You cannot order for this branch."})
+        return branch
 
     def render(self, request, cart, code=200):
         return Response(services.evaluate(cart, request), status=code)
@@ -88,6 +97,7 @@ class ContextSerializer(serializers.Serializer):
     branch = serializers.IntegerField()
     order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY"])
     qr = serializers.UUIDField(required=False)
+    table = serializers.IntegerField(required=False, min_value=1)
 
 
 class CartContextView(CartBase):
@@ -100,7 +110,8 @@ class CartContextView(CartBase):
         branch = self.branch_from(s.validated_data)
         cart = services.get_or_create_cart(ident, branch)
         try:
-            services.set_context(cart, s.validated_data["order_type"], s.validated_data.get("qr"))
+            services.set_context(cart, s.validated_data["order_type"], s.validated_data.get("qr"),
+                                 s.validated_data.get("table"))
         except CartError as exc:
             return fail(exc)
         return self.render(request, cart)
@@ -237,9 +248,10 @@ class CheckoutValidateView(CartBase):
         if not view["can_checkout"]:
             return Response({"detail": "Your cart needs attention before checkout.", "code": "cart_invalid",
                              "issues": view["issues"], "cart": view}, status=status.HTTP_409_CONFLICT)
+        methods = [{"code": "COUNTER", "label": "Pay on Counter"}]
+        if keys_configured():  # online methods would fail with 503 payments_unconfigured otherwise
+            methods = [{"code": "UPI", "label": "UPI"}, {"code": "CARD", "label": "Card"}] + methods
         return Response({
-            "ready": True, "cart": view,
-            "payment_methods": [{"code": "UPI", "label": "UPI"}, {"code": "CARD", "label": "Card"},
-                                {"code": "COUNTER", "label": "Pay on Counter"}],
+            "ready": True, "cart": view, "payment_methods": methods,
             "customer": {"name": request.user.name, "phone": request.user.phone},
         })

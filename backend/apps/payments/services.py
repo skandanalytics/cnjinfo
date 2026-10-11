@@ -68,7 +68,7 @@ def start_online(customer, order_id, method):
         order = _lock_order(order_id)
     except Order.DoesNotExist:
         raise PaymentError("Not found.", "not_found", 404)
-    if order.customer_id != customer.id:
+    if order.customer_id != customer.id and order.placed_by_id != customer.id:
         raise PaymentError("Not found.", "not_found", 404)
     if order.status == Order.Status.CANCELLED:
         raise PaymentError("This order is cancelled.", "order_cancelled", 409)
@@ -106,7 +106,7 @@ def verify_checkout(customer, razorpay_order_id, razorpay_payment_id, signature)
     if not verify_checkout_signature(razorpay_order_id, razorpay_payment_id, signature, secret):
         raise PaymentError("Invalid signature.", "invalid_signature", 400)
     payment = Payment.objects.select_for_update().filter(razorpay_order_id=razorpay_order_id).first()
-    if payment is None or payment.order.customer_id != customer.id:
+    if payment is None or (payment.order.customer_id != customer.id and payment.order.placed_by_id != customer.id):
         raise PaymentError("Not found.", "not_found", 404)
     event_id = f"checkout:{razorpay_payment_id}"
     payload = {

@@ -2,7 +2,7 @@ import React from 'react';
 import Modal from '../common/Modal';
 import { FiShoppingBag, FiCoffee } from 'react-icons/fi';
 
-export const OrderTypeModal = ({ isOpen, onSelectType }) => {
+export const OrderTypeModal = ({ isOpen, onSelectType, dineInAvailable = true }) => {
   if (!isOpen) return null;
 
   const handleSelect = (type) => {
@@ -27,13 +27,17 @@ export const OrderTypeModal = ({ isOpen, onSelectType }) => {
               type="button"
               className="btn btn-outline-danger w-100 p-4 rounded-4 d-flex flex-column align-items-center justify-content-center gap-2 border-2 dining-option-card"
               onClick={() => handleSelect('DINE_IN')}
+              disabled={!dineInAvailable}
+              data-testid="modal-dine-in"
               style={{ minHeight: '140px' }}
             >
               <div className="dining-option-icon rounded-circle p-2 mb-1 d-flex align-items-center justify-content-center">
                 <FiCoffee size={36} className="text-danger" />
               </div>
               <span className="fw-bold fs-6">Table Dine-In</span>
-              <span className="text-muted" style={{ fontSize: '11px' }}>Food served at your table</span>
+              <span className="text-muted" style={{ fontSize: '11px' }}>
+                {dineInAvailable ? 'Food served at your table' : 'Scan the QR code on your table first'}
+              </span>
             </button>
           </div>
 
@@ -42,6 +46,7 @@ export const OrderTypeModal = ({ isOpen, onSelectType }) => {
               type="button"
               className="btn btn-outline-danger w-100 p-4 rounded-4 d-flex flex-column align-items-center justify-content-center gap-2 border-2 dining-option-card"
               onClick={() => handleSelect('TAKEAWAY')}
+              data-testid="modal-takeaway"
               style={{ minHeight: '140px' }}
             >
               <div className="dining-option-icon rounded-circle p-2 mb-1 d-flex align-items-center justify-content-center">

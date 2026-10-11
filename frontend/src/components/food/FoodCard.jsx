@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCart } from '../../context/CartContext';
-import { getImageUrl } from '../../utils/imageUtils';
+import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 
 export const FoodCard = ({ food }) => {
   const { addToCart } = useCart();
@@ -64,7 +64,7 @@ export const FoodCard = ({ food }) => {
           }}
           onError={(event) => {
             console.error('Failed to load food image:', event.currentTarget.src);
-            event.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80';
+            event.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
           }}
         />
 

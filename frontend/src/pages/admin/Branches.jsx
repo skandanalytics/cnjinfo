@@ -117,7 +117,7 @@ export const Branches = () => {
       tablesCount: branch.tablesCount || 20,
       status: branch.status || 'Active',
       isMainBranch: Boolean(branch.isMainBranch),
-      image: branch.image || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80'
+      image: branch.image || ''
     });
     setErrorMessage('');
     setIsModalOpen(true);
@@ -368,15 +368,11 @@ export const Branches = () => {
 
             <div className="col-12 col-md-4">
               <Input 
-                label="Total Tables"
+                label="Tables on record"
                 name="tablesCount"
                 type="number"
-                min={1}
-                max={200}
-                placeholder="e.g. 24"
                 value={formData.tablesCount}
-                onChange={handleFormChange}
-                required
+                readOnly
               />
             </div>
 
@@ -387,7 +383,6 @@ export const Branches = () => {
                 placeholder="https://images.unsplash.com/..."
                 value={formData.image}
                 onChange={handleFormChange}
-                required
               />
             </div>
 
