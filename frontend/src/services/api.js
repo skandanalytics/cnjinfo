@@ -32,22 +32,23 @@ api.interceptors.request.use(
   (config) => {
     const currentPath = window.location.pathname;
 
+    const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
     const isAdminRoute =
-      currentPath.startsWith('/admin');
+      currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || staffOrdering;
 
     const adminToken = sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin');
     const customerToken = sessionStorage.getItem('foodie_token_customer') || localStorage.getItem('foodie_token_customer');
 
-    /*
-     * Use admin token only inside admin routes.
-     * Use customer token for customer routes.
-     */
+    // Staff who are placing an order keep their staff login on the shared customer pages.
     const token = isAdminRoute
       ? adminToken
       : customerToken;
 
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      const guestToken = sessionStorage.getItem('foodie_guest_token');
+      if (guestToken) config.headers['X-Guest-Token'] = guestToken;
     }
 
     if (config.data instanceof FormData) {
@@ -231,7 +232,8 @@ export const clearApiCache = () => {
 
 api.get = function (url, config = {}) {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-  const isAdminRoute = currentPath.startsWith('/admin');
+  const staffOrdering = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('foodie_staff_ordering') === '1';
+  const isAdminRoute = currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || staffOrdering;
   const adminToken = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin') || '') : '';
   const customerToken = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('foodie_token_customer') || '' : '';
   const token = isAdminRoute ? adminToken : customerToken;

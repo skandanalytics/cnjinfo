@@ -7,7 +7,7 @@ from apps.accounts.scoping import allowed_branch_id, can_access_branch
 from apps.accounts.services import record_audit
 from apps.branches.models import Branch
 
-from .lifecycle import OrderError, change_status, create_from_cart, serialize_order
+from .lifecycle import OrderError, change_status, create_assisted, create_from_cart, serialize_order
 from .models import Order
 
 
@@ -24,8 +24,8 @@ def _error(exc):
 class OrderListCreateView(APIView):
     def get_permissions(self):
         if self.request.method == "POST":
-            return [IsCustomer()]
-        return [IsStaffMember() if False else _AnyActive()]
+            return [_CustomerOrStaff()]
+        return [_AnyActive()]
 
     def post(self, request):
         ser = PlaceOrderSerializer(data=request.data)
@@ -51,18 +51,61 @@ class OrderListCreateView(APIView):
             qs = Order.objects.all()
             if emp.branch_id is not None:
                 qs = qs.filter(branch_id=emp.branch_id)
+            # Employee history is the orders that employee placed. The kitchen queue stays branch-wide.
+            if request.query_params.get("mine") == "1":
+                qs = qs.filter(placed_by=user)
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
-        return Response([serialize_order(o) for o in qs.prefetch_related("items", "status_history")])
+        return Response([serialize_order(o) for o in qs.select_related("placed_by").prefetch_related("items", "status_history")])
 
     def _ip(self, request):
         return request.META.get("REMOTE_ADDR")
 
 
+class AssistedItemSerializer(serializers.Serializer):
+    food = serializers.IntegerField(min_value=1)
+    quantity = serializers.IntegerField(min_value=1, max_value=99)
+
+
+class AssistedOrderSerializer(serializers.Serializer):
+    table = serializers.IntegerField(min_value=1)
+    items = AssistedItemSerializer(many=True)
+    idempotency_key = serializers.CharField(max_length=64)
+
+
+class AssistedOrderView(APIView):
+    permission_classes = [IsStaffMember]
+
+    def post(self, request):
+        ser = AssistedOrderSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        data = ser.validated_data
+        if not data["items"]:
+            return Response({"detail": "Add at least one dish.", "code": "cart_empty"}, status=400)
+        try:
+            order, created = create_assisted(request.user, data["table"], data["items"], data["idempotency_key"])
+        except OrderError as exc:
+            return _error(exc)
+        if created:
+            record_audit(request.user, "order.assisted", "Order", order.id, branch=order.branch,
+                         ip=request.META.get("REMOTE_ADDR"))
+        return Response(serialize_order(order), status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+
 class _AnyActive:
     def has_permission(self, request, view):
         return bool(request.user and request.user.is_authenticated)
+
+
+class _CustomerOrStaff:
+    def has_permission(self, request, view):
+        user = request.user
+        if not user.is_authenticated or not user.is_active:
+            return False
+        if user.user_type == "CUSTOMER":
+            return True
+        return get_active_employee(user) is not None
 
 
 class OrderDetailView(APIView):

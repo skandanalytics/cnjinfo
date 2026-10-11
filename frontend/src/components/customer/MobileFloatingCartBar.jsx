@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
 import { FiChevronRight, FiChevronUp, FiChevronDown } from 'react-icons/fi';
-import { getImageUrl } from '../../utils/imageUtils';
+import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 import formatCurrency from '../../utils/formatCurrency';
 
 export const MobileFloatingCartBar = () => {
@@ -126,7 +126,7 @@ export const MobileFloatingCartBar = () => {
                     boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)'
                   }}
                   onError={(e) => {
-                    e.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&auto=format&fit=crop&q=80';
+                    e.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
                   }}
                 />
               )}

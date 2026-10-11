@@ -7,8 +7,9 @@ import { useCart } from '../../hooks/useCart';
 import Loader from '../../components/common/Loader';
 import BackButton from '../../components/common/BackButton';
 import formatCurrency from '../../utils/formatCurrency';
-import { FiClock, FiCheck, FiXCircle, FiDownload } from 'react-icons/fi';
-import { generateEBillPDF } from '../../utils/generateEBillPDF';
+import { FiClock, FiCheck, FiXCircle } from 'react-icons/fi';
+import { fetchCustomerOrder } from '../../services/customerCheckout';
+import { mapOrder } from '../../services/adminApi';
 import { normalizeFoodType } from '../../utils/filters';
 import EBillModal from '../../components/orders/EBillModal';
 
@@ -23,19 +24,7 @@ export const OrderTracking = () => {
   const [order, setOrder] = useState(initialOrder);
   const [loading, setLoading] = useState(!initialOrder);
   const [error, setError] = useState(null);
-  const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [showReceiptModal, setShowReceiptModal] = useState(false);
-
-  const handleDownloadEBill = async () => {
-    setDownloadingPdf(true);
-    try {
-      const target = order || { id: orderId };
-      await generateEBillPDF(target);
-    } catch (e) {
-      console.error("[E-BILL DOWNLOAD ERROR]", e);
-    }
-    setDownloadingPdf(false);
-  };
 
   // Employee track order redirect to Tables
   useEffect(() => {
@@ -103,7 +92,8 @@ export const OrderTracking = () => {
       setError(null);
 
       try {
-        const currentData = await orderService.getOrderById(orderId, true, true);
+        const raw = await fetchCustomerOrder(orderId);
+        const currentData = raw?.id ? { ...mapOrder(raw), status: raw.status } : null;
         if (currentData) {
           const effectiveStatus = currentData.status;
           statusRef.current = effectiveStatus;
@@ -138,11 +128,13 @@ export const OrderTracking = () => {
       };
 
       window.addEventListener('foodie_orders_updated', handleSync);
-      window.addEventListener('storage', handleSync);
+      const timer = setInterval(() => {
+        if (!document.hidden) fetchTrackingData(false);
+      }, 4000);
 
       return () => {
+        clearInterval(timer);
         window.removeEventListener('foodie_orders_updated', handleSync);
-        window.removeEventListener('storage', handleSync);
       };
     }
   }, [orderId]);
@@ -219,18 +211,6 @@ export const OrderTracking = () => {
             <BackButton to="/customer/home" />
             <h4 className="fw-bold text-dark mb-0">Track Order</h4>
           </div>
-          {String(currentStatus || order?.status || '').toLowerCase() === 'completed' && (
-            <button
-              type="button"
-              onClick={handleDownloadEBill}
-              disabled={downloadingPdf}
-              className="btn btn-sm btn-danger text-white fw-bold rounded-pill px-3 py-1.5 shadow-sm d-flex align-items-center gap-1.5"
-              style={{ backgroundColor: 'var(--primary-color)', borderColor: 'var(--primary-color)', fontSize: '12px' }}
-            >
-              <FiDownload size={14} />
-              <span>{downloadingPdf ? 'Generating...' : 'Download E-Bill'}</span>
-            </button>
-          )}
         </div>
 
         {/* Info Header Card for Tracked Order */}

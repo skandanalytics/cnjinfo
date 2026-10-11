@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 import { getFrontendCategoryName } from '../../utils/categoryUtils';
-import { compressImageFile } from '../../utils/imageUtils';
+import { compressImageFile, isHttpUrl } from '../../utils/imageUtils';
 import { extractApiErrorMessage } from '../../utils/errorUtils';
 import { menuService } from '../../services/menuService';
 import Modal from '../common/Modal';
@@ -211,9 +211,15 @@ export const AddDishModal = ({
       return;
     }
 
-    const stockNum = stock && stock.trim() !== '' ? parseInt(stock) : 100;
-    if (isNaN(stockNum) || stockNum < 0) {
-      setErrorMsg('Stock quantity must be a positive integer.');
+    const stockNum = stock && stock.trim() !== '' ? Number(stock) : undefined;
+    if (stockNum !== undefined && (!Number.isInteger(stockNum) || stockNum < 0)) {
+      setErrorMsg('Stock quantity must be a whole number of 0 or more.');
+      return;
+    }
+
+    const imageUrl = imageMode === 'url' ? image.trim() : '';
+    if (imageUrl && !isHttpUrl(imageUrl)) {
+      setErrorMsg('Image URL must be a full http:// or https:// address.');
       return;
     }
 
@@ -239,8 +245,8 @@ export const AddDishModal = ({
         foodType: foodType,
         stock: stockNum,
         protein: protNum,
-        image: image.trim() || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80',
-        imageFile: imageFile
+        imageUrl,
+        imageFile: imageMode === 'file' ? imageFile : null
       });
       setLoading(false);
 
@@ -252,7 +258,6 @@ export const AddDishModal = ({
       setCategory(defaultCategory || '');
       setFoodType('veg');
       setStock('20');
-      setCalories('');
       setProtein('');
       setImage('');
       setImageFile(null);
@@ -264,9 +269,13 @@ export const AddDishModal = ({
       onClose();
     } catch (err) {
       console.error('Error creating dish:', err);
-      const apiErr = extractApiErrorMessage(err, 'Unable to create dish. Please check the entered data.');
       setLoading(false);
-      setErrorMsg(apiErr);
+      if (err.dishSaved) {
+        window.alert(err.message);
+        onClose();
+        return;
+      }
+      setErrorMsg(extractApiErrorMessage(err, 'Unable to create dish. Please check the entered data.'));
     }
   };
 

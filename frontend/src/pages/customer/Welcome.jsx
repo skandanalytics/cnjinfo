@@ -8,6 +8,10 @@ import { FiCornerDownRight, FiPhone, FiLock, FiCheckCircle, FiCoffee, FiShopping
 import { tableService } from '../../services/tableService';
 import api from '../../services/api';
 import { COUNTRY_CODES, detectUserCountryCode, fetchGeolocationCountryCode } from '../../utils/countryCodes';
+import { availableTables } from '../../services/customerCheckout';
+import {
+  DINE_IN, NO_TABLES_MESSAGE, TAKEAWAY, hasScannedTable, rememberScannedTableQr, setOrderType, setSelectedTableId,
+} from '../../utils/orderContext';
 
 export const Welcome = () => {
   const navigate = useNavigate();
@@ -26,87 +30,153 @@ export const Welcome = () => {
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [showOrderTypeSelection, setShowOrderTypeSelection] = useState(false);
+  const [showOrderTypeSelection, setShowOrderTypeSelection] = useState(Boolean(location.state?.chooseDining));
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [qrDisabled, setQrDisabled] = useState(false);
+  const [, setDineInAvailable] = useState(hasScannedTable);
+  const [checkingTables, setCheckingTables] = useState(false);
+  const [tableChoices, setTableChoices] = useState(null);
+  const [availabilityMessage, setAvailabilityMessage] = useState('');
+  const [availabilityError, setAvailabilityError] = useState('');
 
-  const handleSkip = () => {
-    setShowOrderTypeSelection(true);
+  const continueAsGuest = async () => {
+    setError('');
+    setLoading(true);
+    try {
+      if (!sessionStorage.getItem('foodie_guest_token')) {
+        const issued = await api.post('/cart/guest-token/');
+        sessionStorage.setItem('foodie_guest_token', issued.data.guest_token);
+      }
+      setOtpSent(false);
+      setOtp('');
+      setShowOrderTypeSelection(true);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Could not start a guest session. You can still sign in with OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requestNewOtp = async () => {
+    setError('');
+    setOtp('');
+    setLoading(true);
+    try {
+      const sent = await sendOTP(phone);
+      setOtpSent(true);
+      setShowOrderTypeSelection(false);
+      if (sent?.dev_otp) {
+        setOtp(String(sent.dev_otp));
+        setInfoMessage(`OTP sent. Development code: ${sent.dev_otp}`);
+      } else {
+        setInfoMessage('A new OTP was sent to your mobile.');
+      }
+    } catch (err) {
+      setError(err.message || 'Could not send a new OTP.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const goHome = () => navigate(location.state?.from || '/customer/home', { replace: true });
+
+  const claimTable = (table) => {
+    setSelectedTableId(table.id);
+    setOrderType(DINE_IN);
+    setTable({ tableNumber: table.table_number, tableId: table.id, location: table.location || '', orderType: DINE_IN });
+    goHome();
+  };
+
+  const startDineIn = async () => {
+    setError('');
+    setAvailabilityMessage('');
+    setAvailabilityError('');
+    if (hasScannedTable()) {
+      setOrderType(DINE_IN);
+      goHome();
+      return;
+    }
+    setCheckingTables(true);
+    try {
+      let branchId = sessionStorage.getItem('foodie_public_branch');
+      if (!branchId) {
+        const listed = await api.get('/public/branches/');
+        const rows = Array.isArray(listed.data) ? listed.data : [];
+        const pick = rows.find((row) => row.is_primary) || (rows.length === 1 ? rows[0] : null);
+        if (!pick) {
+          setAvailabilityError(rows.length
+            ? 'More than one restaurant is open. Scan your table QR so we know which one you are at.'
+            : 'No restaurant is open for dine-in right now.');
+          return;
+        }
+        branchId = String(pick.id);
+        sessionStorage.setItem('foodie_public_branch', branchId);
+        sessionStorage.setItem('foodie_branch_source', 'chosen');
+      }
+      const tables = await availableTables(branchId);
+      if (!tables.length) {
+        setAvailabilityMessage(NO_TABLES_MESSAGE);
+        return;
+      }
+      if (tables.length === 1) {
+        claimTable(tables[0]);
+        return;
+      }
+      setTableChoices(tables);
+    } catch {
+      setAvailabilityError('Could not check table availability. Check your connection and try again.');
+    } finally {
+      setCheckingTables(false);
+    }
   };
 
   const handleSelectOrderType = (type) => {
-    sessionStorage.setItem('foodie_order_type', type);
-    localStorage.setItem('foodie_order_type', type);
-
-    if (type === 'TAKEAWAY') {
-      const takeawayContext = { tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: 'TAKEAWAY' };
-      setTable(takeawayContext);
-      sessionStorage.setItem('foodie_table', JSON.stringify(takeawayContext));
-      localStorage.setItem('foodie_table', JSON.stringify(takeawayContext));
-    } else if (qrParam || sessionStorage.getItem('foodie_table_qr')) {
-      let storedTable = null;
-      try { storedTable = JSON.parse(sessionStorage.getItem('foodie_table') || 'null'); } catch (e) {}
-      if (Number(storedTable?.tableId) > 0) {
-        const dineInContext = { ...storedTable, orderType: 'DINE_IN' };
-        setTable(dineInContext);
-        sessionStorage.setItem('foodie_table', JSON.stringify(dineInContext));
-        localStorage.setItem('foodie_table', JSON.stringify(dineInContext));
-      }
-      navigate(location.state?.from || '/customer/home', { replace: true });
+    if (type === DINE_IN) {
+      startDineIn();
       return;
-    } else {
-      let rawNum = tableNum || tableParam;
-      if (!rawNum || String(rawNum).toLowerCase() === 'takeaway') {
-        const ctxNum = tableContext?.tableNumber;
-        if (ctxNum && String(ctxNum).toLowerCase() !== 'takeaway') {
-          rawNum = ctxNum;
-        } else {
-          rawNum = 'T01';
-        }
-      }
-      const canon = tableService.getCanonicalTableNumber(rawNum);
-      const dineInContext = { tableNumber: canon, tableId: canon, diners: 2, orderType: 'DINE_IN' };
-      setTable(dineInContext);
-      sessionStorage.setItem('foodie_table', JSON.stringify(dineInContext));
-      localStorage.setItem('foodie_table', JSON.stringify(dineInContext));
-      if (typeof tableService.occupyTableByNumber === 'function') {
-        tableService.occupyTableByNumber(canon).catch(() => {});
-      }
     }
-
-    const destination = location.state?.from || '/customer/home';
-    navigate(destination, { replace: true });
+    setSelectedTableId(null);
+    setOrderType(TAKEAWAY);
+    setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
+    goHome();
   };
 
-  // Capture table context from URL parameter or existing context on load
+  // A QR is trusted only after the backend resolves it to an active table of an active branch.
   useEffect(() => {
     if (qrParam) {
-      sessionStorage.setItem('foodie_table_qr', qrParam);
       api.get(`/public/qr/${qrParam}/`).then((res) => {
         const table = res.data?.table;
         const branch = res.data?.branch;
         if (!table) return;
+        rememberScannedTableQr(qrParam);
         if (branch?.id) {
           sessionStorage.setItem('foodie_public_branch', String(branch.id));
           sessionStorage.setItem('foodie_branch_source', 'qr');
         }
         const ctx = {
           tableNumber: table.table_number, tableId: table.id,
-          diners: table.capacity || 2, orderType: 'DINE_IN', location: table.location || '',
+          diners: table.capacity || 2, orderType: DINE_IN, location: table.location || '',
         };
         setTable(ctx);
         setTableNum(table.table_number);
-        sessionStorage.setItem('foodie_order_type', 'DINE_IN');
-        localStorage.setItem('foodie_order_type', 'DINE_IN');
-        sessionStorage.setItem('foodie_table', JSON.stringify(ctx));
+        setOrderType(DINE_IN);
+        setDineInAvailable(true);
         setQrDisabled(false);
       }).catch(() => {
+        rememberScannedTableQr(null);
+        setDineInAvailable(false);
         setQrDisabled(true);
         setError('This table QR is currently unavailable or disabled.');
       });
     }
+    // setTable is recreated on every provider render, so it must not be a dependency here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [qrParam]);
+
+  // A plain ?table= link is display-only: it never enables Dine-In without a verified QR.
+  useEffect(() => {
     const targetQuery = tableParam || qrParam;
     if (targetQuery && !qrParam) {
       const canonNum = tableService.getCanonicalTableNumber(targetQuery);
@@ -167,7 +237,8 @@ export const Welcome = () => {
       }
     };
     if (!qrParam) loadTable();
-  }, [tableParam, qrParam, tableContext, setTable]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableParam, qrParam]);
 
   const [countryCode, setCountryCode] = useState('+91');
 
@@ -201,17 +272,10 @@ export const Welcome = () => {
 
     setLoading(true);
     try {
-      // Ensure table is saved in context if set
-      if (tableNum.trim()) {
-        const targetTable = tableService.getCanonicalTableNumber(tableNum);
-        setTable({ tableNumber: targetTable, tableId: targetTable, diners: 2 });
-        if (typeof tableService.occupyTableByNumber === 'function') {
-          tableService.occupyTableByNumber(targetTable).catch(() => {});
-        }
-      }
-      
       const sent = await sendOTP(phone);
+      setOtp('');
       setOtpSent(true);
+      setShowOrderTypeSelection(false);
       if (sent?.dev_otp) {
         setOtp(String(sent.dev_otp));
         setInfoMessage(`OTP sent. Development code: ${sent.dev_otp}`);
@@ -244,13 +308,6 @@ export const Welcome = () => {
 
     setLoading(true);
     try {
-      if (tableNum.trim()) {
-        const targetTable = tableService.getCanonicalTableNumber(tableNum);
-        setTable({ tableNumber: targetTable, tableId: targetTable, diners: 2 });
-        if (typeof tableService.occupyTableByNumber === 'function') {
-          tableService.occupyTableByNumber(targetTable).catch(() => {});
-        }
-      }
       await verifyOTP(phone, cleanOtp);
       setShowOrderTypeSelection(true);
     } catch (err) {
@@ -269,6 +326,18 @@ export const Welcome = () => {
 
       <div className="my-auto py-4">
 
+        {availabilityMessage && (
+          <div className="alert alert-warning text-start small" role="status" data-testid="no-tables-banner">
+            {availabilityMessage}
+            <button type="button" className="btn btn-link btn-sm p-0 ms-2" onClick={startDineIn} disabled={checkingTables}>
+              Check again
+            </button>
+          </div>
+        )}
+        {availabilityError && (
+          <div className="alert alert-danger text-start small" role="alert">{availabilityError}</div>
+        )}
+
         {showOrderTypeSelection ? (
           <div className="text-center py-2 animate-fade-in">
             <div className="mb-4">
@@ -281,11 +350,29 @@ export const Welcome = () => {
               <p className="text-secondary small mb-0">How would you like to enjoy your food today?</p>
             </div>
 
+            {tableChoices && (
+              <div className="d-flex flex-column gap-2 mb-3 text-start">
+                <p className="small fw-semibold mb-1">Choose your table</p>
+                {tableChoices.map((table) => (
+                  <button
+                    key={table.id}
+                    type="button"
+                    className="btn btn-outline-danger text-start"
+                    onClick={() => claimTable(table)}
+                  >
+                    Table {table.table_number}{table.location ? ` · ${table.location}` : ''}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <div className="d-flex flex-column gap-3 mb-2">
               {/* Dine-In Card */}
               <button
                 type="button"
-                onClick={() => handleSelectOrderType('DINE_IN')}
+                data-testid="welcome-dine-in"
+                onClick={() => handleSelectOrderType(DINE_IN)}
+                disabled={checkingTables}
                 className="btn btn-outline-danger p-3 rounded-4 d-flex align-items-center gap-3 text-start border-2 shadow-sm bg-white dining-option-card"
                 style={{ borderColor: 'var(--primary-color, #dc3545)' }}
               >
@@ -298,7 +385,9 @@ export const Welcome = () => {
                 <div className="flex-grow-1 min-width-0">
                   <div className="fw-bold text-dark fs-6">Table Dine-In</div>
                   <span className="text-secondary small d-block mt-0.5" style={{ fontSize: '11.5px', lineHeight: '1.3' }}>
-                    Food will be freshly prepared and served right at your table
+                    {checkingTables
+                      ? 'Checking tables…'
+                      : 'Served at an available table, or scan the QR code on your table'}
                   </span>
                 </div>
               </button>
@@ -306,7 +395,8 @@ export const Welcome = () => {
               {/* Takeaway Card */}
               <button
                 type="button"
-                onClick={() => handleSelectOrderType('TAKEAWAY')}
+                data-testid="welcome-takeaway"
+                onClick={() => handleSelectOrderType(TAKEAWAY)}
                 className="btn btn-outline-danger p-3 rounded-4 d-flex align-items-center gap-3 text-start border-2 shadow-sm bg-white dining-option-card"
                 style={{ borderColor: 'var(--primary-color, #dc3545)' }}
               >
@@ -324,6 +414,7 @@ export const Welcome = () => {
                 </div>
               </button>
             </div>
+            {error && <div className="text-danger small mt-2 fw-semibold">{error}</div>}
           </div>
         ) : !otpSent ? (
           <form onSubmit={handleSendOTP}>
@@ -404,7 +495,7 @@ export const Welcome = () => {
                 type="button" 
                 variant="outline" 
                 className="py-2.5 fw-bold" 
-                onClick={handleSkip}
+                onClick={continueAsGuest}
               >
                 Skip for Now
               </Button>
@@ -442,17 +533,15 @@ export const Welcome = () => {
                 variant="primary" 
                 className="py-2.5" 
                 loading={loading}
-                disabled={otp.replace(/\D/g, '').length !== 6 || loading}
+                disabled={/request a new otp/i.test(error) || otp.replace(/\D/g, '').length !== 6 || loading}
               >
                 Verify & Continue
               </Button>
-              <Button 
-                type="button" 
-                variant="outline" 
-                className="py-2.5 fw-bold" 
-                onClick={handleSkip}
-              >
-                Skip for Now
+              <Button type="button" variant="outline" className="py-2.5 fw-bold" onClick={requestNewOtp} disabled={loading}>
+                Request a new OTP
+              </Button>
+              <Button type="button" variant="light" className="py-2.5 fw-bold" onClick={() => { setOtpSent(false); setOtp(''); setError(''); }}>
+                Use a different number
               </Button>
             </div>
           </form>

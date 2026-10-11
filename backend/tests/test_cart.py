@@ -401,8 +401,17 @@ class CheckoutValidateTests(CartBase):
         self.assertTrue(body["ready"])
         self.assertEqual(body["cart"]["table"]["table_number"], "T1")
         self.assertEqual(body["cart"]["pricing"]["total_amount"], "276.00")
-        self.assertEqual([m["code"] for m in body["payment_methods"]], ["UPI", "CARD", "COUNTER"])
         self.assertEqual(body["customer"]["phone"], "+919800000001")
+
+    @override_settings(RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET="")
+    def test_online_methods_hidden_without_gateway_keys(self):
+        self.ready_cart()
+        self.assertEqual([m["code"] for m in self.check().json()["payment_methods"]], ["COUNTER"])
+
+    @override_settings(RAZORPAY_KEY_ID="rzp_test_x", RAZORPAY_KEY_SECRET="secret")
+    def test_online_methods_listed_with_gateway_keys(self):
+        self.ready_cart()
+        self.assertEqual([m["code"] for m in self.check().json()["payment_methods"]], ["UPI", "CARD", "COUNTER"])
 
     def test_valid_takeaway_checkout(self):
         self.ready_cart(order_type="TAKEAWAY")

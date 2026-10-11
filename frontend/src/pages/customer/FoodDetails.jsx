@@ -9,7 +9,7 @@ import formatCurrency from '../../utils/formatCurrency';
 import { useCart } from '../../hooks/useCart';
 import BackButton from '../../components/common/BackButton';
 import { getProductSellingPrice } from '../../utils/pricing';
-import { getImageUrl } from '../../utils/imageUtils';
+import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 
 export const FoodDetails = () => {
   const { id } = useParams();
@@ -215,7 +215,7 @@ export const FoodDetails = () => {
               }}
               onError={(event) => {
                 console.error('Failed to load food image:', event.currentTarget.src);
-                event.currentTarget.src = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80';
+                event.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
               }}
             />
             {/* Veg/Non-veg overlay badge (top-right) */}

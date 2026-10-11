@@ -6,10 +6,25 @@ const getBackendBaseUrl = () => {
   if (import.meta.env.VITE_API_TARGET) {
     return import.meta.env.VITE_API_TARGET;
   }
-  return 'http://192.168.68.150:8000';
+  return ''; // same origin; the Vite dev server proxies /media to Django
 };
 
-const DEFAULT_FOOD_IMAGE = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=500&auto=format&fit=crop&q=80';
+// Shown only when a dish has no image or its image fails to load. Neutral, local, never a stock photo.
+export const FOOD_IMAGE_PLACEHOLDER = `data:image/svg+xml;utf8,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300"><rect width="400" height="300" fill="#f1f3f5"/>'
+  + '<text x="200" y="158" font-family="sans-serif" font-size="22" fill="#adb5bd" text-anchor="middle">No image</text></svg>'
+)}`;
+
+export const isHttpUrl = (value) => {
+  try {
+    const parsed = new URL(String(value || '').trim());
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname);
+  } catch {
+    return false;
+  }
+};
+
+const DEFAULT_FOOD_IMAGE = FOOD_IMAGE_PLACEHOLDER;
 
 export const getImageUrl = (input) => {
   if (!input) {
@@ -20,14 +35,7 @@ export const getImageUrl = (input) => {
 
   // 1. If input is a food/dish object
   if (typeof input === 'object' && input !== null && !Array.isArray(input)) {
-    const foodId = input.id || input.food_id;
-    if (foodId) {
-      try {
-        const saved = JSON.parse(localStorage.getItem('foodie_dish_images') || '{}');
-        const savedImg = saved[foodId] || saved[String(foodId)] || saved[Number(foodId)];
-        if (savedImg) rawImg = savedImg;
-      } catch (e) {}
-    }
+    rawImg = input.primary_image || input.image_url || (typeof input.image === 'string' ? input.image : '');
 
     if (!rawImg) {
       const imgArray = Array.isArray(input.images) ? input.images : (Array.isArray(input.food_images) ? input.food_images : null);
@@ -38,7 +46,7 @@ export const getImageUrl = (input) => {
     }
 
     if (!rawImg) {
-      rawImg = input.image_url || input.image || input.image_path || input.img || input.photo || input.url || input.src || '';
+      rawImg = input.image_path || input.img || input.photo || input.url || input.src || '';
     }
   } else if (Array.isArray(input) && input.length > 0) {
     const primary = input.find(i => typeof i === 'object' && i?.is_primary) || input[0];

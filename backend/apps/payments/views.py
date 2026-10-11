@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import IsCustomer, IsStaffMember, get_active_employee
+from apps.accounts.permissions import IsCustomer, IsCustomerOrStaff, IsStaffMember, get_active_employee
 from apps.accounts.scoping import can_access_branch
 from apps.accounts.services import record_audit
 
@@ -31,7 +31,7 @@ class CounterPaymentSerializer(serializers.Serializer):
 
 
 class StartOnlinePaymentView(APIView):
-    permission_classes = [IsCustomer]
+    permission_classes = [IsCustomerOrStaff]
 
     def post(self, request, pk):
         ser = StartPaymentSerializer(data=request.data)
@@ -47,7 +47,7 @@ class StartOnlinePaymentView(APIView):
 
 
 class VerifyPaymentView(APIView):
-    permission_classes = [IsCustomer]
+    permission_classes = [IsCustomerOrStaff]
 
     def post(self, request):
         ser = VerifyPaymentSerializer(data=request.data)

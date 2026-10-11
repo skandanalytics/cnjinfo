@@ -21,6 +21,7 @@ import { useSearchParams } from 'react-router-dom';
 import { tableService } from '../../services/tableService';
 import { couponService } from '../../services/couponService';
 import OrderTypeModal from '../../components/customer/OrderTypeModal';
+import { getOrderType, hasDineInTable, hasScannedTable, setOrderType } from '../../utils/orderContext';
 import SearchBar from '../../components/common/SearchBar';
 
 const ITEMS_PER_PAGE = 12;
@@ -55,7 +56,7 @@ export const Home = () => {
   const { tableContext, setTable } = useCart();
 
   useEffect(() => {
-    const hasActiveSession = isAuthenticated || sessionStorage.getItem('foodie_order_type') || sessionStorage.getItem('foodie_table') || tableParam || qrParam;
+    const hasActiveSession = isAuthenticated || sessionStorage.getItem('foodie_staff_ordering') === '1' || sessionStorage.getItem('foodie_order_type') || sessionStorage.getItem('foodie_table') || tableParam || qrParam;
     if (!hasActiveSession) {
       const searchStr = window.location.search || '';
       navigate(`/customer/welcome${searchStr}`, { replace: true });
@@ -63,12 +64,13 @@ export const Home = () => {
   }, [isAuthenticated, navigate, tableParam, qrParam]);
 
   useEffect(() => {
-    const target = tableParam || qrParam;
-    if (target) {
-      const canon = tableService.getCanonicalTableNumber(target);
+    if (tableParam) {
+      const canon = tableService.getCanonicalTableNumber(tableParam);
       setTable({ tableNumber: canon, tableId: canon, diners: 2 });
     }
-  }, [tableParam, qrParam, setTable]);
+    // setTable is recreated on every provider render; depending on it would loop.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tableParam]);
 
   const [selectedCategories, setSelectedCategories] = useState(['All']);
   const [search, setSearch] = useState('');
@@ -97,21 +99,20 @@ export const Home = () => {
   const isEmployee = user?.role === 'employee' || user?.role === 'admin';
 
   const [showOrderTypeModal, setShowOrderTypeModal] = useState(() => {
-    const savedType = sessionStorage.getItem('foodie_order_type') || localStorage.getItem('foodie_order_type');
-    const hasTable = tableParam || qrParam;
-    return !savedType && !hasTable;
+    const savedType = getOrderType();
+    if (savedType === 'DINE_IN' && !hasDineInTable()) return true;
+    return !savedType && !qrParam;
   });
 
   const handleSelectOrderType = (type) => {
+    if (type === 'DINE_IN' && !hasDineInTable()) {
+      navigate('/customer/welcome', { state: { chooseDining: true } });
+      return;
+    }
     setShowOrderTypeModal(false);
-    sessionStorage.setItem('foodie_order_type', type);
-    localStorage.setItem('foodie_order_type', type);
+    setOrderType(type);
     if (type === 'TAKEAWAY') {
-      const takeawayContext = { tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: 'TAKEAWAY' };
-      setTable(takeawayContext);
-    } else {
-      const canon = tableContext?.tableNumber || 'T01';
-      setTable({ tableNumber: canon, tableId: canon, diners: 2, orderType: 'DINE_IN' });
+      setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: 'TAKEAWAY' });
     }
   };
 
@@ -721,7 +722,7 @@ export const Home = () => {
           )}
         </div>
       </main>
-      <OrderTypeModal isOpen={showOrderTypeModal} onSelectType={handleSelectOrderType} />
+      <OrderTypeModal isOpen={showOrderTypeModal} onSelectType={handleSelectOrderType} dineInAvailable />
     </CustomerLayout>
   );
 };

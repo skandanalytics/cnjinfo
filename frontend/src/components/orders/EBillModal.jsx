@@ -18,8 +18,13 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
     }
     setDownloadingPdf(true);
     try {
-      const { downloadInvoice } = await import('../../services/adminApi');
-      await downloadInvoice(order);
+      const { downloadInvoice, isStaffScreen } = await import('../../services/adminApi');
+      if (isStaffScreen()) {
+        await downloadInvoice(order);
+      } else {
+        const { downloadCustomerInvoice } = await import('../../services/customerCheckout');
+        await downloadCustomerInvoice(order);
+      }
     } catch (e) {
       window.alert(e.message || 'The invoice could not be downloaded.');
     }

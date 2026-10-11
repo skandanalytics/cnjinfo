@@ -31,6 +31,14 @@ class IsCustomer(BasePermission):
         return bool(u and u.is_authenticated and u.is_active and u.user_type == User.UserType.CUSTOMER)
 
 
+class IsCustomerOrStaff(BasePermission):
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated and user.is_active):
+            return False
+        return user.user_type == User.UserType.CUSTOMER or get_active_employee(user) is not None
+
+
 class IsStaffMember(BasePermission):
     """Any active employee (cashier, chef, staff, manager, admin)."""
 

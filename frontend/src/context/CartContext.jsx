@@ -8,6 +8,8 @@ import { productService } from '../services/productService';
 import { AuthContext } from './AuthContext';
 import OutOfStockModal from '../components/common/OutOfStockModal';
 import api from '../services/api';
+import { placeOrder as placeCustomerOrder } from '../services/customerCheckout';
+import { getOrderType } from '../utils/orderContext';
 
 const formatInstructions = (item) => {
   const parts = [];
@@ -179,7 +181,7 @@ export const CartProvider = ({ children }) => {
         }
       } catch (e) { }
 
-      if (user && user.role === 'customer') {
+      if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
         // Skip backend cart sync immediately after order placement to prevent
         // creating a new cart right after the old one was cleared/abandoned.
         const skipFlag = sessionStorage.getItem('foodie_checkout_in_progress');
@@ -189,8 +191,8 @@ export const CartProvider = ({ children }) => {
         }
         try {
           const activeCart = (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0)
-            ? await cartService.getOrCreateCart(user.id || user.phone, tableContext?.tableId || null).catch(() => null)
-            : await cartService.getExistingCart(user.id || user.phone, tableContext?.tableId || null).catch(() => null);
+            ? await cartService.getOrCreateCart(user?.id || user?.phone, tableContext?.tableId || null).catch(() => null)
+            : await cartService.getExistingCart(user?.id || user?.phone, tableContext?.tableId || null).catch(() => null);
 
           if (!activeCart) {
             if (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
@@ -392,7 +394,7 @@ export const CartProvider = ({ children }) => {
     });
 
     // 2. Backend sync in background
-    if (user && user.role === 'customer') {
+    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
       try {
         const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
         const formattedText = formatInstructions({ instructions, extraIngredients });
@@ -401,11 +403,10 @@ export const CartProvider = ({ children }) => {
           extraIngredients
         });
 
-        if (added && (added.id || added.cart_item_id)) {
-          const newCartItemId = added.cart_item_id || added.id;
+        if (added?.cart_item_id) {
           setCartItems((prev) => {
             const updated = prev.map((i) =>
-              Number(i.id) === Number(item.id) ? { ...i, cartItemId: newCartItemId } : i
+              Number(i.id) === Number(item.id) ? { ...i, cartItemId: added.cart_item_id } : i
             );
             saveCartToStorage(updated);
             return updated;
@@ -413,6 +414,15 @@ export const CartProvider = ({ children }) => {
         }
       } catch (err) {
         console.error("Error adding to database cart:", err);
+        setCartItems((prev) => {
+          const updated = prev
+            .map((i) => (Number(i.id) === Number(item.id) ? { ...i, quantity: i.quantity - qtyToAdd } : i))
+            .filter((i) => i.quantity > 0);
+          saveCartToStorage(updated);
+          return updated;
+        });
+        showOutOfStockModal({ item, message: err.message, stock: 0 });
+        return false;
       }
     }
 
@@ -433,7 +443,7 @@ export const CartProvider = ({ children }) => {
     });
 
     // 2. Backend sync in background
-    if (user && user.role === 'customer') {
+    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
       try {
         const item = cartItems.find((i) => i.id === id);
         let cartItemId = item?.cartItemId;
@@ -470,7 +480,7 @@ export const CartProvider = ({ children }) => {
 
       let backendSuccess = true;
 
-      if (user && user.role === 'customer') {
+      if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
         let cartItemId = item.cartItemId;
         if (!cartItemId || String(cartItemId).startsWith('local_')) {
           try {
@@ -558,7 +568,7 @@ export const CartProvider = ({ children }) => {
     });
 
     // 2. Backend sync in background
-    if (user && user.role === 'customer') {
+    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
       try {
         let cartItemId = item.cartItemId;
         if (!cartItemId) {
@@ -600,7 +610,7 @@ export const CartProvider = ({ children }) => {
     });
 
     // 2. Backend sync in background
-    if (user && user.role === 'customer') {
+    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
       try {
         let cartItemId = item.cartItemId;
         if (!cartItemId) {
@@ -649,7 +659,7 @@ export const CartProvider = ({ children }) => {
       return updated;
     });
 
-    if (user && user.role === 'customer') {
+    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
       try {
         let cartItemId = item.cartItemId;
         if (!cartItemId) {
@@ -672,7 +682,7 @@ export const CartProvider = ({ children }) => {
   const clearCart = async () => {
     // Set flag so loadBackendCart doesn't immediately re-create a cart after checkout
     sessionStorage.setItem('foodie_checkout_in_progress', '1');
-    if (user && user.role === 'customer') {
+    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
       try {
         const targetId = user.id ? Number(user.id) : null;
         const userCart = await cartService.getExistingCart(targetId, tableContext?.tableId || null);
@@ -702,10 +712,7 @@ export const CartProvider = ({ children }) => {
     if (typeof customTakeawayFlag === 'string') {
       return customTakeawayFlag.toUpperCase() === 'TAKEAWAY';
     }
-    const savedType = sessionStorage.getItem('foodie_order_type') || localStorage.getItem('foodie_order_type');
-    if (savedType === 'TAKEAWAY') return true;
-    if (tableContext?.orderType === 'TAKEAWAY' || tableContext?.tableNumber === 'Takeaway' || tableContext?.tableId === 'Takeaway') return true;
-    return false;
+    return getOrderType() === 'TAKEAWAY';
   };
 
   const getEffectiveItems = () => {
@@ -793,18 +800,6 @@ export const CartProvider = ({ children }) => {
     if (branch) {
       api.delete(`/cart/coupon/?branch=${branch}`).catch(() => {});
     }
-  };
-
-  const getActiveTableContext = () => {
-    if (tableContext && tableContext.tableNumber) return tableContext;
-    try {
-      const saved = sessionStorage.getItem('foodie_table');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.tableNumber) return parsed;
-      }
-    } catch (e) { }
-    return null;
   };
 
   const userRemovedCouponRef = useRef(false);
@@ -923,150 +918,29 @@ export const CartProvider = ({ children }) => {
 
 
 
-  const submitOrder = async (paymentMethod = 'COD', explicitOrderType = null) => {
-    const savedOrderType = explicitOrderType || sessionStorage.getItem('foodie_order_type') || localStorage.getItem('foodie_order_type');
-    const activeTable = getActiveTableContext();
-    const isTakeawayChoice = savedOrderType === 'TAKEAWAY' || activeTable?.orderType === 'TAKEAWAY' || activeTable?.tableNumber === 'Takeaway';
-
-    const breakdown = getBillBreakdown(isTakeawayChoice);
-    const effectiveItems = getEffectiveItems();
-
-    const rawTableNum = activeTable ? (activeTable.tableNumber || activeTable.tableId) : 'T01';
-    const canonTableNum = String(rawTableNum).startsWith('T') ? rawTableNum : (rawTableNum === '1' ? 'T01' : (rawTableNum === '2' ? 'T02' : (rawTableNum === '3' ? 'T03' : (rawTableNum === '4' ? 'T04' : `T0${rawTableNum}`))));
-
-    const selectedRestId = activeTable?.restaurantId || activeTable?.restaurant || localStorage.getItem('foodie_selected_restaurant_id') || 1;
-
-    const orderData = {
-      restaurant_id: Number(selectedRestId) || 1,
-      restaurant: Number(selectedRestId) || 1,
-      table: isTakeawayChoice ? 'Takeaway' : (activeTable ? (activeTable.tableId || canonTableNum) : 'T01'),
-      tableNumber: isTakeawayChoice ? 'Takeaway' : canonTableNum,
-      orderType: isTakeawayChoice ? 'Takeaway' : 'Dine-In',
-      items: effectiveItems.map((i) => {
-        const extraPerUnit = i.extraIngredients
-          ? i.extraIngredients.reduce((s, ing) => s + ing.price, 0)
-          : 0;
-        return {
-          id: i.id,
-          item_id: i.id,
-          name: i.name,
-          quantity: i.quantity || 1,
-          price: (getProductSellingPrice(i) || i.price || 0) + extraPerUnit,
-          instructions: formatInstructions(i)
-        };
-      }),
-      subtotal: breakdown.subtotal,
-      itemDiscounts: breakdown.menuDiscounts,
-      extraCharges: breakdown.extraCharges,
-      packingCharge: breakdown.packingCharge,
-      packing_charge: breakdown.packingCharge,
-      tax: breakdown.tax,
-      serviceCharge: breakdown.serviceCharge,
-      service_charge: breakdown.serviceCharge,
-      isServiceChargeRemoved: breakdown.isServiceChargeRemoved,
-      deliveryFee: 0,
-      discount: breakdown.discount,
-      voucher: coupon ? (coupon.code || coupon) : null,
-      voucherCode: coupon ? (coupon.code || coupon) : null,
-      coupon: coupon || null,
-      total: breakdown.grandTotal,
-      paymentMethod,
-      diners: activeTable ? activeTable.diners || 2 : 2,
-      source: activeTable ? 'QR Code' : 'Counter'
-    };
-
-    let placed = null;
+  // Places the order from the customer's server cart. The server prices it, enforces the Dine-In table rule
+  // and marks that cart CONVERTED; the local mirror is reset only after the server confirms the order.
+  const submitOrder = async (paymentMethod = 'COUNTER', explicitOrderType = null) => {
+    const order = await placeCustomerOrder(explicitOrderType || getOrderType(), paymentMethod);
+    setOrderLogs((prev) => [order, ...prev]);
+    resetLocalCart();
     try {
-      const branch = sessionStorage.getItem('foodie_public_branch');
-      if (!branch) throw new Error('Choose a restaurant before checkout.');
-      const contextBody = { branch: Number(branch), order_type: isTakeawayChoice ? 'TAKEAWAY' : 'DINE_IN' };
-      if (!isTakeawayChoice) {
-        const qr = sessionStorage.getItem('foodie_table_qr');
-        if (!qr) throw new Error('Scan the table QR code to place a dine-in order, or switch to Takeaway.');
-        contextBody.qr = qr;
-      }
-      await api.put('/cart/context/', contextBody);
-      const validated = await api.post('/checkout/validate/', { branch: Number(branch) });
-      if (!validated.data?.ready) throw new Error('Your cart needs attention before checkout.');
-      let key = sessionStorage.getItem('foodie_checkout_key');
-      if (!key) {
-        key = (crypto.randomUUID && crypto.randomUUID()) || `ck-${Date.now()}`;
-        sessionStorage.setItem('foodie_checkout_key', key);
-      }
-      const created = await api.post('/orders/', {
-        branch: Number(branch), idempotency_key: key, payment_method: 'COUNTER',
-      });
-      sessionStorage.removeItem('foodie_checkout_key');
-      const order = created.data;
-      placed = {
-        id: order.id, order_number: order.order_number, status: order.status,
-        total: Number(order.total_amount), payment_status: order.payment_status, items: order.items,
-      };
-    } catch (err) {
-      const detail = err.response?.data?.detail;
-      throw new Error(typeof detail === 'string' ? detail : (err.message || 'Could not place the order.'));
-    }
-
-    if (!placed || !placed.id || String(placed.id) === 'undefined' || String(placed.id) === 'null') {
-      throw new Error("Order creation failed: Backend did not return a valid order ID.");
-    }
-
-    placed.placedAt = placed.placedAt || Date.now();
-    placed.rawCreatedAt = placed.rawCreatedAt || Date.now();
-    placed.createdAt = placed.createdAt || new Date().toISOString();
-    placed.packingCharge = breakdown.packingCharge;
-    placed.packing_charge = breakdown.packingCharge;
-
-    if (!placed.total || Number(placed.total) === 0) {
-      placed.total = breakdown.grandTotal;
-    }
-    try {
-      sessionStorage.setItem('foodie_last_placed_order', JSON.stringify(placed));
-      localStorage.setItem('foodie_last_placed_order', JSON.stringify(placed));
-      localStorage.setItem(`foodie_saved_order_${placed.id}`, JSON.stringify(placed));
-      const existingAll = JSON.parse(localStorage.getItem('foodie_all_placed_orders') || '[]');
-      const filteredExisting = existingAll.filter(o => String(o.id || o.order_id) !== String(placed.id));
-      localStorage.setItem('foodie_all_placed_orders', JSON.stringify([placed, ...filteredExisting]));
-      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: placed.id } }));
-      localStorage.setItem('foodie_orders_sync_trigger', Date.now().toString());
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: order.id } }));
     } catch (e) { }
+    return order;
+  };
 
-    setOrderLogs((prev) => [placed, ...prev]);
-    try {
-      if (user && user.id) {
-        const userKey = `foodie_customer_order_ids_${user.id}`;
-        const saved = JSON.parse(localStorage.getItem(userKey) || '[]');
-        if (!saved.includes(String(placed.id))) {
-          localStorage.setItem(userKey, JSON.stringify([String(placed.id), ...saved]));
-        }
-
-        if (user.phone) {
-          const phoneClean = String(user.phone).replace(/\D/g, '').slice(-10);
-          const phoneKey = `foodie_customer_order_ids_${phoneClean}`;
-          const phoneSaved = JSON.parse(localStorage.getItem(phoneKey) || '[]');
-          if (!phoneSaved.includes(String(placed.id))) {
-            localStorage.setItem(phoneKey, JSON.stringify([String(placed.id), ...phoneSaved]));
-          }
-        }
-      } else {
-        const guestSaved = JSON.parse(localStorage.getItem('foodie_guest_order_ids') || '[]');
-        if (!guestSaved.includes(String(placed.id))) {
-          localStorage.setItem('foodie_guest_order_ids', JSON.stringify([String(placed.id), ...guestSaved]));
-        }
-      }
-    } catch (e) {
-      console.error("Error saving customer order ID in cart", e);
+  const resetLocalCart = () => {
+    sessionStorage.setItem('foodie_checkout_in_progress', '1');
+    setCartItems([]);
+    setCoupon(null);
+    saveCartToStorage([], user);
+    for (const key of ['foodie_cart', 'foodie_guest_cart', 'foodie_guest_cart_temp', 'foodie_guest_cart_unmerged']) {
+      sessionStorage.removeItem(key);
+      localStorage.removeItem(key);
     }
-
-    try {
-      await clearCart();
-      if (user) {
-        sessionStorage.removeItem(getCartStorageKey(user));
-        sessionStorage.removeItem('foodie_cart');
-      }
-    } catch (e) { }
-
-    return placed;
+    if (user) sessionStorage.removeItem(getCartStorageKey(user));
+    setTimeout(() => sessionStorage.removeItem('foodie_checkout_in_progress'), 3000);
   };
 
   const loadOrderIntoCart = (items) => {

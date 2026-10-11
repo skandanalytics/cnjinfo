@@ -127,13 +127,14 @@ function mapBranch(b) {
     city: '',
     address: b.address || '',
     phone: b.contact_number || '',
-    email: '',
+    email: b.email || '',
+    city: b.city || '',
     managerName: b.manager_name || '',
-    openingHours: '',
+    openingHours: b.opening_hours || '',
     tablesCount: b.tables_count || 0,
     status: b.is_active ? 'Active' : 'Inactive',
-    isMainBranch: false,
-    image: '',
+    isMainBranch: Boolean(b.is_primary),
+    image: b.cover_image_url || '',
     gst_rate: b.gst_rate,
     service_charge_rate: b.service_charge_rate,
     takeaway_charge: b.takeaway_charge,
@@ -149,8 +150,13 @@ export async function saveBranch(form, existingId) {
   const body = {
     name: form.name,
     address: form.address,
+    city: form.city || '',
     contact_number: form.phone,
+    email: (form.email || '').trim(),
     manager_name: form.managerName,
+    opening_hours: form.openingHours || '',
+    cover_image_url: (form.image || '').trim(),
+    is_primary: Boolean(form.isMainBranch),
     is_active: form.status === 'Active',
   };
   const data = existingId
@@ -175,6 +181,7 @@ function mapTable(t) {
     capacity: t.capacity,
     area: t.location || 'Indoor Main',
     location: t.location || '',
+    tableViewId: t.table_view || null,
     status: label,
     branch: t.branch,
     branch_name: t.branch_name,
@@ -320,6 +327,8 @@ function mapFood(f, stockByFood) {
     inventoryId: stockRow ? stockRow.id : null,
     status: f.is_orderable === false ? 'Out of Stock' : 'Active',
     image: f.primary_image || '',
+    imageUrl: f.image_url || '',
+    currentDiscount: discount || null,
     calories: f.calories,
     protein: f.protein_grams,
     is_orderable: f.is_orderable,
@@ -334,7 +343,7 @@ async function stockMap() {
 
 export async function listFoods() {
   const [foods, stocks] = await Promise.all([
-    staffJson('/foods/'),
+    staffJson('/foods/?is_active=true'),
     stockMap(),
   ]);
   return listOf(foods).map((food) => mapFood(food, stocks));
@@ -349,7 +358,17 @@ async function categoryIdByName(name) {
   return created.id;
 }
 
-async function syncDiscount(foodId, data) {
+function discountUnchanged(data, current) {
+  const pct = Number(data.discountPercent || 0);
+  const discPrice = Number(data.discountPrice || 0);
+  if (!current) return !(pct > 0) && !(discPrice > 0);
+  if (current.type === 'PERCENT') return pct === Number(current.value);
+  return Math.abs(discPrice - (Number(data.price) - Number(current.value))) < 0.01;
+}
+
+async function syncDiscount(foodId, data, current) {
+  if (data.discountPercent === undefined && data.discountPrice === undefined) return;
+  if (current !== undefined && discountUnchanged(data, current)) return;
   const clear = data.hasDiscount === false || (Number(data.discountPercent) === 0 && Number(data.discountPrice) === 0 && data.discountPrice !== undefined && data.discountPercent !== undefined);
   const pct = Number(data.discountPercent || 0);
   const price = Number(data.price || 0);
@@ -405,6 +424,14 @@ async function syncStock(foodId, quantity, inventoryId) {
   });
 }
 
+async function uploadPrimaryImage(foodId, file) {
+  const form = new FormData();
+  form.append('food', String(foodId));
+  form.append('image', file);
+  form.append('is_primary', 'true');
+  await staffJson('/food-images/', { method: 'POST', body: form });
+}
+
 export async function createFood(data) {
   const category = await categoryIdByName(data.category);
   const branch = await currentBranchId();
@@ -419,18 +446,20 @@ export async function createFood(data) {
       price: data.price,
       calories: data.calories,
       protein_grams: data.protein,
+      image_url: data.imageFile ? '' : (data.imageUrl || ''),
       is_active: true,
     }),
   });
-  if (data.imageFile) {
-    const form = new FormData();
-    form.append('food', String(created.id));
-    form.append('image', data.imageFile);
-    form.append('is_primary', 'true');
-    await staffJson('/food-images/', { method: 'POST', body: form });
+  // The dish row exists from here on; a failed follow-up step must not look like a failed create.
+  try {
+    if (data.imageFile) await uploadPrimaryImage(created.id, data.imageFile);
+    await syncDiscount(created.id, data);
+    await syncStock(created.id, data.stock, null);
+  } catch (err) {
+    const wrapped = new Error(`"${created.name}" was saved, but ${explain(err)}. Edit the dish to finish setting it up.`);
+    wrapped.dishSaved = true;
+    throw wrapped;
   }
-  await syncDiscount(created.id, data);
-  await syncStock(created.id, data.stock, null);
   const foods = await listFoods();
   return foods.find((f) => f.id === created.id) || created;
 }
@@ -444,21 +473,37 @@ export async function updateFood(id, data) {
   if (data.calories !== undefined) body.calories = data.calories;
   if (data.protein !== undefined) body.protein_grams = data.protein;
   if (data.category) body.category = await categoryIdByName(data.category);
+  if (data.imageUrl !== undefined && !data.imageFile) body.image_url = data.imageUrl || '';
+  let current = null;
   if (Object.keys(body).length) {
-    await staffJson(`/foods/${id}/`, { method: 'PATCH', body: JSON.stringify(body) });
+    current = await staffJson(`/foods/${id}/`, { method: 'PATCH', body: JSON.stringify(body) });
+  } else if (data.discountPercent !== undefined || data.discountPrice !== undefined) {
+    current = await staffJson(`/foods/${id}/`);
   }
-  if (data.imageFile) {
-    const form = new FormData();
-    form.append('food', String(id));
-    form.append('image', data.imageFile);
-    form.append('is_primary', 'true');
-    await staffJson('/food-images/', { method: 'POST', body: form });
+  if (data.imageFile) await uploadPrimaryImage(id, data.imageFile);
+  await syncDiscount(id, data, current ? current.current_discount : undefined);
+  if (data.stock !== undefined && data.stock !== null && data.stock !== '') {
+    const stocks = await stockMap();
+    await syncStock(id, data.stock, stocks.get(Number(id))?.id || stocks.get(id)?.id);
   }
-  await syncDiscount(id, data);
-  const stocks = await stockMap();
-  await syncStock(id, data.stock, stocks.get(Number(id))?.id || stocks.get(id)?.id);
   const foods = await listFoods();
   return foods.find((f) => String(f.id) === String(id));
+}
+
+export async function restockFood(foodId, quantity) {
+  const qty = Number(quantity);
+  if (!Number.isInteger(qty) || qty <= 0) throw new Error('Enter a positive whole number.');
+  const row = listOf(await staffJson(`/inventory/?food=${foodId}`))[0];
+  if (row) {
+    return staffJson(`/inventory/${row.id}/restock/`, {
+      method: 'POST',
+      body: JSON.stringify({ quantity: qty, note: 'Restock from the menu screen' }),
+    });
+  }
+  if (!staffIsAdmin()) {
+    throw new Error('Only an administrator can create a stock record. Restock adds to an existing one.');
+  }
+  return staffJson('/inventory/', { method: 'POST', body: JSON.stringify({ food: foodId, quantity: qty }) });
 }
 
 export async function deleteFood(id) {
@@ -578,6 +623,7 @@ function mapEmployee(e) {
   const admin = role === 'SUPER_ADMIN' || role === 'ADMIN' || role === 'MANAGER';
   return {
     id: String(e.id),
+    userId: e.user_id,
     employeeId: e.employee_code,
     name: e.name,
     email: e.email || '',
@@ -624,7 +670,7 @@ export async function deactivateEmployee(id) {
   await staffJson(`/employees/${id}/`, { method: 'DELETE' });
 }
 
-function mapOrder(o) {
+export function mapOrder(o) {
   const created = o.created_at ? new Date(o.created_at) : new Date();
   const tableLabel = o.order_type === 'TAKEAWAY' ? 'Takeaway' : (o.table?.label || '—');
   return {
@@ -642,6 +688,7 @@ function mapOrder(o) {
     source: o.order_type === 'TAKEAWAY' ? 'Takeaway' : 'Dine-In',
     orderType: o.order_type === 'TAKEAWAY' ? 'Takeaway' : 'Dine-In',
     paymentMethod: o.payment_status,
+    paymentStatus: o.payment_status,
     payment_status: o.payment_status,
     total: Number(o.total_amount),
     total_amount: o.total_amount,
@@ -656,7 +703,10 @@ function mapOrder(o) {
     service_charge_rate: o.service_charge_rate,
     service_charge_amount: Number(o.service_charge_amount || 0),
     serviceCharge: Number(o.service_charge_amount || 0),
+    branchId: o.branch_id,
     branch_id: o.branch_id,
+    placedById: o.placed_by || null,
+    placedByName: o.placed_by_name || '',
     user: o.customer_phone || '',
     customerPhone: o.customer_phone || '',
     items: (o.items || []).map((item) => ({
@@ -671,7 +721,9 @@ function mapOrder(o) {
 }
 
 export async function listOrdersForUi() {
-  const rows = listOf(await staffJson('/orders/'));
+  const path = typeof window !== 'undefined' ? window.location.pathname : '';
+  const mine = path.startsWith('/employee') && !path.includes('/kitchen');
+  const rows = listOf(await staffJson(`/orders/${mine ? '?mine=1' : ''}`));
   return rows.map(mapOrder);
 }
 

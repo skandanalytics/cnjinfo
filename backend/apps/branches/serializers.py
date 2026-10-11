@@ -1,3 +1,4 @@
+from django.db import transaction
 from rest_framework import serializers
 
 from apps.accounts.mixins import BranchBoundSerializerMixin
@@ -8,11 +9,22 @@ from .qr import qr_url
 
 
 class BranchSerializer(serializers.ModelSerializer):
+    tables_count = serializers.SerializerMethodField()
+    email = serializers.EmailField(required=False, allow_blank=True, max_length=254)
+    cover_image_url = serializers.URLField(required=False, allow_blank=True, max_length=1000)
+
     class Meta:
         model = Branch
-        fields = ["id", "code", "name", "address", "contact_number", "manager_name", "is_active",
+        fields = ["id", "code", "name", "address", "city", "contact_number", "email", "manager_name",
+                  "opening_hours", "cover_image_url", "is_primary", "tables_count", "is_active",
                   "gst_rate", "service_charge_rate", "takeaway_charge", "created_at", "updated_at"]
-        read_only_fields = ["id", "code", "created_at", "updated_at"]
+        read_only_fields = ["id", "code", "tables_count", "created_at", "updated_at"]
+
+    def get_tables_count(self, obj):
+        annotated = getattr(obj, "tables_count", None)
+        if isinstance(annotated, int):
+            return annotated
+        return obj.tables.filter(is_active=True).count()
 
     def validate_contact_number(self, value):
         if not value:
@@ -30,6 +42,12 @@ class BranchSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("A branch with this name already exists.")
         return value.strip()
 
+    def validate_cover_image_url(self, value):
+        value = (value or "").strip()
+        if value and value.split(":", 1)[0].lower() not in ("http", "https"):
+            raise serializers.ValidationError("Cover image URL must start with http:// or https://.")
+        return value
+
     def validate(self, attrs):
         for rate in ("gst_rate", "service_charge_rate"):
             if rate in attrs and attrs[rate] > 100:
@@ -37,10 +55,21 @@ class BranchSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated):
-        branch = Branch.objects.create(code="TMP", **validated)
-        branch.code = f"BR{branch.id:03d}"
-        branch.save(update_fields=["code"])
+        with transaction.atomic():
+            if validated.get("is_primary"):
+                Branch.objects.select_for_update().filter(is_primary=True).update(is_primary=False)
+            branch = Branch.objects.create(code="TMP", **validated)
+            branch.code = f"BR{branch.id:03d}"
+            branch.save(update_fields=["code"])
         return branch
+
+    def update(self, instance, validated):
+        with transaction.atomic():
+            # Clear the previous headquarters before this row becomes primary, or the unique rule rejects the save.
+            if validated.get("is_primary"):
+                (Branch.objects.select_for_update().exclude(pk=instance.pk).filter(is_primary=True)
+                 .update(is_primary=False))
+            return super().update(instance, validated)
 
 
 class TableSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):

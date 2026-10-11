@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
 import { getFrontendCategoryName } from '../../utils/categoryUtils';
-import { compressImageFile } from '../../utils/imageUtils';
+import { compressImageFile, isHttpUrl } from '../../utils/imageUtils';
 import { extractApiErrorMessage } from '../../utils/errorUtils';
 import { menuService } from '../../services/menuService';
 import Modal from '../common/Modal';
@@ -118,12 +118,11 @@ export const EditDishModal = ({
       setDescription(dish.description || '');
       setCategory(dish.category || 'Main Course');
       setFoodType((dish.foodType || dish.type || 'veg').toLowerCase());
-      setStock(dish.stock !== undefined ? String(dish.stock) : '20');
+      setStock(dish.stock !== undefined && dish.stock !== null ? String(dish.stock) : '');
       setProtein(dish.protein !== undefined && dish.protein !== null ? String(dish.protein) : '');
-      const initialImg = dish.image || '';
-      setImage(initialImg);
+      setImage(dish.imageUrl || dish.image || '');
       setImageFile(null);
-      setImageMode(initialImg.startsWith('data:') ? 'file' : (initialImg ? 'url' : 'file'));
+      setImageMode(dish.imageUrl ? 'url' : 'file');
       setErrorMsg('');
     }
   }, [dish, isOpen]);
@@ -220,10 +219,22 @@ export const EditDishModal = ({
       return;
     }
 
-    const stockNum = stock && stock.trim() !== '' ? parseInt(stock) : 100;
-    if (isNaN(stockNum) || stockNum < 0) {
-      setErrorMsg('Stock quantity must be a positive integer.');
+    const stockNum = stock && stock.trim() !== '' ? Number(stock) : undefined;
+    if (stockNum !== undefined && (!Number.isInteger(stockNum) || stockNum < 0)) {
+      setErrorMsg('Stock quantity must be a whole number of 0 or more.');
       return;
+    }
+
+    const imageChanges = {};
+    if (imageMode === 'file' && imageFile) {
+      imageChanges.imageFile = imageFile;
+    } else if (imageMode === 'url') {
+      const nextUrl = image.trim();
+      if (nextUrl && !isHttpUrl(nextUrl)) {
+        setErrorMsg('Image URL must be a full http:// or https:// address.');
+        return;
+      }
+      if (nextUrl !== (dish.imageUrl || '')) imageChanges.imageUrl = nextUrl;
     }
 
     let protNum = null;
@@ -248,8 +259,7 @@ export const EditDishModal = ({
         foodType: foodType,
         stock: stockNum,
         protein: protNum,
-        image: image.trim(),
-        imageFile: imageFile
+        ...imageChanges
       });
       setLoading(false);
       onClose();

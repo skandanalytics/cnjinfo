@@ -73,7 +73,10 @@ def serialize_order(order):
         "id": order.id, "order_number": order.order_number, "branch_id": order.branch_id,
         "order_type": order.order_type, "status": order.status, "payment_status": order.payment_status,
         "table": {"id": order.table_id, "label": order.table_label} if order.table_id else None,
-        "customer_phone": order.customer_phone, "items": items, "history": history,
+        "customer_phone": order.customer_phone,
+        "placed_by": order.placed_by_id,
+        "placed_by_name": order.placed_by.name if order.placed_by_id else None,
+        "items": items, "history": history,
         "items_subtotal": str(order.items_subtotal), "customization_total": str(order.customization_total),
         "dish_discount_total": str(order.dish_discount_total),
         "coupon_discount_total": str(order.coupon_discount_total), "takeaway_charge": str(order.takeaway_charge),
@@ -84,14 +87,22 @@ def serialize_order(order):
     }
 
 
+def _owns_order(order, user):
+    return order.customer_id == user.id or order.placed_by_id == user.id
+
+
 @transaction.atomic
 def create_from_cart(user, branch, idempotency_key, payment_method):
-    if user.user_type != User.UserType.CUSTOMER:
-        raise OrderError("Only a customer can place this order.", "not_customer", 403)
+    from apps.accounts.permissions import get_active_employee
+    from apps.accounts.scoping import can_access_branch
+
+    assisted = user.user_type != User.UserType.CUSTOMER
+    if assisted and (get_active_employee(user) is None or not can_access_branch(user, branch.id)):
+        raise OrderError("You cannot place an order for this branch.", "not_staff", 403)
     if idempotency_key:
         existing = Order.objects.filter(idempotency_key=idempotency_key).first()
         if existing:
-            if existing.customer_id != user.id:
+            if not _owns_order(existing, user):
                 raise OrderError("This checkout key was already used.", "idempotency_conflict", 409)
             return existing, False
     cart = Cart.objects.select_for_update().filter(
@@ -102,16 +113,18 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
     if not view["can_checkout"]:
         raise OrderError("Your cart needs attention before checkout.", "cart_invalid", 409)
     try:
-        priced = price_order(branch, _lines_of(cart), cart.order_type, user, [c.code for c in cart.coupons.all()],
-                             allow_auto=not cart.skip_auto_coupons)
+        priced = price_order(branch, _lines_of(cart), cart.order_type, None if assisted else user,
+                             [c.code for c in cart.coupons.all()], allow_auto=not cart.skip_auto_coupons)
     except PricingError as exc:
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
 
     order = Order(
         order_number=f"TMP{uuid4().hex[:12]}",
-        branch=branch, customer=user, customer_phone=user.phone,
+        branch=branch, customer=None if assisted else user, customer_phone="" if assisted else user.phone,
         table=cart.table, table_label=(f"{cart.table.table_number}" if cart.table_id else ""),
-        order_type=cart.order_type, source=Order.Source.CUSTOMER, status=Order.Status.PENDING,
+        order_type=cart.order_type,
+        source=Order.Source.EMPLOYEE if assisted else Order.Source.CUSTOMER,
+        placed_by=user if assisted else None, status=Order.Status.PENDING,
         # COUNTER stays UNPAID until staff records it. Online stays PENDING here; the Payment row is
         # created when the customer starts payment. Missing Razorpay keys do not block placing the order.
         payment_status=(Order.PaymentStatus.UNPAID if payment_method == "COUNTER" else Order.PaymentStatus.PENDING),
@@ -129,7 +142,7 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
     except IntegrityError:
         if idempotency_key:
             existing = Order.objects.get(idempotency_key=idempotency_key)
-            if existing.customer_id != user.id:
+            if not _owns_order(existing, user):
                 raise OrderError("This checkout key was already used.", "idempotency_conflict", 409)
             return existing, False
         raise
@@ -153,9 +166,89 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
     OrderStatusHistory.objects.create(order=order, from_status="", to_status=Order.Status.PENDING, changed_by=user,
                                       note="Order placed")
     if order.table_id:
-        _occupy(order.table)
+        claimed = DiningTable.objects.select_for_update().get(pk=order.table_id)
+        if not claimed.is_active or claimed.status == DiningTable.Status.OCCUPIED:
+            raise OrderError("This table was just taken. Choose another table or Takeaway.", "table_unavailable", 409)
+        _occupy(claimed)
     cart.status = Cart.Status.CONVERTED
     cart.save(update_fields=["status", "active_slot", "updated_at"])
+    publish_order_event(order)
+    return order, True
+
+
+def _money_fields(priced):
+    return {
+        "items_subtotal": priced["items_subtotal"], "customization_total": priced["customization_total"],
+        "dish_discount_total": priced["dish_discount_total"], "coupon_discount_total": priced["coupon_discount_total"],
+        "takeaway_charge": priced["takeaway_charge"], "taxable_amount": priced["taxable_amount"],
+        "gst_rate": priced["gst_rate"], "gst_amount": priced["gst_amount"],
+        "service_charge_rate": priced["service_charge_rate"],
+        "service_charge_amount": priced["service_charge_amount"], "total_amount": priced["total_amount"],
+    }
+
+
+def _write_items(order, priced):
+    for line in priced["items"]:
+        OrderItem.objects.create(
+            order=order, food_id=line["food_id"], food_name=line["name"], unit_price=line["unit_price"],
+            customizations=[{"name": c["name"], "extra_price": str(c["extra_price"])} for c in line["customizations"]],
+            customization_per_unit=line["customization_per_unit"],
+            dish_discount_per_unit=line["dish_discount_per_unit"], quantity=line["quantity"],
+            line_total=line["line_total"], special_instructions=line["special_instructions"])
+
+
+@transaction.atomic
+def create_assisted(staff_user, table_id, item_rows, idempotency_key):
+    """A branch employee places a dine-in order for a table. The creator is the logged-in employee."""
+    from apps.accounts.permissions import get_active_employee
+    from apps.accounts.scoping import can_access_branch
+    from apps.orders.pricing import Line
+
+    if get_active_employee(staff_user) is None:
+        raise OrderError("No active staff profile.", "not_staff", 403)
+    if idempotency_key:
+        existing = Order.objects.filter(idempotency_key=idempotency_key).first()
+        if existing:
+            if existing.placed_by_id != staff_user.id:
+                raise OrderError("This checkout key was already used.", "idempotency_conflict", 409)
+            return existing, False
+    table = DiningTable.objects.select_for_update().filter(pk=table_id).first()
+    if table is None or not can_access_branch(staff_user, table.branch_id):
+        raise OrderError("Not found.", "not_found", 404)
+    if not table.is_active or table.status == DiningTable.Status.OCCUPIED:
+        raise OrderError("This table is not available for a new order.", "table_unavailable", 409)
+    lines = [Line(row["food"], row["quantity"], [], "") for row in item_rows]
+    try:
+        priced = price_order(table.branch, lines, Order.Type.DINE_IN, None, [])
+    except PricingError as exc:
+        raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
+    order = Order(
+        order_number=f"TMP{uuid4().hex[:12]}", branch=table.branch, customer=None, customer_phone="",
+        table=table, table_label=table.table_number, order_type=Order.Type.DINE_IN,
+        source=Order.Source.EMPLOYEE, placed_by=staff_user, status=Order.Status.PENDING,
+        payment_status=Order.PaymentStatus.UNPAID, idempotency_key=idempotency_key or None,
+        **_money_fields(priced),
+    )
+    try:
+        with transaction.atomic():
+            order.save()
+    except IntegrityError:
+        if idempotency_key:
+            existing = Order.objects.get(idempotency_key=idempotency_key)
+            if existing.placed_by_id != staff_user.id:
+                raise OrderError("This checkout key was already used.", "idempotency_conflict", 409)
+            return existing, False
+        raise
+    order.order_number = f"FD{order.id:06d}"
+    order.save(update_fields=["order_number"])
+    _write_items(order, priced)
+    try:
+        deduct_for_order(order)
+    except InsufficientStock as exc:
+        raise OrderError(str(exc), "out_of_stock", 409)
+    OrderStatusHistory.objects.create(order=order, from_status="", to_status=Order.Status.PENDING,
+                                      changed_by=staff_user, note="Order placed by staff")
+    _occupy(table)
     publish_order_event(order)
     return order, True
 
