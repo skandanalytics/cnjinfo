@@ -7,6 +7,8 @@ import Input from '../../components/common/Input';
 import Modal from '../../components/common/Modal';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
+import BranchRequiredState from '../../components/common/BranchRequiredState';
+import { useBranches } from '../../hooks/useBranches';
 import SearchBar from '../../components/common/SearchBar';
 import EditDishModal from '../../components/menu/EditDishModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
@@ -17,6 +19,7 @@ import formatCurrency from '../../utils/formatCurrency';
 import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 
 export const Offers = () => {
+  const { hasBranches, loading: branchesLoading } = useBranches();
   const [activeTab, setActiveTab] = useState('dishes'); // 'dishes' | 'coupons'
   const [coupons, setCoupons] = useState([]);
   const [discountedDishes, setDiscountedDishes] = useState([]);
@@ -95,7 +98,7 @@ export const Offers = () => {
 
   const handleCreateCoupon = async (e) => {
     e.preventDefault();
-    if (!code || !discount) return;
+    if (!hasBranches || !code || !discount) return;
 
     try {
       await couponService.createCoupon({
@@ -220,13 +223,22 @@ export const Offers = () => {
     );
   });
 
-  if (loading && coupons.length === 0 && discountedDishes.length === 0) {
+  if ((loading && coupons.length === 0 && discountedDishes.length === 0) || branchesLoading) {
     return (
       <AdminLayout>
         <div className="py-5 text-center">
           <Loader />
           <p className="text-muted small mt-2">Loading offers...</p>
         </div>
+      </AdminLayout>
+    );
+  }
+
+  if (!hasBranches) {
+    return (
+      <AdminLayout>
+        <PageHeader title="Offers & Discounts" showBackButton />
+        <BranchRequiredState />
       </AdminLayout>
     );
   }
@@ -303,13 +315,32 @@ export const Offers = () => {
         actions={
           <div className="d-flex align-items-center gap-2 flex-wrap">
             {((activeTab === 'dishes' && discountedDishes.length > 0) || (activeTab === 'coupons' && coupons.length > 0)) && (
-              <SearchBar
-                placeholder={activeTab === 'dishes' ? "Search dish offers..." : "Search coupons..."}
-                value={search}
-                onChange={setSearch}
-                suggestions={activeTab === 'dishes' ? discountedDishes.map(d => d.name) : coupons.map(c => c.code)}
-                style={{ width: '220px' }}
-              />
+            <SearchBar
+              placeholder={activeTab === 'dishes' ? "Search dish offers..." : "Search coupons..."}
+              value={search}
+              onChange={setSearch}
+              records={activeTab === 'dishes'
+                ? discountedDishes.map((dish) => ({
+                  id: dish.id,
+                  label: dish.name,
+                  title: dish.name,
+                  subtitle: dish.category || 'Offer',
+                  price: dish.sellingPrice ?? dish.discountPrice ?? dish.price,
+                  image: dish.image,
+                  searchText: [dish.name, dish.category].filter(Boolean).join(' '),
+                }))
+                : coupons.map((coupon) => ({
+                  id: coupon.id || coupon.code,
+                  label: coupon.code,
+                  title: coupon.code,
+                  subtitle: [coupon.type || coupon.discountType || 'Discount', coupon.status || (coupon.is_active === false ? 'Inactive' : 'Active')].filter(Boolean).join(' · '),
+                  searchText: [coupon.code, coupon.description, coupon.type, coupon.status].filter(Boolean).join(' '),
+                }))}
+              onSelectSuggestion={(item) => {
+                if (item?.label) setSearch(item.label);
+              }}
+              style={{ width: '220px' }}
+            />
             )}
             {activeTab === 'coupons' && (
               <Button

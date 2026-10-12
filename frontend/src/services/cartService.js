@@ -191,8 +191,20 @@ export const cartService = {
     try {
       const view = await fetchCartView();
       return (view?.items || []).map(item => ({
-        id: item.item_id, food: item.food_id, food_item: item.food_id,
-        quantity: item.quantity, special_instructions: item.special_instructions || '',
+        id: item.item_id,
+        item_id: item.item_id,
+        food: item.food_id,
+        food_id: item.food_id,
+        food_item: item.food_id,
+        name: item.name,
+        image: item.image,
+        quantity: item.quantity,
+        special_instructions: item.special_instructions || '',
+        options: Array.isArray(item.options) ? item.options : [],
+        available_customizations: Array.isArray(item.available_customizations) ? item.available_customizations : [],
+        unit_price: item.unit_price,
+        final_unit_price: item.final_unit_price,
+        line_total: item.line_total,
       }));
     } catch (e) {
       return [];

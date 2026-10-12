@@ -230,7 +230,7 @@ class CounterAndInvoiceTests(PaymentCase):
         downloaded = self.cust.get(f"/api/orders/{order.id}/invoice/")
         self.assertEqual(downloaded.status_code, 200)
         self.assertTrue(downloaded["Content-Type"].startswith("application/pdf"))
-        pdf = b"".join(downloaded.streaming_content)
+        pdf = downloaded.content
         self.assertTrue(pdf.startswith(b"%PDF"))
         self.assertIn(order.order_number.encode(), pdf)
         self.assertIn(invoice.invoice_number.encode(), pdf)
@@ -239,7 +239,7 @@ class CounterAndInvoiceTests(PaymentCase):
         self.assertEqual(self.admin_b.get(f"/api/orders/{order.id}/invoice/").status_code, 404)
         staff_copy = self.chef_a.get(f"/api/orders/{order.id}/invoice/")
         self.assertEqual(staff_copy.status_code, 200)
-        self.assertTrue(b"".join(staff_copy.streaming_content).startswith(b"%PDF"))
+        self.assertTrue(staff_copy.content.startswith(b"%PDF"))
 
 
 @override_settings(RAZORPAY_KEY_ID="", RAZORPAY_KEY_SECRET="", RAZORPAY_WEBHOOK_SECRET="")

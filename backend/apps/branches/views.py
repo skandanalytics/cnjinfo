@@ -1,7 +1,7 @@
 import uuid
 
-from django.db import transaction
-from django.db.models import Count, Q
+from django.db import IntegrityError, transaction
+from django.db.models import Count, ProtectedError, Q
 from django.http import HttpResponse
 from rest_framework import status, viewsets
 from rest_framework.decorators import action
@@ -13,16 +13,19 @@ from rest_framework.views import APIView
 from apps.accounts.mixins import AuditedMixin
 from apps.accounts.permissions import IsAdminLevel, IsOwnerLevel, IsStaffMember, StaffReadAdminWrite
 from apps.accounts.scoping import BranchScopedMixin, allowed_branch_id
+from apps.accounts.services import client_ip
 from apps.orders.models import Order
 
-from .models import Branch, DiningTable, TableView
+from .models import Branch, DiningTable, TableView, qr_ordering_enabled
 from .qr import render_png
 from .serializers import BranchSerializer, TableSerializer, TableViewSerializer
+from .services import BranchDeleteError, delete_branch
 
 
 class BranchViewSet(AuditedMixin, viewsets.ModelViewSet):
-    """Create/deactivate: owner-level staff only. Edit: admin-level. Read: staff (own branch only if limited).
-    DELETE deactivates; branches with history are never removed."""
+    """Create/delete: owner-level staff only. Edit: admin-level. Read: staff (own branch only if limited).
+    DELETE removes the branch and its configuration (see branches.services); orders and bills are kept.
+    If the deleted branch is primary, another surviving branch is promoted automatically."""
 
     audit_entity = "Branch"
     queryset = Branch.objects.all().order_by("name")
@@ -51,14 +54,29 @@ class BranchViewSet(AuditedMixin, viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         branch = self.get_object()
-        if Order.objects.filter(branch=branch, status__in=Order.ACTIVE_STATUSES).exists():
-            return Response({"detail": "This branch has active orders. Finish or cancel them first."},
-                            status=status.HTTP_409_CONFLICT)
-        branch.is_active = False
-        branch.is_primary = False  # a closed branch cannot keep the single headquarters slot
-        branch.save(update_fields=["is_active", "is_primary", "updated_at"])
-        self.audit("deactivate", branch)
-        return Response({"detail": "Branch deactivated.", "deactivated": True})
+        replacement = request.query_params.get("replacement_primary") or request.data.get("replacement_primary")
+        try:
+            replacement_id = int(replacement) if replacement not in (None, "") else None
+        except (TypeError, ValueError):
+            return Response({"replacement_primary": ["Must be a branch id."]}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            summary = delete_branch(branch.pk, request.user, replacement_id, client_ip(request))
+        except BranchDeleteError as exc:
+            return Response({"detail": exc.detail, "code": exc.code}, status=exc.http_status)
+        except (IntegrityError, ProtectedError):
+            return Response(
+                {"detail": "This branch could not be deleted because related records are still in use. "
+                           "Complete or cancel in-progress orders and try again.",
+                 "code": "constraint"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except Exception:
+            return Response(
+                {"detail": "This branch could not be deleted. Complete or cancel in-progress orders and try again.",
+                 "code": "delete_failed"},
+                status=status.HTTP_409_CONFLICT,
+            )
+        return Response({"detail": "Branch deleted.", "deleted": True, "summary": summary})
 
 
 class TableViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
@@ -73,17 +91,16 @@ class TableViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
         return Order.objects.filter(table=table, status__in=Order.ACTIVE_STATUSES).exists()
 
     def destroy(self, request, *args, **kwargs):
+        """Deletes the table. Past orders keep their table label; an unfinished order blocks deletion."""
         table = self.get_object()
         if self._active_orders(table):
-            return Response({"detail": "This table has active orders."}, status=status.HTTP_409_CONFLICT)
-        if table.orders.exists():  # history exists: deactivate, keep the row
-            table.is_active = False
-            table.qr_is_active = False
-            table.save(update_fields=["is_active", "qr_is_active", "updated_at"])
-            self.audit("deactivate", table)
-            return Response({"detail": "Table has order history, so it was deactivated.", "deactivated": True})
-        self.audit("delete", table)
-        table.delete()
+            return Response({"detail": "This table has an order that is still in progress. Complete or cancel it "
+                                       "before deleting the table.", "code": "active_orders"},
+                            status=status.HTTP_409_CONFLICT)
+        with transaction.atomic():
+            Order.objects.filter(table=table, table_label="").update(table_label=table.table_number)
+            self.audit("delete", table)
+            table.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"], url_path="set-status", permission_classes=[IsStaffMember])
@@ -115,6 +132,8 @@ class TableViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=["post"], url_path="regenerate-qr", permission_classes=[IsAdminLevel])
     def regenerate_qr(self, request, pk=None):
         """Issue a new QR identifier. The old printed QR stops working immediately."""
+        if not qr_ordering_enabled():
+            return Response({"detail": "QR codes are turned off in Settings.", "code": "qr_disabled"}, status=409)
         table = self.get_object()
         table.qr_code = uuid.uuid4()
         table.qr_is_active = True
@@ -124,6 +143,8 @@ class TableViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get"], url_path="qr", permission_classes=[IsStaffMember])
     def qr_image(self, request, pk=None):
+        if not qr_ordering_enabled():
+            return Response({"detail": "QR codes are turned off in Settings.", "code": "qr_disabled"}, status=409)
         table = self.get_object()
         if not (table.is_active and table.qr_is_active):
             return Response({"detail": "QR code is inactive."}, status=status.HTTP_409_CONFLICT)
@@ -142,6 +163,8 @@ class QRResolveView(APIView):
     throttle_scope = "qr_resolve"
 
     def get(self, request, qr):
+        if not qr_ordering_enabled():
+            return Response({"detail": "QR codes are turned off.", "code": "qr_disabled"}, status=409)
         invalid = Response({"detail": "Invalid or inactive QR code.", "code": "qr_invalid"}, status=404)
         try:
             code = uuid.UUID(str(qr))
@@ -204,8 +227,37 @@ class PublicAvailableTablesView(APIView):
         branch = Branch.objects.filter(pk=branch_id, is_active=True).first()
         if branch is None:
             return Response({"detail": "Branch not found."}, status=status.HTTP_404_NOT_FOUND)
-        tables = branch.tables.filter(
-            is_active=True, qr_is_active=True, status=DiningTable.Status.AVAILABLE
-        ).order_by("table_number")
-        return Response([{"id": t.id, "table_number": t.table_number, "location": t.location,
-                          "capacity": t.capacity} for t in tables])
+        tables = branch.tables.filter(is_active=True).order_by("table_number")
+        return Response([{
+            "id": t.id, "table_number": t.table_number, "location": t.location, "capacity": t.capacity,
+            "status": t.status,
+            "available": t.status == DiningTable.Status.AVAILABLE and t.qr_is_active,
+        } for t in tables])
+
+
+class PublicRestaurantSettingsView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request):
+        return Response({"qr_enabled": qr_ordering_enabled()})
+
+
+class RestaurantSettingsView(APIView):
+    """Staff can read the restaurant switches. Only an administrator can change them."""
+
+    def get_permissions(self):
+        if self.request.method == "GET":
+            return [IsStaffMember()]
+        return [IsAdminLevel()]
+
+    def get(self, request):
+        return Response({"qr_enabled": qr_ordering_enabled()})
+
+    def patch(self, request):
+        from .models import RestaurantSetting
+        row, _ = RestaurantSetting.objects.get_or_create(pk=1, defaults={"qr_enabled": True})
+        if "qr_enabled" in request.data:
+            row.qr_enabled = bool(request.data.get("qr_enabled"))
+            row.save(update_fields=["qr_enabled"])
+        return Response({"qr_enabled": row.qr_enabled})

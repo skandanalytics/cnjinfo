@@ -82,6 +82,15 @@ class EmployeeSerializer(serializers.ModelSerializer):
         inst = self.instance
         role = attrs.get("role", inst.role if inst else Employee.Role.STAFF)
         branch = attrs["branch"] if "branch" in attrs else (inst.branch if inst else None)
+        allowed = allowed_branch_id(request_user)
+        if inst is None and "branch" not in attrs and role not in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
+            if allowed is None and not Branch.objects.exists():
+                raise serializers.ValidationError(
+                    {"branch": "Create a branch first to manage tables, meals, categories, "
+                               "employees, offers, and coupons."})
+            branch = (Branch.objects.filter(pk=allowed).first() if allowed is not None
+                      else Branch.objects.filter(is_primary=True).first())
+            attrs["branch"] = branch
 
         # Privilege escalation: you can only grant roles below your own (SUPER_ADMIN may grant any).
         if actor.role != Employee.Role.SUPER_ADMIN and ROLE_RANK[role] >= ROLE_RANK[actor.role]:
@@ -92,7 +101,6 @@ class EmployeeSerializer(serializers.ModelSerializer):
         # Branch rules: only owner-level roles may be branchless; branch-limited admins stay in their branch.
         if branch is None and role not in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
             raise serializers.ValidationError({"branch": "Branch is required for this role."})
-        allowed = allowed_branch_id(request_user)
         if allowed is not None and (branch is None or branch.id != allowed):
             raise serializers.ValidationError({"branch": "You can only manage employees of your own branch."})
 

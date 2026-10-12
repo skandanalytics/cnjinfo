@@ -9,17 +9,16 @@ export const AddCategoryModal = ({
   isOpen,
   onClose,
   onAdd,
-  categories = [],
 }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [parentId, setParentId] = useState('');
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (loading) return;
     if (!name.trim()) {
       setErrorMsg('Please enter a category name.');
       return;
@@ -32,11 +31,9 @@ export const AddCategoryModal = ({
         name: name.trim(),
         description: description.trim(),
         status: isActive ? 'Active' : 'Inactive',
-        parent: parentId ? Number(parentId) : null,
       });
       setName('');
       setDescription('');
-      setParentId('');
       setIsActive(true);
       onClose();
     } catch (err) {
@@ -84,21 +81,6 @@ export const AddCategoryModal = ({
           required 
         />
         
-        <div className="mb-3">
-          <label className="form-label small fw-bold text-secondary" htmlFor="parent-category">Parent category</label>
-          <select
-            id="parent-category"
-            className="form-select rounded-3"
-            value={parentId}
-            onChange={(e) => setParentId(e.target.value)}
-          >
-            <option value="">None</option>
-            {categories.map((category) => (
-              <option key={category.id} value={category.id}>{category.name}</option>
-            ))}
-          </select>
-        </div>
-
         <Input 
           label="Description (Optional)" 
           placeholder="Brief description of this category" 

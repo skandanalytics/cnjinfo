@@ -145,31 +145,6 @@ export const OrderHistory = () => {
                               <FiEye size={11} />
                               <span>View Bill</span>
                             </button>
-                            {(() => {
-                              const pm = String(ord.paymentMethod || ord.payment_method || ord?.payment?.method || 'Pay on Counter (COD)').toUpperCase();
-                              const pStatus = String(ord.payment_status || ord.paymentStatus || ord?.payment?.status || '').toUpperCase();
-                              const isOnline = pm.includes('CARD') || pm.includes('UPI');
-                              const isPaymentSuccess = ['SUCCESS', 'COMPLETED', 'PAID'].includes(pStatus);
-                              const st = String(ord.status || '').toUpperCase();
-                              const isCompleted = ['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(st);
-                              const canDownload = (isOnline && isPaymentSuccess) || isCompleted;
-
-                              if (canDownload) {
-                                return (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => { e.stopPropagation(); setViewingBillOrder(ord); }}
-                                    className="btn btn-xs btn-outline-danger rounded-pill px-2 py-0.5 d-flex align-items-center gap-1"
-                                    style={{ fontSize: '11px' }}
-                                    title="View E-Bill"
-                                  >
-                                    <FiEye size={11} />
-                                    <span>E-Bill</span>
-                                  </button>
-                                );
-                              }
-                              return null;
-                            })()}
                           </div>
                       </div>
                     </div>
@@ -235,30 +210,6 @@ export const OrderHistory = () => {
                         <FiEye size={13} />
                         <span>View Bill</span>
                       </button>
-                      {(() => {
-                        const pm = String(selectedOrder.paymentMethod || selectedOrder.payment_method || selectedOrder?.payment?.method || 'Pay on Counter (COD)').toUpperCase();
-                        const pStatus = String(selectedOrder.payment_status || selectedOrder.paymentStatus || selectedOrder?.payment?.status || '').toUpperCase();
-                        const isOnline = pm.includes('CARD') || pm.includes('UPI');
-                        const isPaymentSuccess = ['SUCCESS', 'COMPLETED', 'PAID'].includes(pStatus);
-                        const st = String(selectedOrder.status || '').toUpperCase();
-                        const isCompleted = ['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(st);
-                        const canDownload = (isOnline && isPaymentSuccess) || isCompleted;
-
-                        if (canDownload) {
-                          return (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setViewingBillOrder(selectedOrder); setSelectedOrder(null); }}
-                              className="btn btn-sm btn-outline-danger fw-bold rounded-pill px-3 py-1.5 d-flex align-items-center gap-1"
-                              style={{ fontSize: '12px' }}
-                            >
-                              <FiEye size={13} />
-                              <span>View E-Bill</span>
-                            </button>
-                          );
-                        }
-                        return null;
-                      })()}
                     </div>
                   <button
                     type="button"

@@ -3,7 +3,7 @@
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
 from django.utils.crypto import get_random_string
-from rest_framework import status, viewsets
+from rest_framework import serializers, status, viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -20,8 +20,8 @@ from .permissions import ROLE_RANK, IsAdminLevel, get_active_employee
 from .scoping import BranchScopedMixin
 from .serializers import (EmployeeSerializer, LogoutSerializer, SendOTPSerializer, StaffLoginSerializer,
                           VerifyOTPSerializer, user_payload)
-from .services import (clear_failures, client_ip, is_locked, issue_tokens, mark_login, record_audit,
-                        register_failure, revoke_user_tokens)
+from .services import (clear_failures, client_ip, delete_employee, is_locked, issue_tokens, mark_login,
+                        record_audit, register_failure, revoke_user_tokens)
 from .sms import dev_otp_visible
 
 # Used to burn comparable CPU time when the employee code does not exist (prevents account enumeration by timing).
@@ -152,8 +152,44 @@ class MeView(APIView):
         return Response(user_payload(request.user))
 
 
+class ChangePasswordSerializer(serializers.Serializer):
+    current_password = serializers.CharField(trim_whitespace=False)
+    new_password = serializers.CharField(trim_whitespace=False)
+    confirm_password = serializers.CharField(trim_whitespace=False)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["confirm_password"]:
+            raise serializers.ValidationError({"confirm_password": "New password and confirmation do not match."})
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError
+        try:
+            validate_password(attrs["new_password"], self.context["request"].user)
+        except ValidationError as exc:
+            raise serializers.ValidationError({"new_password": list(exc.messages)})
+        return attrs
+
+
+class ChangePasswordView(APIView):
+    """The signed-in staff member changes only their own password."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        if request.user.user_type != "EMPLOYEE":
+            return Response({"detail": "Only a staff account can change this password."}, status=403)
+        serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        if not request.user.check_password(serializer.validated_data["current_password"]):
+            return Response({"current_password": ["Current password is incorrect."]}, status=400)
+        request.user.set_password(serializer.validated_data["new_password"])
+        request.user.save(update_fields=["password"])
+        revoke_user_tokens(request.user)
+        record_audit(request.user, "auth.password_change", "User", request.user.id, None, {}, client_ip(request))
+        return Response({"detail": "Password updated."})
+
+
 class EmployeeViewSet(BranchScopedMixin, viewsets.ModelViewSet):
-    """Admin-level only. Delete means deactivate; employee history is never destroyed."""
+    """Admin-level only. DELETE removes the employee and their login; orders keep the staff name snapshot."""
 
     queryset = Employee.objects.select_related("user", "branch").order_by("-id")
     serializer_class = EmployeeSerializer
@@ -179,7 +215,7 @@ class EmployeeViewSet(BranchScopedMixin, viewsets.ModelViewSet):
     def destroy(self, request, *args, **kwargs):
         emp = self.get_object()
         if emp.user_id == request.user.id:
-            raise PermissionDenied("You cannot deactivate your own account.")
+            raise PermissionDenied("You cannot delete your own account.")
         if emp.role in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
             remaining = Employee.objects.filter(
                 role__in=(Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN),
@@ -189,12 +225,11 @@ class EmployeeViewSet(BranchScopedMixin, viewsets.ModelViewSet):
                 raise PermissionDenied("The last active administrator cannot be removed.")
         actor = get_active_employee(request.user)
         if actor.role != Employee.Role.SUPER_ADMIN and ROLE_RANK[emp.role] >= ROLE_RANK[actor.role]:
-            raise PermissionDenied("You cannot deactivate an employee with an equal or higher role.")
-        emp.status = Employee.Status.INACTIVE
-        emp.save(update_fields=["status"])
-        emp.user.is_active = False
-        emp.user.save(update_fields=["is_active"])
-        revoke_user_tokens(emp.user)
-        record_audit(request.user, "employee.deactivate", "Employee", emp.id, emp.branch, {}, client_ip(request))
+            raise PermissionDenied("You cannot delete an employee with an equal or higher role.")
+        details = {"employee_code": emp.employee_code, "name": emp.user.name, "role": emp.role}
+        emp_id, branch = emp.id, emp.branch
+        with transaction.atomic():
+            details["login"] = delete_employee(emp)
+            record_audit(request.user, "employee.delete", "Employee", emp_id, branch, details, client_ip(request))
         return Response(status=status.HTTP_204_NO_CONTENT)
 

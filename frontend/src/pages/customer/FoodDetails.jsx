@@ -79,14 +79,22 @@ export const FoodDetails = () => {
     );
   }
 
-  const isOutOfStock = dish ? (dish.stock <= 0 || dish.status === 'Out of Stock' || dish.status === 'OUT_OF_STOCK' || dish.is_available === false) : false;
+  const isOutOfStock = Boolean(
+    dish && (
+      dish.is_orderable === false
+      || dish.is_available === false
+      || dish.status === 'Out of Stock'
+      || dish.status === 'OUT_OF_STOCK'
+      || (dish.stock !== undefined && dish.stock !== null && Number(dish.stock) <= 0)
+    )
+  );
 
-  if (!dish || isOutOfStock) {
+  if (!dish) {
     return (
       <CustomerLayout>
         <div className="container py-5 text-center px-3">
-          <h5 className="fw-bold mb-2">Dish Unavailable</h5>
-          <p className="text-secondary small mb-3">This dish is currently out of stock and not available on the menu.</p>
+          <h5 className="fw-bold mb-2">Dish not found</h5>
+          <p className="text-secondary small mb-3">This dish is not on the menu for the selected restaurant.</p>
           <Button onClick={() => navigate('/customer/home')} variant="primary" className="mt-2">
             Back to Menu
           </Button>
@@ -174,16 +182,6 @@ export const FoodDetails = () => {
         item: dish,
         stock: maxS,
         message: `You have reached the maximum available quantity (${maxS} in stock) for "${dish.name}". Additional quantity is out of stock.`
-      });
-    }
-  };
-
-  const handleOutOfStockClick = () => {
-    if (showOutOfStockModal) {
-      showOutOfStockModal({
-        item: dish,
-        stock: 0,
-        message: `Sorry, "${dish.name}" is currently out of stock and will be freshly prepared soon.`
       });
     }
   };
@@ -312,27 +310,12 @@ export const FoodDetails = () => {
                 );
               })()}
 
-              {/* Calories and Protein Section - Only shown if explicitly provided */}
-              {(dish.calories || dish.protein) ? (
-                <div className="row g-2 mb-4">
-                  {dish.calories ? (
-                    <div className={dish.protein ? "col-6" : "col-12"}>
-                      <div className="bg-light rounded-3 p-2.5 text-center border border-light-subtle">
-                        <span className="text-secondary small d-block" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '600' }}>Calories</span>
-                        <strong className="text-dark fs-6">{dish.calories} kcal</strong>
-                      </div>
-                    </div>
-                  ) : null}
-                  {dish.protein ? (
-                    <div className={dish.calories ? "col-6" : "col-12"}>
-                      <div className="bg-light rounded-3 p-2.5 text-center border border-light-subtle">
-                        <span className="text-secondary small d-block" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '600' }}>Protein</span>
-                        <strong className="text-dark fs-6">{dish.protein} g</strong>
-                      </div>
-                    </div>
-                  ) : null}
+              {dish.protein !== undefined && dish.protein !== null && dish.protein !== '' && (
+                <div className="bg-light rounded-3 p-2.5 text-center border border-light-subtle mb-4">
+                  <span className="text-secondary small d-block" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '600' }}>Protein</span>
+                  <strong className="text-dark fs-6">{Number(dish.protein).toFixed(2)} g</strong>
                 </div>
-              ) : null}
+              )}
 
               <h6 className="fw-bold text-dark mb-2">Description</h6>
               <p className="text-secondary small mb-4" style={{ lineHeight: '1.6' }}>
@@ -362,16 +345,14 @@ export const FoodDetails = () => {
                 {isOutOfStock ? (
                   <div className="text-center">
                     <Button
-                      onClick={handleOutOfStockClick}
+                      disabled
                       variant="secondary"
-                      className="w-100 py-2.5 opacity-75 mb-1"
-                      style={{ cursor: 'pointer' }}
-                      title="Click to view out of stock details"
+                      className="w-100 py-2.5"
                     >
                       Out of Stock
                     </Button>
                     <span className="text-muted small fw-semibold" style={{ fontSize: '11px' }}>
-                      Will be available soon
+                      This dish is currently out of stock.
                     </span>
                   </div>
                 ) : isAdded ? (

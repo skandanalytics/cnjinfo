@@ -244,13 +244,13 @@ class TwentyFourStepScenario(TestCase):
         self.assertNotIn(order_id, hidden)
         self.assertEqual(chef_b.get(f"/api/orders/{order_id}/").status_code, 404)
 
-        # 18. Staff cannot place an order. Assisted ordering is not an endpoint.
+        # 18. Staff checkout without a cart is refused (empty cart), not treated as a customer order.
         assisted = chef_a.post(
             "/api/orders/",
             {"branch": branch_id, "idempotency_key": "phase11-assisted", "payment_method": "COUNTER"},
             format="json",
         )
-        self.assertEqual(assisted.status_code, 403)
+        self.assertEqual((assisted.status_code, assisted.json()["code"]), (400, "cart_empty"))
 
         # 19. Online pay fails closed while Razorpay keys are empty. No network call.
         online = customer.post(f"/api/orders/{order_id}/pay/", {"method": "UPI"}, format="json")
@@ -294,7 +294,7 @@ class TwentyFourStepScenario(TestCase):
         pdf = customer.get(f"/api/orders/{order_id}/invoice/")
         self.assertEqual(pdf.status_code, 200)
         self.assertEqual(pdf["Content-Type"], "application/pdf")
-        body = b"".join(pdf.streaming_content)
+        body = pdf.content
         self.assertTrue(body.startswith(b"%PDF"))
         invoice = Invoice.objects.get(order_id=order_id)
         self.assertEqual(invoice.snapshot["total_amount"], "360.00")

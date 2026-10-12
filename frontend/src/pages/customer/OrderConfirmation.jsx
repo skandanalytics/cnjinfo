@@ -10,7 +10,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { mapOrder } from '../../services/adminApi';
 import { fetchCustomerOrder, payOrderOnline } from '../../services/customerCheckout';
 import { extractApiErrorMessage } from '../../utils/errorUtils';
-
 const PAYMENT_LABEL = {
   PAID: 'Paid',
   UNPAID: 'Pay at the counter',
@@ -61,6 +60,10 @@ export const OrderConfirmation = () => {
     } catch { /* employee routes */ }
     const base = role === 'admin' ? '/admin' : '/employee';
     return page === 'tables' ? `${base}/tables` : `${base}/kitchen`;
+  };
+
+  const orderAgain = () => {
+    navigate('/customer/home');
   };
 
   const payAgain = async (method) => {
@@ -178,6 +181,11 @@ export const OrderConfirmation = () => {
               <div className="col-6">
                 <Button onClick={() => navigate('/customer/home')} variant="secondary" className="w-100 py-2.5 fw-bold shadow-sm">
                   Go to Menu
+                </Button>
+              </div>
+              <div className="col-12">
+                <Button onClick={orderAgain} variant="outline" className="w-100 py-2.5 fw-bold">
+                  Order Again
                 </Button>
               </div>
             </>

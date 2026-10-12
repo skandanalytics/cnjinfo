@@ -31,18 +31,15 @@ export const ServerBillSummary = ({ cart, children }) => {
           {Number(pricing.takeaway_charge) > 0 && (
             <Row label="Packing Charge (Takeaway)" value={`+${formatCurrency(Number(pricing.takeaway_charge))}`} className="text-dark" />
           )}
-          {Number(pricing.gst_amount) > 0 && (
-            <Row label={`GST (${Number(pricing.gst_rate)}%)`} value={formatCurrency(Number(pricing.gst_amount))} className="text-dark" />
-          )}
-          {Number(pricing.service_charge_amount) > 0 && (
-            <Row
-              label={`Service Charge (${Number(pricing.service_charge_rate)}%)`}
-              value={formatCurrency(Number(pricing.service_charge_amount))}
-              className="text-dark"
-            />
-          )}
+          <Row label={`GST (${Number(pricing.gst_rate) || 0}%)`} value={formatCurrency(Number(pricing.gst_amount || 0))} className="text-dark" />
+          <Row
+            label={`Service Charge (${Number(pricing.service_charge_rate) || 0}%)`}
+            value={formatCurrency(Number(pricing.service_charge_amount || 0))}
+            className="text-dark"
+          />
+          <Row label="Round Off" value={formatCurrency(Number(pricing.round_off || 0))} className="text-dark" />
           <div className="d-flex align-items-center justify-content-between my-3 pt-3 border-top fw-bold fs-5 text-dark">
-            <span>Payable Amount</span>
+            <span>Grand Total</span>
             <span className="text-danger fw-bold fs-4" data-testid="server-total">
               {formatCurrency(Number(pricing.total_amount))}
             </span>

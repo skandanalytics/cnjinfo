@@ -11,7 +11,7 @@ class InventoryItem(models.Model):
         OUT_OF_STOCK = "OUT_OF_STOCK", "Out of Stock"
 
     branch = models.ForeignKey("branches.Branch", on_delete=models.PROTECT, related_name="inventory")
-    food = models.OneToOneField("menu.Food", on_delete=models.PROTECT, related_name="inventory")
+    food = models.OneToOneField("menu.Food", on_delete=models.CASCADE, related_name="inventory")
     quantity = models.PositiveIntegerField(default=0)
     low_stock_threshold = models.PositiveIntegerField(default=5)
     updated_at = models.DateTimeField(auto_now=True)
@@ -39,7 +39,10 @@ class StockTransaction(models.Model):
         ORDER_DEDUCTION = "ORDER_DEDUCTION", "Order deduction"
         ORDER_RESTORE = "ORDER_RESTORE", "Order restore"
 
-    item = models.ForeignKey(InventoryItem, on_delete=models.PROTECT, related_name="transactions")
+    # The ledger outlives the stock row: deleting a dish removes its InventoryItem and leaves item NULL here.
+    item = models.ForeignKey(InventoryItem, on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name="transactions")
+    food_name = models.CharField(max_length=255, blank=True)  # snapshot
     transaction_type = models.CharField(max_length=20, choices=Type.choices)
     quantity_change = models.IntegerField()
     balance_after = models.PositiveIntegerField()

@@ -378,7 +378,7 @@ export const EmployeeDashboard = () => {
                               className="py-1 px-2.5 fw-bold rounded-pill"
                               style={{ fontSize: '11.5px' }}
                             >
-                              Record counter payment
+                              Mark as Paid
                             </Button>
                           )}
                           <Button

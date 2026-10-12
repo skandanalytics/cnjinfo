@@ -134,8 +134,10 @@ class GuestCartTests(CartBase):
         self.assertEqual(customer.delete(f"/api/cart/items/{item_id}/").status_code, 404)
         self.assertEqual(CartItem.objects.get().quantity, 1)
 
-    def test_staff_cannot_use_customer_carts_and_bad_token_rejected(self):
-        self.assertEqual(self.chef_a.get(f"/api/cart/?branch={self.a.id}").status_code, 403)
+    def test_staff_can_open_an_assisted_cart_and_bad_token_rejected(self):
+        staff_cart = self.chef_a.get(f"/api/cart/?branch={self.a.id}")
+        self.assertEqual(staff_cart.status_code, 200, staff_cart.content)
+        self.assertEqual(staff_cart.json()["items"], [])
         bad = APIClient()
         bad.credentials(HTTP_AUTHORIZATION="Bearer not-a-token")
         self.assertEqual(bad.get(f"/api/cart/?branch={self.a.id}").status_code, 401)
@@ -386,8 +388,9 @@ class CheckoutValidateTests(CartBase):
         self.assertEqual((r.status_code, r.json()["code"]), (401, "login_required"))
         self.assertEqual(self.check(self.anon).status_code, 401)
 
-    def test_staff_cannot_check_out_as_customer(self):
-        self.assertEqual(self.check(self.chef_a).status_code, 403)
+    def test_staff_checkout_without_a_cart_is_empty(self):
+        r = self.check(self.chef_a)
+        self.assertEqual((r.status_code, r.json()["code"]), (400, "cart_empty"))
 
     def test_empty_cart(self):
         r = self.check()

@@ -182,18 +182,14 @@ const deleteCustomTable = (id, tableNum = null) => {
   }
 };
 
-const normalizeArea = (rawArea, tableNum) => {
-  if (!rawArea) {
-    const numStr = String(tableNum || '').toUpperCase();
-    if (numStr.includes('5') || numStr.includes('6')) return 'Garden View';
-    if (numStr.includes('7') || numStr.includes('8')) return 'Rooftop Terrace';
-    return 'Indoor Main';
-  }
-  const clean = rawArea.trim().toLowerCase();
-  if (clean.includes('garden')) return 'Garden View';
-  if (clean.includes('rooftop') || clean.includes('terrace')) return 'Rooftop Terrace';
-  if (clean.includes('indoor') || clean.includes('main')) return 'Indoor Main';
-  return rawArea;
+const normalizeArea = (rawArea) => {
+  const clean = String(rawArea || '').trim();
+  if (!clean) return '';
+  const key = clean.toLowerCase();
+  if (key === 'indoor main' || key === 'indoor' || key === 'main') return 'Indoor Main';
+  if (key === 'garden view' || key === 'garden') return 'Garden View';
+  if (key === 'rooftop terrace' || key === 'rooftop' || key === 'terrace') return 'Rooftop Terrace';
+  return clean;
 };
 
 const getCanonicalTableNumber = (raw) => {
@@ -250,8 +246,8 @@ const mapTableToFrontend = (t) => {
   }
 
   const isAvail = status === 'Available';
-  const rawArea = custom.area || savedMeta.area || t.area;
-  const area = normalizeArea(rawArea, tableNum);
+  const rawArea = t.location || t.area || '';
+  const area = normalizeArea(rawArea);
   const cap = custom.capacity || savedMeta.capacity || t.capacity || 4;
 
   return {
@@ -265,7 +261,8 @@ const mapTableToFrontend = (t) => {
     is_active: t.is_active !== undefined ? Boolean(t.is_active) : (custom.is_active !== undefined ? Boolean(custom.is_active) : true),
     capacity: parseInt(cap, 10),
     area: area,
-    linkedMenus: custom.linkedMenus || savedMeta.linkedMenus || t.linkedMenus || 'Main Menu',
+    location: area,
+    linkedMenus: custom.linkedMenus || savedMeta.linkedMenus || t.linkedMenus || '',
     restaurant: t.restaurant || custom.restaurant || 1,
     orderId: status === 'Occupied' ? (custom.orderId || savedMeta.orderId || t.orderId) : undefined,
     reservationName: status === 'Reserved' ? (custom.reservationName || savedMeta.reservationName || t.reservationName) : undefined,
@@ -519,7 +516,7 @@ export const tableService = {
     }
     const isAvail = data.status ? String(data.status).toUpperCase() === 'AVAILABLE' : true;
     const rawNum = String(data.number || data.table_number || '').trim();
-    const area = normalizeArea(data.area, rawNum);
+    const area = normalizeArea(data.area || data.location);
     const capNum = Math.min(15, Math.max(1, parseInt(data.capacity || 4, 10)));
     const statusVal = isAvail ? 'AVAILABLE' : (data.status ? String(data.status).toUpperCase() : 'AVAILABLE');
 
@@ -598,7 +595,7 @@ export const tableService = {
     const rawNum = String(data.number || data.table_number || '').trim();
     const numericDigits = rawNum.replace(/[^0-9]/g, '');
     const tableNumInt = numericDigits ? parseInt(numericDigits, 10) : undefined;
-    const area = normalizeArea(data.area, rawNum);
+    const area = normalizeArea(data.area || data.location);
     const capNum = Math.min(15, Math.max(1, parseInt(data.capacity || 4, 10)));
     const canonNum = getCanonicalTableNumber(rawNum || (tableNumInt !== undefined ? tableNumInt : id));
     const formattedDigits = tableNumInt !== undefined ? (tableNumInt < 10 ? `0${tableNumInt}` : `${tableNumInt}`) : rawNum;

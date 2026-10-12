@@ -143,7 +143,9 @@ class CartItemsView(CartBase):
 
 
 class QuantitySerializer(serializers.Serializer):
-    quantity = serializers.IntegerField(min_value=1, max_value=99)
+    quantity = serializers.IntegerField(min_value=1, max_value=99, required=False)
+    options = serializers.ListField(child=serializers.IntegerField(), required=False, max_length=20)
+    special_instructions = serializers.CharField(max_length=500, required=False, allow_blank=True)
 
 
 class CartItemView(CartBase):
@@ -159,8 +161,16 @@ class CartItemView(CartBase):
         item = self._item(ident, pk)
         s = QuantitySerializer(data=request.data)
         s.is_valid(raise_exception=True)
+        data = s.validated_data
+        if "quantity" not in data and "options" not in data and "special_instructions" not in data:
+            return Response({"detail": "Nothing to update."}, status=400)
         try:
-            services.set_quantity(item, s.validated_data["quantity"])
+            services.update_line(
+                item,
+                quantity=data.get("quantity"),
+                option_ids=data.get("options"),
+                instructions=data.get("special_instructions"),
+            )
         except CartError as exc:
             return fail(exc)
         return self.render(request, item.cart)
@@ -230,8 +240,8 @@ class CartMergeView(CartBase):
 
 
 class CheckoutValidateView(CartBase):
-    """Final server-side review before an order is placed (order creation itself is Phase 7). Customers only:
-    a guest is told to log in. Everything is re-priced and re-validated here."""
+    """Final server-side review before an order is placed. Guests must log in. Staff may validate an
+    assisted cart. Everything is re-priced and re-validated here."""
 
     def post(self, request):
         if not request.user.is_authenticated:

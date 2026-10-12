@@ -4,6 +4,7 @@ import {
   getBackendCategoryName,
   normalizeCategoryName
 } from '../utils/categoryUtils';
+import { classifyStock } from '../utils/stockStatus';
 
 const _isValidId = (id) => {
   if (id === undefined || id === null) return false;
@@ -12,12 +13,7 @@ const _isValidId = (id) => {
 };
 
 const mapStatusToFrontend = (status, stock) => {
-  if (stock !== undefined && stock !== null) {
-    const num = Number(stock);
-    if (num <= 0) return 'Out of Stock';
-    if (num <= 5) return 'Low Stock';
-    return 'In Stock';
-  }
+  if (stock !== undefined && stock !== null && stock !== '') return classifyStock(stock);
   if (!status) return 'In Stock';
   const s = String(status).toUpperCase();
   if (s === 'IN_STOCK') return 'In Stock';
@@ -91,7 +87,13 @@ const mapProductToFrontend = (food, categories, inventory, images) => {
   }) : null;
 
   let stock = 20;
-  if (invObj && invObj.quantity !== undefined && invObj.quantity !== null && !isNaN(Number(invObj.quantity))) {
+  if (food.stock_status || typeof food.is_orderable === 'boolean') {
+    stock = food.is_orderable === false || food.stock_status === 'OUT_OF_STOCK'
+      ? 0
+      : (food.stock !== undefined && food.stock !== null && !isNaN(Number(food.stock))
+        ? Number(food.stock)
+        : (food.stock_status === 'LOW_STOCK' ? 5 : 20));
+  } else if (invObj && invObj.quantity !== undefined && invObj.quantity !== null && !isNaN(Number(invObj.quantity))) {
     stock = parseFloat(invObj.quantity);
   } else if (savedStockVal !== undefined && savedStockVal !== null && !isNaN(Number(savedStockVal))) {
     stock = parseFloat(savedStockVal);
@@ -103,9 +105,7 @@ const mapProductToFrontend = (food, categories, inventory, images) => {
     stock = 20;
   }
 
-  const status = (stock <= 0) 
-    ? 'Out of Stock' 
-    : (stock <= 5 ? 'Low Stock' : 'In Stock');
+  const status = classifyStock(stock);
 
   // Check nested images array directly attached to food object (if any)
   let foodObjImg = null;
@@ -145,12 +145,13 @@ const mapProductToFrontend = (food, categories, inventory, images) => {
   const savedType = savedTypes[foodId] || savedTypes[String(foodId)] || savedTypes[Number(foodId)];
 
   let resolvedType = 'veg';
-  const isVegVal = food.is_veg;
-  if (isVegVal === false || isVegVal === 'false' || isVegVal === 0 || isVegVal === '0') {
+  const diet = String(food.diet_type || food.type || food.foodType || '').toLowerCase();
+  if (diet === 'vegan' || diet === 'veg') {
+    resolvedType = diet === 'vegan' ? 'vegan' : 'veg';
+  } else if (diet === 'non_veg' || diet === 'non-veg' || diet === 'nonveg') {
     resolvedType = 'non-veg';
-  } else if (isVegVal === true || isVegVal === 'true' || isVegVal === 1 || isVegVal === '1') {
-    const isVegan = normName.includes('vegan') || String(food.description || '').toLowerCase().includes('vegan');
-    resolvedType = isVegan ? 'vegan' : 'veg';
+  } else if (food.is_veg === false || food.is_veg === 'false' || food.is_veg === 0 || food.is_veg === '0') {
+    resolvedType = 'non-veg';
   } else if (savedType) {
     resolvedType = savedType;
   } else if (food.type || food.foodType) {
@@ -253,7 +254,9 @@ const mapProductToFrontend = (food, categories, inventory, images) => {
     foodType: resolvedType,
     rating: food.rating || 4.5,
     calories: food.calories !== undefined ? food.calories : null,
-    protein: food.protein !== undefined ? food.protein : null,
+    protein: food.protein !== undefined && food.protein !== null
+      ? food.protein
+      : (food.protein_grams !== undefined && food.protein_grams !== null ? food.protein_grams : null),
     popular: isTopSellingDish,
     isPopular: isTopSellingDish,
     isTopSelling: isTopSellingDish,
@@ -261,7 +264,13 @@ const mapProductToFrontend = (food, categories, inventory, images) => {
     isNew: isCreatedNew,
     addedAt: addedAt || (isCreatedNew ? Date.now() : 0),
     minStock: food.minStock !== undefined ? food.minStock : 5,
-    categoryId: resolvedCatId
+    categoryId: resolvedCatId,
+    customizations: (Array.isArray(food.customizations) ? food.customizations : []).map((option) => ({
+      id: option.id,
+      name: option.name,
+      price: Number(option.extra_price ?? option.price ?? 0),
+      extra_price: Number(option.extra_price ?? option.price ?? 0),
+    })).filter((option) => option.id && option.name),
   };
 };
 
@@ -429,7 +438,9 @@ export const productService = {
         is_veg: food.diet_type !== 'NON_VEG',
         type: food.diet_type === 'VEGAN' ? 'vegan' : (food.diet_type === 'NON_VEG' ? 'non-veg' : 'veg'),
         is_available: food.is_orderable,
-        stock: food.is_orderable === false || food.stock_status === 'OUT_OF_STOCK' ? 0 : (food.stock_status === 'LOW_STOCK' ? 5 : undefined),
+        stock: food.quantity !== undefined && food.quantity !== null
+          ? Number(food.quantity)
+          : (food.is_orderable === false || food.stock_status === 'OUT_OF_STOCK' ? 0 : undefined),
         image: food.primary_image || '',
         images: (food.images || []).map(i => ({ image_url: i.url, is_primary: i.is_primary })),
       }, categories, [], []));
@@ -493,15 +504,31 @@ export const productService = {
   },
 
   getProductById: async (id) => {
-    const foodRes = await api.get(`/restaurant/food/${id}/`);
-    const foodObj = foodRes.data?.data || foodRes.data;
-    const [categories, inventory] = await Promise.all([
-      getCachedCategories(),
-      getCachedInventory()
-    ]);
-    const images = cachedFoodImages || [];
-
-    return mapProductToFrontend(foodObj, categories, inventory, images);
+    const { isStaffScreen, listFoods } = await import('./adminApi');
+    if (isStaffScreen()) {
+      const foods = await listFoods();
+      return foods.find((food) => String(food.id) === String(id)) || null;
+    }
+    const listed = await productService.getProducts(true).catch(() => []);
+    const cached = (listed || []).find((food) => String(food.id) === String(id));
+    if (cached) return cached;
+    const res = await api.get(`/public/foods/${id}/`);
+    const food = res.data;
+    if (!food?.id) return null;
+    return mapProductToFrontend({
+      ...food,
+      price: food.original_price,
+      discount_price: food.has_discount ? food.discounted_price : 0,
+      discount_percent: food.discount_percent,
+      type: food.diet_type === 'VEGAN' ? 'vegan' : (food.diet_type === 'NON_VEG' ? 'non-veg' : 'veg'),
+      diet_type: food.diet_type,
+      is_orderable: food.is_orderable,
+      stock_status: food.stock_status,
+      image: food.primary_image || '',
+      images: (food.images || []).map((image) => ({ image_url: image.url, is_primary: image.is_primary })),
+      category: food.category_name,
+      categoryId: food.category,
+    }, [{ id: food.category, name: food.category_name }], [], []);
   },
 
   createProduct: async (data) => {

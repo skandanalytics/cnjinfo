@@ -60,7 +60,7 @@ export const TableCard = ({
 
       <div className="text-start mb-3 text-secondary" style={{ fontSize: '12.5px' }}>
         <div className="mb-1 text-truncate">Capacity: <strong className="text-dark">{table.capacity} Diners</strong></div>
-        <div className="mb-1 text-truncate">Location: <strong className="text-dark">{table.area}</strong></div>
+        <div className="mb-1 text-truncate">Location: <strong className="text-dark">{table.location || table.area || '—'}</strong></div>
         {table.linkedMenus && (
           <div className="mb-1 text-truncate">Menu: <strong className="text-dark">{table.linkedMenus}</strong></div>
         )}

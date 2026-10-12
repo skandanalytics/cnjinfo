@@ -9,7 +9,7 @@ import formatCurrency from '../../utils/formatCurrency';
 import BackButton from '../../components/common/BackButton';
 import useProducts from '../../hooks/useProducts';
 import { getProductSellingPrice } from '../../utils/pricing';
-import { couponService, mockCoupons, isFirstTimeCustomer } from '../../services/couponService';
+import { couponService, isFirstTimeCustomer } from '../../services/couponService';
 import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 import { useAuth } from '../../hooks/useAuth';
 import { normalizeFoodType } from '../../utils/filters';
@@ -50,7 +50,7 @@ export const Cart = () => {
   const [promoMessage, setPromoMessage] = useState('');
   const [promoSuccess, setPromoSuccess] = useState(null);
   const [showAllCoupons, setShowAllCoupons] = useState(false);
-  const [availableCoupons, setAvailableCoupons] = useState(mockCoupons);
+  const [availableCoupons, setAvailableCoupons] = useState([]);
   const [isFirstTime, setIsFirstTime] = useState(true);
 
   const { products } = useProducts();
@@ -58,10 +58,8 @@ export const Cart = () => {
   useEffect(() => {
     let isMounted = true;
     const fetchCouponsAndEligibility = async () => {
-      const data = await couponService.getCoupons();
-      if (data && data.length > 0 && isMounted) {
-        setAvailableCoupons(data);
-      }
+      const data = await couponService.getCoupons().catch(() => []);
+      if (isMounted) setAvailableCoupons(Array.isArray(data) ? data : []);
       const firstTimeStatus = await isFirstTimeCustomer(user);
       if (isMounted) {
         setIsFirstTime(firstTimeStatus);
@@ -69,7 +67,7 @@ export const Cart = () => {
     };
     fetchCouponsAndEligibility();
     return () => { isMounted = false; };
-  }, [user]);
+  }, [user, cartItems.length]);
 
   const isCustomer = (isAuthenticated && user?.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1';
   const [serverCart, setServerCart] = useState(null);
@@ -143,17 +141,15 @@ export const Cart = () => {
     }
   };
 
-  // WELCOME100 Coupon Details - Always visible on Cart page
-  const welcomeCoupon = availableCoupons.find(c => c.code === 'WELCOME100') || null;
-
-  const currentNetSubtotal = getSubtotal();
-  const welcomeMin = Number(welcomeCoupon?.minOrderValue || welcomeCoupon?.minimum_order_amount || 0);
-  const welcomeRemaining = welcomeCoupon && isFirstTime ? Math.max(0, welcomeMin - currentNetSubtotal) : 0;
-
-  const suggestion = {
-    coupon: welcomeCoupon,
-    remaining: welcomeRemaining
-  };
+  const currentNetSubtotal = Number(serverCart?.pricing?.merchandise_total ?? getSubtotal());
+  const suggestion = availableCoupons
+    .filter((row) => isFirstTime || !(row.isFirstTimeOffer || row.is_first_time_offer))
+    .map((row) => ({
+      coupon: row,
+      remaining: Math.max(0, Number(row.minOrderValue || row.minimum_order_amount || 0) - currentNetSubtotal),
+    }))
+    .filter((row) => row.remaining > 0)
+    .sort((a, b) => a.remaining - b.remaining)[0] || { coupon: null, remaining: 0 };
 
   const getItemFoodType = (item) => {
     if (!item) return 'veg';
@@ -240,17 +236,19 @@ export const Cart = () => {
           {/* Left Column: Cart Items & Promo Codes */}
           <div className="col-12 col-lg-8">
             <div className="mb-4">
-              {cartItems.map((item) => (
+              {cartItems.map((item) => {
+                 const lineKey = item.lineId || item.cartItemId || item.id;
+                 return (
                  <CartItem
-                  key={item.id}
+                  key={lineKey}
                   item={item}
-                  onIncrease={() => increaseQuantity(item.id)}
-                  onDecrease={() => decreaseQuantity(item.id)}
-                  onChange={(val) => updateQuantity(item.id, val)}
-                  onRemove={() => removeFromCart(item.id)}
+                  onIncrease={() => increaseQuantity(lineKey)}
+                  onDecrease={() => decreaseQuantity(lineKey)}
+                  onChange={(val) => updateQuantity(lineKey, val)}
+                  onRemove={() => removeFromCart(lineKey)}
                   onUpdateInstructions={updateItemInstructionsAndExtras}
                 />
-              ))}
+              );})}
             </div>
 
             {/* Smart Coupon Suggestion Box */}
@@ -418,26 +416,60 @@ export const Cart = () => {
                 <span className="small fw-semibold text-secondary mb-2 d-block">Available Coupons:</span>
                 <div className="d-flex flex-column gap-2">
                   {(() => {
-                    const eligibleOnly = availableCoupons.filter(c => {
-                      if (!isFirstTime && c.code === 'WELCOME100') return false;
+                    const describeCoupon = (c) => {
+                      const isPct = c.discount_type === 'PERCENTAGE' || c.type === 'percentage';
+                      const value = Number(c.discount_value || c.discount || 0);
                       const minReq = Number(c.minOrderValue || c.minimum_order_amount || 0);
-                      return currentNetSubtotal >= minReq || coupon?.code === c.code;
-                    });
-                    
-                    const toDisplay = showAllCoupons ? eligibleOnly : eligibleOnly.slice(0, 2);
+                      const maxOff = c.maxDiscount != null ? ` up to ₹${c.maxDiscount}` : '';
+                      const valueLabel = isPct ? `${value}% off${maxOff}` : `₹${value} off`;
+                      const until = c.valid_until ? new Date(c.valid_until) : null;
+                      const from = c.valid_from ? new Date(c.valid_from) : null;
+                      const now = new Date();
+                      let reason = '';
+                      let enabled = true;
+                      if (c.is_active === false || c.status === 'Inactive') {
+                        enabled = false;
+                        reason = 'This coupon is inactive.';
+                      } else if (from && now < from) {
+                        enabled = false;
+                        reason = 'This coupon is not valid yet.';
+                      } else if (until && now > until) {
+                        enabled = false;
+                        reason = 'This coupon has expired.';
+                      } else if ((c.isFirstTimeOffer || c.is_first_time_offer) && !isFirstTime) {
+                        enabled = false;
+                        reason = 'This coupon is only for first-time customers.';
+                      } else if (currentNetSubtotal < minReq) {
+                        enabled = false;
+                        reason = `Add ₹${Math.max(0, Math.ceil(minReq - currentNetSubtotal))} more. Minimum order ₹${minReq}.`;
+                      }
+                      return {
+                        valueLabel,
+                        minReq,
+                        enabled,
+                        reason,
+                        expiry: until && !Number.isNaN(until.getTime())
+                          ? `Valid until ${until.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}`
+                          : '',
+                      };
+                    };
+                    const toDisplay = showAllCoupons ? availableCoupons : availableCoupons.slice(0, 4);
                     
                     return (
                       <>
+                        {availableCoupons.length === 0 && (
+                          <p className="text-secondary small mb-0">No coupons are configured for this restaurant.</p>
+                        )}
                         {toDisplay.map((c) => {
-                    const minReq = Number(c.minOrderValue || c.minimum_order_amount || 0);
-                    const isEligible = currentNetSubtotal >= minReq;
-                    const isApplied = coupon?.code === c.code;
-                    const remaining = Math.max(0, minReq - currentNetSubtotal);
+                    const info = describeCoupon(c);
+                    const minReq = info.minReq;
+                    const isEligible = info.enabled;
+                    const isApplied = coupon?.code === c.code || (serverCart?.pricing?.coupons || []).some((row) => row.code === c.code);
 
                     return (
                       <div 
                         key={c.code} 
-                        className={`d-flex align-items-center justify-content-between ${c.code === 'WELCOME100' ? 'py-1 px-2' : 'p-2'} rounded-3 border flex-wrap gap-2 transition-all ${
+                        className={`d-flex align-items-center justify-content-between p-2 rounded-3 border flex-wrap gap-2 transition-all ${
                           isApplied 
                             ? 'border-success bg-success-subtle shadow-xs' 
                             : isEligible 
@@ -452,16 +484,18 @@ export const Cart = () => {
                               : isEligible 
                                 ? 'bg-danger-subtle text-danger border-danger-subtle' 
                                 : 'bg-secondary-subtle text-secondary border-secondary-subtle'
-                          }`} style={{ fontSize: c.code === 'WELCOME100' ? '9px' : '10px' }}>
-                            {c.code}
+                          }`} style={{ fontSize: '10px' }}>
+                            {c.code}{c.autoApply ? ' · Auto' : ''}
                           </span>
                           <div>
-                            <div className="small fw-semibold text-dark" style={{ fontSize: c.code === 'WELCOME100' ? '10px' : '11px' }}>{c.description}</div>
-                            {!isEligible ? (
-                              <div className="text-danger small" style={{ fontSize: '9px' }}>
-                                Add ₹{remaining} more to use this coupon (min. ₹{minReq})
-                              </div>
-                            ) : null}
+                            <div className="small fw-semibold text-dark" style={{ fontSize: '11px' }}>
+                              {info.valueLabel} · Min ₹{minReq}
+                            </div>
+                            {c.description && <div className="text-secondary" style={{ fontSize: '10px' }}>{c.description}</div>}
+                            {info.expiry && <div className="text-secondary" style={{ fontSize: '10px' }}>{info.expiry}</div>}
+                            {!isEligible && (
+                              <div className="text-danger small" style={{ fontSize: '10px' }}>{info.reason}</div>
+                            )}
                           </div>
                         </div>
                         <div className="d-flex align-items-center gap-1.5 ms-auto">
@@ -491,7 +525,7 @@ export const Cart = () => {
                       </div>
                     );
                   })}
-                        {!showAllCoupons && eligibleOnly.length > 2 && (
+                        {!showAllCoupons && availableCoupons.length > 4 && (
                           <div className="text-center mt-1">
                             <button 
                               type="button"
@@ -503,7 +537,7 @@ export const Cart = () => {
                             </button>
                           </div>
                         )}
-                        {showAllCoupons && eligibleOnly.length > 2 && (
+                        {showAllCoupons && availableCoupons.length > 4 && (
                           <div className="text-center mt-1">
                             <button 
                               type="button"

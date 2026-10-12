@@ -39,7 +39,8 @@ export const EditDishModal = ({
       try {
         const catList = await menuService.getMenus();
         const mapped = (catList || [])
-          .filter(c => c.status !== 'Inactive' && c.is_active !== false)
+          .filter(c => !dish?.branch || String(c.branch) === String(dish.branch))
+          .filter(c => (c.status !== 'Inactive' && c.is_active !== false) || String(c.id) === String(dish?.categoryId))
           .map(c => {
             const label = getFrontendCategoryName(c.name);
             return { value: label, label };
@@ -116,7 +117,7 @@ export const EditDishModal = ({
       setDiscountPrice(dish.discountPrice !== undefined && dish.discountPrice > 0 ? String(dish.discountPrice) : '');
       setDiscountPercent(dish.discountPercent !== undefined && dish.discountPercent > 0 ? String(dish.discountPercent) : '');
       setDescription(dish.description || '');
-      setCategory(dish.category || 'Main Course');
+      setCategory(dish.category ? getFrontendCategoryName(dish.category) : '');
       setFoodType((dish.foodType || dish.type || 'veg').toLowerCase());
       setStock(dish.stock !== undefined && dish.stock !== null ? String(dish.stock) : '');
       setProtein(dish.protein !== undefined && dish.protein !== null ? String(dish.protein) : '');

@@ -304,18 +304,39 @@ class EmployeeManagementTests(Base):
         self.assertEqual(self.admin_a_c.post("/api/employees/", self.payload(phone="bad"),
                                              format="json").status_code, 400)
 
-    def test_delete_deactivates_and_revokes_tokens(self):
+    def test_delete_removes_employee_and_login_and_keeps_order_history(self):
+        from apps.orders.models import Order
         chef_tokens = login_staff(APIClient(), "CHA001").json()
+        user_id = self.chef_a.user_id
+        order = Order.objects.create(order_number="H1", branch=self.chef_a.branch, order_type="TAKEAWAY",
+                                     status="COMPLETED", placed_by_id=user_id, source="EMPLOYEE")
         r = self.admin_a_c.delete(f"/api/employees/{self.chef_a.id}/")
         self.assertEqual(r.status_code, 204)
-        self.chef_a.refresh_from_db()
-        self.assertEqual(self.chef_a.status, "INACTIVE")
-        self.assertTrue(Employee.objects.filter(pk=self.chef_a.id).exists())  # history preserved
-        self.assertEqual(login_staff(APIClient(), "CHA001").status_code, 403)
+        self.assertFalse(Employee.objects.filter(pk=self.chef_a.id).exists())
+        self.assertFalse(User.objects.filter(pk=user_id).exists())
+        order.refresh_from_db()
+        self.assertEqual((order.placed_by_id, order.placed_by_name), (None, self.chef_a.user.name))
+        self.assertEqual(login_staff(APIClient(), "CHA001").status_code, 401)
         r = APIClient().post("/api/auth/refresh/", {"refresh": chef_tokens["refresh"]}, format="json")
         self.assertEqual(r.status_code, 401)
-        # The still-unexpired access token is rejected immediately (inactive users cannot authenticate at all).
         self.assertEqual(auth(APIClient(), chef_tokens).get("/api/employees/").status_code, 401)
+        listed = self.admin_a_c.get("/api/employees/").json()
+        listed = listed["results"] if isinstance(listed, dict) else listed
+        self.assertNotIn(self.chef_a.id, [e["id"] for e in listed])
+
+    def test_edit_updates_user_and_profile_without_touching_password(self):
+        old_hash = self.chef_a.user.password
+        r = self.admin_a_c.patch(f"/api/employees/{self.chef_a.id}/", {
+            "name": "Renamed Chef", "phone": "9300000099", "email": "renamed@example.com",
+            "status": "SUSPENDED"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.chef_a.refresh_from_db()
+        self.chef_a.user.refresh_from_db()
+        self.assertEqual((self.chef_a.user.name, self.chef_a.user.phone, self.chef_a.user.email, self.chef_a.status),
+                         ("Renamed Chef", "+919300000099", "renamed@example.com", "SUSPENDED"))
+        self.assertEqual(self.chef_a.user.password, old_hash)
+        self.assertEqual(Employee.objects.filter(user=self.chef_a.user).count(), 1)
+        self.assertEqual(login_staff(APIClient(), "CHA001").status_code, 403)  # suspended cannot log in
 
     def test_cannot_deactivate_self(self):
         self.assertEqual(self.admin_a_c.delete(f"/api/employees/{self.admin_a.id}/").status_code, 403)

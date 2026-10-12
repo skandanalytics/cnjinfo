@@ -96,9 +96,26 @@ export async function staffJson(path, options = {}) {
   return data;
 }
 
+function isRawBackendDump(text) {
+  const sample = String(text || '').slice(0, 400).toLowerCase();
+  return (
+    sample.includes('<!doctype') ||
+    sample.includes('<html') ||
+    sample.includes('traceback') ||
+    sample.includes('integrityerror') ||
+    sample.includes('operationalerror') ||
+    sample.includes('django.db')
+  );
+}
+
 export function messageFrom(data) {
   if (!data) return '';
-  if (typeof data.detail === 'string') return data.detail;
+  if (typeof data.detail === 'string') {
+    if (isRawBackendDump(data.detail)) {
+      return 'The request could not be completed. Please try again.';
+    }
+    return data.detail;
+  }
   if (Array.isArray(data.detail)) return data.detail.join(', ');
   if (typeof data === 'object') {
     const parts = [];

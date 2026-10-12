@@ -42,7 +42,7 @@ GRANT ALL PRIVILEGES ON `test_foodie_db`.* TO 'foodie_user'@'localhost';  -- Dja
 Plus Django's auth, sessions, admin and `token_blacklist` tables (JWT logout/rotation).
 
 ## Integrity policy
-- **No hard deletes of history.** Branch, table, category, food, order, payment, invoice and coupon relations use `PROTECT`. A branch or dish with history cannot be deleted; it is deactivated (`is_active`). This implements decision Q1.
+- **No hard deletes of history.** Orders, order items, payments, invoices, coupon redemptions and the stock ledger are never deleted (`PROTECT` between them). Their links to configuration records (branch, table, dish, coupon, staff user, stock row) are `SET_NULL`, and snapshots keep what the history needs (`branch_name`, `table_label`, `food_name`, `coupon_code`, `placed_by_name`). Branches, tables, dishes, categories and employees are therefore hard-deleted through their endpoints; branch deletion runs in one transaction in `apps/branches/services.py` (SRS 3.2.6).
 - Money is `DecimalField(12,2)`; rates are `DecimalField(5,2)`.
 - Order statuses: PENDING, PREPARING, READY, SERVED, COMPLETED, CANCELLED (decision Q2). **Transitions are not enforced yet** (Phase 7 service layer).
 - Cascades that remain: cart items with their cart, food images/customizations/discounts with their dish (dishes themselves are never deleted once ordered), a customer's carts with the customer.

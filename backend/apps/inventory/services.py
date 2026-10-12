@@ -16,8 +16,9 @@ class InsufficientStock(Exception):
 
 
 def _ledger(item, kind, change, user=None, order=None, note=""):
-    return StockTransaction.objects.create(item=item, transaction_type=kind, quantity_change=change,
-                                           balance_after=item.quantity, order=order, performed_by=user, note=note)
+    return StockTransaction.objects.create(item=item, food_name=item.food.name, transaction_type=kind,
+                                           quantity_change=change, balance_after=item.quantity, order=order,
+                                           performed_by=user, note=note)
 
 
 @transaction.atomic

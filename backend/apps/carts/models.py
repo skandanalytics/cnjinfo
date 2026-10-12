@@ -53,7 +53,7 @@ class CartItem(models.Model):
     """Prices are not stored: they are recomputed by the pricing service on every read."""
 
     cart = models.ForeignKey(Cart, on_delete=models.CASCADE, related_name="items")
-    food = models.ForeignKey("menu.Food", on_delete=models.PROTECT, related_name="cart_items")
+    food = models.ForeignKey("menu.Food", on_delete=models.CASCADE, related_name="cart_items")
     quantity = models.PositiveIntegerField(validators=[MinValueValidator(1)])
     options = models.ManyToManyField("menu.CustomizationOption", blank=True, related_name="cart_items")
     special_instructions = models.CharField(max_length=500, blank=True)

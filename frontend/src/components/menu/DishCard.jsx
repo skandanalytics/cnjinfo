@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { FiEdit2, FiTrash2 } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
+import { classifyStock } from '../../utils/stockStatus';
 
 export const DishCard = ({
   dish,
@@ -37,12 +38,18 @@ export const DishCard = ({
 
   const discountLabel = calculatedPct > 0 ? `${calculatedPct}% OFF` : `OFFER AVAILABLE`;
 
-  const isOutOfStock = (dish.stock !== undefined && dish.stock <= 0) || dish.status === 'Out of Stock' || dish.status === 'OUT_OF_STOCK' || dish.is_available === false;
+  const stockLabel = classifyStock(dish.stock);
+  const isOutOfStock = stockLabel === 'Out of Stock';
+  const stockBadge = isOutOfStock
+    ? 'bg-dark text-white'
+    : stockLabel === 'Low Stock'
+      ? 'bg-warning-subtle text-warning-emphasis'
+      : 'bg-success-subtle text-success';
 
   return (
-    <div className="card rounded-3 border-0 shadow-sm overflow-hidden bg-white foodie-card h-100 d-flex flex-column justify-content-between">
-      <div>
-        <div className="position-relative" style={{ height: '180px' }}>
+    <div className="card rounded-3 border-0 shadow-sm overflow-hidden bg-white foodie-card h-100 d-flex flex-column">
+      <div className="flex-grow-1 d-flex flex-column">
+        <div className="position-relative flex-shrink-0" style={{ height: '168px' }}>
           <img 
             src={getImageUrl(dish.image)} 
             alt={dish.name} 
@@ -92,100 +99,101 @@ export const DishCard = ({
             </span>
           </div>
 
-          <h6 className="fw-bold text-dark mb-1">{dish.name}</h6>
-          <p className="text-secondary small text-truncate mb-2" style={{ maxHeight: '40px' }}>
+          <h6
+            className="fw-bold text-dark mb-1"
+            style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '2.6em' }}
+          >
+            {dish.name}
+          </h6>
+          <p className="text-secondary small mb-0" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '2.4em' }}>
             {dish.description}
           </p>
         </div>
       </div>
 
-      <div className="p-3 pt-0">
-        <div className="d-flex align-items-center justify-content-between mt-2 pt-2 border-top border-light-subtle">
-          <div>
-            {hasDiscount ? (
-              <div className="d-flex flex-column align-items-start">
-                <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
-                  <span className="text-decoration-line-through text-danger opacity-75 small me-1" style={{ fontSize: '11px' }}>
-                    {formatCurrency(oldPrice)}
-                  </span>
-                  <span className="fw-bold text-dark fs-6">
-                    {formatCurrency(finalPrice)}
-                  </span>
-                </div>
-                <div className="d-flex align-items-center gap-1 mt-0.5">
-                  <span className="badge bg-danger-subtle text-danger fw-bold rounded px-1.5 py-0.5" style={{ fontSize: '9px' }}>
-                    {discountLabel}
-                  </span>
-                  <span className="small text-muted" style={{ fontSize: '10px' }}>• Stock: {dish.stock}</span>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <h5 className="fw-bold text-danger mb-0">{formatCurrency(dish.price)}</h5>
-                <span className="small text-muted" style={{ fontSize: '10px' }}>Stock: {dish.stock}</span>
-              </div>
+      <div className="px-3 pb-3 pt-2 mt-auto border-top border-light-subtle">
+        <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+          <div className="d-flex align-items-baseline gap-2 flex-wrap">
+            {hasDiscount && (
+              <span className="text-decoration-line-through text-secondary" style={{ fontSize: '12px' }}>
+                {formatCurrency(oldPrice)}
+              </span>
             )}
+            <span className="fw-bold text-danger" style={{ fontSize: '18px' }}>{formatCurrency(finalPrice)}</span>
           </div>
-          
-          {isAdmin && isOutOfStock && onRestock && (
-            <form
-              className="d-flex align-items-center gap-1"
-              onSubmit={async (event) => {
-                event.preventDefault();
-                const qty = Number(restockQty);
-                if (!Number.isInteger(qty) || qty <= 0) {
-                  setRestockError('Enter a positive whole number.');
-                  return;
-                }
-                setRestockError('');
-                setRestocking(true);
-                try {
-                  await onRestock(dish, qty);
-                  setRestockQty('');
-                } catch (err) {
-                  setRestockError(err.message || 'Restock failed.');
-                } finally {
-                  setRestocking(false);
-                }
-              }}
-            >
+          {hasDiscount && (
+            <span className="badge bg-danger-subtle text-danger fw-bold rounded-pill px-2 py-1" style={{ fontSize: '10px' }}>
+              {discountLabel}
+            </span>
+          )}
+        </div>
+        <div className="d-flex align-items-center justify-content-between gap-2 mt-2">
+          <span className="small text-secondary">Stock: <strong className="text-dark">{dish.stock ?? 0}</strong></span>
+          <span className={`badge rounded-pill ${stockBadge}`} style={{ fontSize: '10px' }}>
+            {stockLabel}
+          </span>
+        </div>
+
+        {isAdmin && onRestock && (
+          <form
+            className="mt-2"
+            onSubmit={async (event) => {
+              event.preventDefault();
+              const qty = Number(restockQty);
+              if (!Number.isInteger(qty) || qty <= 0) {
+                setRestockError('Enter a positive whole number.');
+                return;
+              }
+              setRestockError('');
+              setRestocking(true);
+              try {
+                await onRestock(dish, qty);
+                setRestockQty('');
+              } catch (err) {
+                setRestockError(err.message || 'Restock failed.');
+              } finally {
+                setRestocking(false);
+              }
+            }}
+          >
+            <div className="d-flex align-items-center gap-2">
               <input
                 type="number"
                 min="1"
                 className="form-control form-control-sm rounded-pill"
-                style={{ width: '72px' }}
+                style={{ width: '88px', maxWidth: '40%' }}
                 placeholder="Qty"
                 value={restockQty}
                 onChange={(e) => setRestockQty(e.target.value)}
                 aria-label={`Restock quantity for ${dish.name}`}
               />
-              <button type="submit" className="btn btn-sm btn-danger rounded-pill px-2 fw-bold" disabled={restocking}>
-                Restock
-              </button>
-              {restockError && <span className="text-danger small">{restockError}</span>}
-            </form>
-          )}
-          {isAdmin && (
-            <div className="d-flex gap-2">
-              <button 
-                onClick={onEdit} 
-                className="btn btn-sm btn-outline-secondary rounded-circle p-2 border d-flex align-items-center justify-content-center"
-                style={{ width: '32px', height: '32px' }}
-                title="Edit Dish"
-              >
-                <FiEdit2 size={14} />
-              </button>
-              <button 
-                onClick={onDelete} 
-                className="btn btn-sm btn-outline-danger rounded-circle p-2 border d-flex align-items-center justify-content-center"
-                style={{ width: '32px', height: '32px' }}
-                title="Delete Dish"
-              >
-                <FiTrash2 size={14} />
+              <button type="submit" className="btn btn-sm btn-danger rounded-pill px-3 fw-bold flex-shrink-0" disabled={restocking}>
+                {restocking ? 'Saving…' : 'Restock'}
               </button>
             </div>
-          )}
-        </div>
+            {restockError && <div className="text-danger small mt-1">{restockError}</div>}
+          </form>
+        )}
+        {isAdmin && (
+          <div className="d-flex justify-content-end gap-2 mt-2">
+            <button
+              onClick={onEdit}
+              className="btn btn-sm btn-outline-secondary rounded-circle border d-flex align-items-center justify-content-center"
+              style={{ width: '32px', height: '32px' }}
+              title="Edit Dish"
+            >
+              <FiEdit2 size={14} />
+            </button>
+            <button
+              onClick={onDelete}
+              className="btn btn-sm btn-outline-danger rounded-circle border d-flex align-items-center justify-content-center"
+              style={{ width: '32px', height: '32px' }}
+              title="Delete Dish"
+            >
+              <FiTrash2 size={14} />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

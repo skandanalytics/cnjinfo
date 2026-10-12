@@ -99,15 +99,19 @@ export const QRDisplayModal = ({
   }, [table, isOpen, targetUrl, qrImageUrl]);
 
   const handleToggleStatus = async () => {
-    if (!qrRecord || !qrRecord.id) return;
+    if (!table?.id || updating) return;
     setUpdating(true);
+    setErrorMsg('');
     try {
-      const updated = await qrService.toggleQRCodeStatus(qrRecord.id, qrRecord.is_active);
-      setQrRecord(updated);
+      const { staffJson } = await import('../../services/staffClient');
+      const saved = await staffJson(`/tables/${table.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ qr_is_active: !isActive }),
+      });
+      setQrRecord((prev) => ({ ...(prev || {}), id: table.id, is_active: saved.qr_is_active !== false }));
       if (onRefresh) onRefresh();
     } catch (err) {
-      console.error("Failed to toggle QR status:", err);
-      alert("Unable to toggle QR status.");
+      setErrorMsg(err.message || 'Unable to update the QR status.');
     }
     setUpdating(false);
   };
@@ -164,7 +168,7 @@ export const QRDisplayModal = ({
 
   if (!isOpen || !table) return null;
 
-  const isActive = qrRecord?.is_active !== undefined ? qrRecord.is_active : true;
+  const isActive = qrRecord?.is_active !== undefined ? qrRecord.is_active !== false : table.qr_is_active !== false;
 
   const footerActions = (
     <div className="d-flex align-items-center justify-content-between w-100 gap-2 flex-wrap">
@@ -179,11 +183,13 @@ export const QRDisplayModal = ({
           {isActive ? 'Disable QR' : 'Enable QR'}
         </Button>
       )}
-      <div className="d-flex align-items-center gap-2 ms-auto">
-        <Button variant="primary" onClick={handlePrint} className="d-flex align-items-center gap-1.5 py-1.5 px-3">
-          <FiPrinter /> Print Card
-        </Button>
-      </div>
+      {isActive && (
+        <div className="d-flex align-items-center gap-2 ms-auto">
+          <Button variant="primary" onClick={handlePrint} className="d-flex align-items-center gap-1.5 py-1.5 px-3">
+            <FiPrinter /> Print Card
+          </Button>
+        </div>
+      )}
     </div>
   );
 
@@ -206,14 +212,18 @@ export const QRDisplayModal = ({
             </span>
           </div>
 
-          <div className="p-4 rounded-4 bg-light border border-light-subtle d-inline-block mb-1 shadow-sm position-relative">
-            <img 
-              src={qrImageUrl} 
-              alt={`QR Code Table ${table.number || table.id}`}
-              className="img-fluid rounded-3"
-              style={{ width: '240px', height: '240px', objectFit: 'contain' }}
-            />
-          </div>
+          {isActive ? (
+            <div className="p-4 rounded-4 bg-light border border-light-subtle d-inline-block mb-1 shadow-sm position-relative">
+              <img
+                src={qrImageUrl}
+                alt={`QR Code Table ${table.number || table.id}`}
+                className="img-fluid rounded-3"
+                style={{ width: '240px', height: '240px', objectFit: 'contain' }}
+              />
+            </div>
+          ) : (
+            <p className="text-secondary small mb-0">This table QR code is disabled. Customers cannot start a new order by scanning it.</p>
+          )}
         </div>
       )}
     </Modal>

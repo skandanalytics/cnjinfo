@@ -7,7 +7,7 @@ import { useCart } from '../../hooks/useCart';
 import Button from '../../components/common/Button';
 import formatCurrency from '../../utils/formatCurrency';
 import BackButton from '../../components/common/BackButton';
-import { applyOrderContext, availableTables } from '../../services/customerCheckout';
+import { applyOrderContext, availableTables, resolvePublicBranchId, selectableTables } from '../../services/customerCheckout';
 import {
   DINE_IN, NO_TABLES_MESSAGE, TAKEAWAY, getOrderType, getSelectedTableId, hasDineInTable, hasScannedTable,
   setOrderType, setSelectedTableId,
@@ -47,20 +47,25 @@ export const Checkout = () => {
     if (type === DINE_IN && !hasScannedTable() && !tableId) {
       setBusy(true);
       try {
-        const branchId = sessionStorage.getItem('foodie_public_branch');
+        const branchId = await resolvePublicBranchId();
         const tables = branchId ? await availableTables(branchId) : [];
+        const open = selectableTables(tables);
         if (!tables.length) {
           setNotice(NO_TABLES_MESSAGE);
           return;
         }
-        if (tables.length > 1) {
-          setTableChoices(tables);
+        if (!open.length) {
+          setNotice('Tables are listed, but none are free for a new dine-in order.');
           return;
         }
-        setSelectedTableId(tables[0].id);
-        tableId = tables[0].id;
-      } catch {
-        setError('Could not check table availability. Check your connection and try again.');
+        if (open.length > 1) {
+          setTableChoices(open);
+          return;
+        }
+        setSelectedTableId(open[0].id);
+        tableId = open[0].id;
+      } catch (err) {
+        setError(err.message || 'Could not check table availability.');
         return;
       } finally {
         setBusy(false);

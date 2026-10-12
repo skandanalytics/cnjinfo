@@ -36,18 +36,22 @@ class Order(models.Model):
         EMPLOYEE = "EMPLOYEE", "Employee-assisted"
 
     order_number = models.CharField(max_length=30, unique=True)
-    branch = models.ForeignKey("branches.Branch", on_delete=models.PROTECT, related_name="orders")
+    # Branch, table and staff references become NULL when that record is deleted; the snapshots keep the history.
+    branch = models.ForeignKey("branches.Branch", on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name="orders")
+    branch_name = models.CharField(max_length=255, blank=True)  # snapshot
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
                                  related_name="orders")
     customer_phone = models.CharField(max_length=20, blank=True)  # snapshot; empty for anonymous takeaway
-    table = models.ForeignKey("branches.DiningTable", on_delete=models.PROTECT, null=True, blank=True,
+    table = models.ForeignKey("branches.DiningTable", on_delete=models.SET_NULL, null=True, blank=True,
                               related_name="orders")
     table_label = models.CharField(max_length=60, blank=True)  # snapshot
     order_type = models.CharField(max_length=10, choices=Type.choices)
     source = models.CharField(max_length=10, choices=Source.choices, default=Source.CUSTOMER)
-    placed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+    placed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                   related_name="placed_orders")  # employee who took an assisted order
-    accepted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, null=True, blank=True,
+    placed_by_name = models.CharField(max_length=255, blank=True)  # snapshot
+    accepted_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                     related_name="accepted_orders")
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
     payment_status = models.CharField(max_length=10, choices=PaymentStatus.choices, default=PaymentStatus.UNPAID)
@@ -66,6 +70,7 @@ class Order(models.Model):
     gst_amount = models.DecimalField(**MONEY)
     service_charge_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("0"))
     service_charge_amount = models.DecimalField(**MONEY)
+    round_off = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0"))
     total_amount = models.DecimalField(**MONEY)
 
     # Client-supplied key; a repeated checkout request with the same key returns the original order.
@@ -85,8 +90,9 @@ class Order(models.Model):
             models.Index(fields=["table", "status"]),
         ]
         constraints = [
+            # A dine-in order keeps its table label after the table itself is deleted.
             models.CheckConstraint(
-                condition=(models.Q(order_type="DINE_IN", table__isnull=False)
+                condition=((models.Q(order_type="DINE_IN") & (models.Q(table__isnull=False) | ~models.Q(table_label="")))
                            | models.Q(order_type="TAKEAWAY", table__isnull=True)),
                 name="ck_order_table_matches_type"),
         ]
@@ -99,7 +105,8 @@ class OrderItem(models.Model):
     """Historical line: name and prices are copied at order time so later menu edits never change old orders."""
 
     order = models.ForeignKey(Order, on_delete=models.PROTECT, related_name="items")
-    food = models.ForeignKey("menu.Food", on_delete=models.PROTECT, related_name="order_items")
+    food = models.ForeignKey("menu.Food", on_delete=models.SET_NULL, null=True, blank=True,
+                             related_name="order_items")
     food_name = models.CharField(max_length=255)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2)             # base price at order time
     customizations = models.JSONField(default=list, blank=True)                    # [{"name":..,"extra_price":..}]

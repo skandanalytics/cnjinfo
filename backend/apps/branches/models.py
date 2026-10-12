@@ -9,7 +9,8 @@ RATE = dict(max_digits=5, decimal_places=2, validators=[MinValueValidator(Decima
 
 
 class Branch(models.Model):
-    """A restaurant location. Branches are deactivated, never hard-deleted (historical orders reference them)."""
+    """A restaurant location. Deleting one goes through branches.services.delete_branch, which removes its
+    configuration and keeps orders, payments and invoices with snapshots."""
 
     name = models.CharField(max_length=255)
     code = models.CharField(max_length=30, unique=True)
@@ -21,10 +22,12 @@ class Branch(models.Model):
     opening_hours = models.CharField(max_length=100, blank=True, default="")
     cover_image_url = models.URLField(max_length=1000, blank=True, default="")
     is_primary = models.BooleanField(default=False)  # at most one branch is the main headquarters
+    configured_table_count = models.PositiveIntegerField(
+        default=0, help_text="Planned table count. Existing dining tables are never deleted when this changes.")
     is_active = models.BooleanField(default=True)
 
     # Tax and charge configuration. The SRS gives no rates, so they default to 0 until configured by an admin.
-    gst_rate = models.DecimalField(default=Decimal("0"), help_text="GST percent on the taxable amount.", **RATE)
+    gst_rate = models.DecimalField(default=Decimal("5"), help_text="GST percent on the taxable amount.", **RATE)
     service_charge_rate = models.DecimalField(default=Decimal("0"), help_text="Service charge percent.", **RATE)
     takeaway_charge = models.DecimalField(default=Decimal("0"), help_text="Flat takeaway charge per order.",
                                           max_digits=12, decimal_places=2,
@@ -41,6 +44,23 @@ class Branch(models.Model):
 
     def __str__(self):
         return self.name
+
+
+class RestaurantSetting(models.Model):
+    """One row for restaurant-wide switches. Existing table QR codes are kept; this only controls whether they are used."""
+
+    qr_enabled = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "restaurant_settings"
+
+    def __str__(self):
+        return "Restaurant settings"
+
+
+def qr_ordering_enabled():
+    row, _ = RestaurantSetting.objects.get_or_create(pk=1, defaults={"qr_enabled": True})
+    return bool(row.qr_enabled)
 
 
 class DiningTable(models.Model):

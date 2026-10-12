@@ -12,14 +12,14 @@ Calculation order (rates come from the branch; the SRS gives no values, so they 
     takeaway_charge       = branch.takeaway_charge for TAKEAWAY orders (flat per order), else 0
     taxable_amount        = food_after_coupon + takeaway_charge
     gst_amount            = taxable_amount x gst_rate%
-    service_charge_amount = food_after_coupon x service_charge_rate%    (not charged on the takeaway charge)
+    service_charge_amount = food_after_coupon x tier rate               (not charged on the takeaway charge)
     total_amount          = taxable_amount + gst_amount + service_charge_amount
 
 Every amount is rounded half-up to 2 decimals at each step and totals are sums of the rounded parts.
 These formulas follow the legacy frontend's `pricing.js` and are UNCONFIRMED against the SRS (docs: Q3).
 """
 from dataclasses import dataclass, field
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 from django.utils import timezone
 
@@ -29,6 +29,24 @@ from apps.menu.pricing_helpers import current_discount, inventory_of, is_orderab
 
 MAX_QTY_PER_LINE = 99
 ZERO = Decimal("0.00")
+
+
+def service_charge_for(food_after_coupon, configured_rate):
+    """Service charge on the food amount after discounts, before this charge and before round-off.
+
+    Up to 999: 0%. Above 999 through 1,999: 1%. Above 1,999 through 20,000: 2%.
+    Above 20,000 the branch's configured rate is kept, because no higher tier is defined.
+    """
+    base = money(food_after_coupon)
+    if base <= Decimal("999"):
+        rate = Decimal("0.00")
+    elif base <= Decimal("1999"):
+        rate = Decimal("1.00")
+    elif base <= Decimal("20000"):
+        rate = Decimal("2.00")
+    else:
+        rate = money(configured_rate or 0)
+    return rate, money(base * rate / Decimal("100"))
 
 
 class PricingError(Exception):
@@ -117,8 +135,10 @@ def price_order(branch, lines, order_type, customer=None, coupon_codes=None, now
     takeaway = money(branch.takeaway_charge) if order_type == "TAKEAWAY" else ZERO
     taxable = food_after_coupon + takeaway
     gst = money(taxable * branch.gst_rate / 100)
-    service = money(food_after_coupon * branch.service_charge_rate / 100)
-    total = taxable + gst + service
+    service_rate, service = service_charge_for(food_after_coupon, branch.service_charge_rate)
+    raw_total = taxable + gst + service
+    payable = raw_total.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    round_off = payable - raw_total
 
     return {
         "order_type": order_type, "items": items,
@@ -129,8 +149,8 @@ def price_order(branch, lines, order_type, customer=None, coupon_codes=None, now
         "rejected_coupons": [{"code": c, "reason": r} for c, r in outcome.rejected],
         "coupon_discount_total": coupon_total, "takeaway_charge": takeaway, "taxable_amount": taxable,
         "gst_rate": branch.gst_rate, "gst_amount": gst,
-        "service_charge_rate": branch.service_charge_rate, "service_charge_amount": service,
-        "total_amount": total,
+        "service_charge_rate": service_rate, "service_charge_amount": service,
+        "amount_before_round": raw_total, "round_off": round_off, "total_amount": payable,
         "is_first_time_customer": outcome.first_time,
         "offer_progress": offer_progress(branch, merchandise, customer, outcome.applied, now),
         "_applied_coupons": outcome.applied,  # internal: consumed by order creation (Phase 7), stripped for APIs

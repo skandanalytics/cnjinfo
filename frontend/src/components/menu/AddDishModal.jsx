@@ -23,7 +23,6 @@ export const AddDishModal = ({
   const [category, setCategory] = useState(defaultCategory || '');
   const [foodType, setFoodType] = useState('veg');
   const [stock, setStock] = useState('20');
-  const [protein, setProtein] = useState('');
   const [image, setImage] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imageMode, setImageMode] = useState('file'); // 'file' | 'url'
@@ -223,15 +222,6 @@ export const AddDishModal = ({
       return;
     }
 
-    let protNum = null;
-    if (protein && protein.trim() !== '') {
-      protNum = parseInt(protein);
-      if (isNaN(protNum) || protNum < 0) {
-        setErrorMsg('Protein must be a positive integer.');
-        return;
-      }
-    }
-
     setLoading(true);
     try {
       await onAdd({
@@ -244,7 +234,6 @@ export const AddDishModal = ({
         type: foodType,
         foodType: foodType,
         stock: stockNum,
-        protein: protNum,
         imageUrl,
         imageFile: imageMode === 'file' ? imageFile : null
       });
@@ -258,7 +247,6 @@ export const AddDishModal = ({
       setCategory(defaultCategory || '');
       setFoodType('veg');
       setStock('20');
-      setProtein('');
       setImage('');
       setImageFile(null);
       setImageMode('file');
@@ -344,14 +332,6 @@ export const AddDishModal = ({
           placeholder="e.g. 50" 
           value={stock} 
           onChange={(e) => setStock(e.target.value)} 
-        />
-
-        <Input
-          label="Protein (g) (Optional)"
-          type="number"
-          placeholder="Enter protein (g)"
-          value={protein}
-          onChange={(e) => setProtein(e.target.value)}
         />
 
         <Select 

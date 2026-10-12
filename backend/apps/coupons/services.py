@@ -202,5 +202,5 @@ def redeem(order, applied):
                 raise CouponError(f"Coupon {coupon.code} was already used.")
         if now > coupon.valid_to or not coupon.is_active:
             raise CouponError(f"Coupon {coupon.code} is no longer valid.")
-        CouponRedemption.objects.create(coupon=coupon, order=order, customer=order.customer,
-                                        discount_amount=a.amount)
+        CouponRedemption.objects.create(coupon=coupon, coupon_code=coupon.code, order=order,
+                                        customer=order.customer, discount_amount=a.amount)

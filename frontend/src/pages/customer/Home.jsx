@@ -12,8 +12,8 @@ import {
   FiGrid, FiPieChart, FiHeart, FiLayers, FiZap, FiActivity, FiCoffee, FiDisc, FiStar, FiPercent,
   FiChevronLeft, FiChevronRight
 } from 'react-icons/fi';
-import { filterAndSortProducts, normalizeFoodType } from '../../utils/filters';
-import { normalizeCategoryName } from '../../utils/categoryUtils';
+import { filterAndSortProducts } from '../../utils/filters';
+import { isDishInCategory, normalizeCategoryName } from '../../utils/categoryUtils';
 import { orderService, isOrderOwnedByCustomer, getCustomerPhone } from '../../services/orderService';
 import { useCart } from '../../hooks/useCart';
 import { chooseCustomerBranch, listOpenBranches } from '../../services/productService';
@@ -43,13 +43,8 @@ export const Home = () => {
   const categories = allCategories.filter(cat => {
     if (cat === 'All') return true;
     if (cat === 'Discount' || cat === 'Offers') return false;
-    return products?.some(p => {
-      const c1 = normalizeCategoryName(p.category);
-      const c2 = normalizeCategoryName(cat);
-      if (c1 === c2) return true;
-      if (cat === 'Popular' && p.is_popular) return true;
-      return false;
-    });
+    const catObj = rawCategories.find((row) => normalizeCategoryName(row.name) === normalizeCategoryName(cat)) || { name: cat };
+    return products?.some((product) => isDishInCategory(product, catObj) || (cat === 'Popular' && product.is_popular));
   });
 
   const { user, isAuthenticated } = useAuth();
@@ -252,9 +247,6 @@ export const Home = () => {
     setCurrentPage(1);
   }, [selectedCategories, sortBy, selectedFoodType, search]);
 
-  // Dynamic food type availability across current loaded menu
-  // Old hasVeg code removed
-
   useEffect(() => {
     let isMounted = true;
 
@@ -265,6 +257,18 @@ export const Home = () => {
       }
       try {
         const INACTIVE_STATUSES = ['completed', 'cancelled', 'canceled', 'cancel', 'done', 'settled', 'delivered', 'rejected', 'void', 'voided'];
+        const token = sessionStorage.getItem('foodie_token_customer') || localStorage.getItem('foodie_token_customer');
+        if (token) {
+          const api = (await import('../../services/api')).default;
+          const { mapOrder } = await import('../../services/adminApi');
+          const res = await api.get('/orders/', { bypassCache: true });
+          const rows = Array.isArray(res.data) ? res.data : (res.data?.results || []);
+          const activeList = rows
+            .map(mapOrder)
+            .filter((ord) => !INACTIVE_STATUSES.includes(String(ord.status || ord.backendStatus || '').toLowerCase()));
+          if (isMounted) setActiveOrders(activeList);
+          return;
+        }
 
         const currentCustomer = JSON.parse(localStorage.getItem('foodie_auth_customer') || sessionStorage.getItem('foodie_auth_customer') || '{}').user || user;
         const activePhone = getCustomerPhone() || currentCustomer?.phone || user?.phone;
@@ -296,6 +300,7 @@ export const Home = () => {
     };
 
     fetchActiveOrders();
+    const poll = setInterval(fetchActiveOrders, 8000);
 
     const handleSync = () => fetchActiveOrders();
     window.addEventListener('foodie_orders_updated', handleSync);
@@ -303,6 +308,7 @@ export const Home = () => {
 
     return () => {
       isMounted = false;
+      clearInterval(poll);
       window.removeEventListener('foodie_orders_updated', handleSync);
       window.removeEventListener('storage', handleSync);
     };
@@ -311,6 +317,10 @@ export const Home = () => {
   const handleFoodTypeClick = (type) => {
     setSelectedFoodType((prev) => (prev === type ? null : type));
     setCurrentPage(1);
+  };
+
+  const handleOrderAgain = () => {
+    document.getElementById('customer-menu')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   const getCategoryIcon = (category) => {
@@ -337,18 +347,6 @@ export const Home = () => {
     search: search,
     sortBy
   });
-
-  // Dynamic food type availability across current loaded menu AFTER filtering by category/search
-  const hasVeg = baseFilteredDishes.some(p => normalizeFoodType(p.foodType || p.type || (p.is_veg === false || p.is_veg === 'false' ? 'non-veg' : 'veg')) === 'veg');
-  const hasNonVeg = baseFilteredDishes.some(p => normalizeFoodType(p.foodType || p.type || (p.is_veg === false || p.is_veg === 'false' ? 'non-veg' : 'veg')) === 'non-veg');
-  const hasVegan = baseFilteredDishes.some(p => normalizeFoodType(p.foodType || p.type || (p.is_veg === false || p.is_veg === 'false' ? 'non-veg' : 'veg')) === 'vegan');
-
-  // When selected food type is no longer available, reset it
-  useEffect(() => {
-    if (selectedFoodType === 'non-veg' && !hasNonVeg) setSelectedFoodType(null);
-    if (selectedFoodType === 'veg' && !hasVeg) setSelectedFoodType(null);
-    if (selectedFoodType === 'vegan' && !hasVegan) setSelectedFoodType(null);
-  }, [hasVeg, hasNonVeg, hasVegan, selectedFoodType]);
 
   const effectiveSelectedFoodTypes = selectedFoodType ? [selectedFoodType] : [];
 
@@ -512,7 +510,11 @@ export const Home = () => {
                         )}
                       </div>
                       <div className="small text-white-50">
-                        Total Paid: <strong className="text-white">₹{ord.total || ord.total_amount}</strong>
+                        {(ord.items || []).slice(0, 3).map((item) => `${item.name} × ${item.quantity}`).join(', ')}
+                        {(ord.items || []).length > 3 ? '…' : ''}
+                      </div>
+                      <div className="small text-white-50">
+                        Total: <strong className="text-white">₹{ord.total || ord.total_amount}</strong>
                       </div>
                     </div>
 
@@ -525,6 +527,14 @@ export const Home = () => {
                       >
                         Track Order →
                       </button>
+                      <button
+                        type="button"
+                        onClick={handleOrderAgain}
+                        className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold"
+                        style={{ fontSize: '12px' }}
+                      >
+                        Order Again
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -535,6 +545,7 @@ export const Home = () => {
 
         {/* Sticky Frozen Filter Header Container */}
         <div
+          id="customer-menu"
           className="sticky-filter-header mb-4 py-3 px-3 rounded-4 shadow-sm bg-white border border-light-subtle text-start"
           style={{
             position: 'sticky',
@@ -551,7 +562,18 @@ export const Home = () => {
               value={search}
               onChange={(val) => { setSearch(val); setCurrentPage(1); }}
               disabled={!products || products.length === 0}
-              suggestions={(products || []).map(p => p.name)}
+              records={(products || []).map((dish) => ({
+                id: dish.id,
+                label: dish.name,
+                title: dish.name,
+                subtitle: dish.category || '',
+                image: dish.image,
+                price: dish.sellingPrice ?? dish.price,
+                searchText: [dish.name, dish.category, dish.foodType || dish.type].filter(Boolean).join(' '),
+              }))}
+              onSelectSuggestion={(item) => {
+                if (item?.id) navigate(`/customer/food/${item.id}${window.location.search || ''}`);
+              }}
               className="w-100"
             />
           </div>
@@ -622,60 +644,53 @@ export const Home = () => {
             </div>
           )}
 
-          {/* Food Type Clickable Filters - Visible when available in menu */}
-          {(hasVeg || hasNonVeg || hasVegan) && (
+          {(products || []).length > 0 && (
             <div className="d-flex align-items-center gap-2 flex-wrap px-1 pt-2 border-top border-light-subtle w-100">
               <span className="small fw-semibold text-secondary me-1" style={{ fontSize: '12px' }}>Food Type:</span>
 
-              {hasVeg && (
-                <button
-                  type="button"
-                  onClick={() => handleFoodTypeClick('veg')}
-                  className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'veg'
-                    ? 'bg-success text-white border-success shadow-sm'
-                    : 'bg-white text-dark border-light shadow-sm'
-                    }`}
-                  style={{ fontSize: '11px', cursor: 'pointer' }}
-                >
-                  <span className="veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                  <span>Veg</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => handleFoodTypeClick('veg')}
+                className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'veg'
+                  ? 'bg-success text-white border-success shadow-sm'
+                  : 'bg-white text-dark border-light shadow-sm'
+                  }`}
+                style={{ fontSize: '11px', cursor: 'pointer' }}
+              >
+                <span className="veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
+                <span>Veg</span>
+              </button>
 
-              {hasNonVeg && (
-                <button
-                  type="button"
-                  onClick={() => handleFoodTypeClick('non-veg')}
-                  className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'non-veg'
-                    ? 'bg-danger text-white border-danger shadow-sm'
-                    : 'bg-white text-dark border-light shadow-sm'
-                    }`}
-                  style={{ fontSize: '11px', cursor: 'pointer' }}
-                >
-                  <span className="non-veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                  <span>Non-Veg</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => handleFoodTypeClick('non-veg')}
+                className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'non-veg'
+                  ? 'bg-danger text-white border-danger shadow-sm'
+                  : 'bg-white text-dark border-light shadow-sm'
+                  }`}
+                style={{ fontSize: '11px', cursor: 'pointer' }}
+              >
+                <span className="non-veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
+                <span>Non-Veg</span>
+              </button>
 
-              {hasVegan && (
-                <button
-                  type="button"
-                  onClick={() => handleFoodTypeClick('vegan')}
-                  className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'vegan'
-                    ? 'text-white shadow-sm'
-                    : 'bg-white text-dark border-light shadow-sm'
-                    }`}
-                  style={{
-                    fontSize: '11px',
-                    cursor: 'pointer',
-                    backgroundColor: selectedFoodType === 'vegan' ? '#059669' : '#ffffff',
-                    borderColor: selectedFoodType === 'vegan' ? '#059669' : undefined
-                  }}
-                >
-                  <span className="vegan-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                  <span>Vegan</span>
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => handleFoodTypeClick('vegan')}
+                className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'vegan'
+                  ? 'text-white shadow-sm'
+                  : 'bg-white text-dark border-light shadow-sm'
+                  }`}
+                style={{
+                  fontSize: '11px',
+                  cursor: 'pointer',
+                  backgroundColor: selectedFoodType === 'vegan' ? '#059669' : '#ffffff',
+                  borderColor: selectedFoodType === 'vegan' ? '#059669' : undefined
+                }}
+              >
+                <span className="vegan-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
+                <span>Vegan</span>
+              </button>
             </div>
           )}
         </div>

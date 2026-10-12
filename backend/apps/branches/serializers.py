@@ -7,6 +7,27 @@ from apps.accounts.phone import normalize_phone
 from .models import Branch, DiningTable, TableView
 from .qr import qr_url
 
+TABLE_LOCATIONS = ("Indoor Main", "Garden View", "Rooftop Terrace")
+LOCATION_ALIASES = {
+    "indoor main": "Indoor Main",
+    "indoor": "Indoor Main",
+    "main": "Indoor Main",
+    "garden view": "Garden View",
+    "garden": "Garden View",
+    "rooftop terrace": "Rooftop Terrace",
+    "rooftop": "Rooftop Terrace",
+    "terrace": "Rooftop Terrace",
+}
+
+
+def canonicalize_location(value):
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if value in TABLE_LOCATIONS:
+        return value
+    return LOCATION_ALIASES.get(value.lower(), value)
+
 
 class BranchSerializer(serializers.ModelSerializer):
     tables_count = serializers.SerializerMethodField()
@@ -16,9 +37,13 @@ class BranchSerializer(serializers.ModelSerializer):
     class Meta:
         model = Branch
         fields = ["id", "code", "name", "address", "city", "contact_number", "email", "manager_name",
-                  "opening_hours", "cover_image_url", "is_primary", "tables_count", "is_active",
+                  "opening_hours", "cover_image_url", "is_primary", "tables_count",
+                  "configured_table_count", "is_active",
                   "gst_rate", "service_charge_rate", "takeaway_charge", "created_at", "updated_at"]
         read_only_fields = ["id", "code", "tables_count", "created_at", "updated_at"]
+        # create()/update() move the primary flag under a row lock, so the generated unique check would only
+        # reject the hand-over.
+        extra_kwargs = {"is_primary": {"validators": []}}
 
     def get_tables_count(self, obj):
         annotated = getattr(obj, "tables_count", None)
@@ -48,14 +73,36 @@ class BranchSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Cover image URL must start with http:// or https://.")
         return value
 
+    def validate_configured_table_count(self, value):
+        if value < 0:
+            raise serializers.ValidationError("Total tables cannot be negative.")
+        if self.instance is not None:
+            existing = self.instance.tables.filter(is_active=True).count()
+            if value < existing:
+                raise serializers.ValidationError(
+                    f"This branch already has {existing} tables. Total tables cannot be lower than that.")
+        return value
+
     def validate(self, attrs):
         for rate in ("gst_rate", "service_charge_rate"):
             if rate in attrs and attrs[rate] > 100:
                 raise serializers.ValidationError({rate: "Rate cannot exceed 100."})
+        inst = self.instance
+        primary = attrs.get("is_primary", inst.is_primary if inst else False)
+        active = attrs.get("is_active", inst.is_active if inst else True)
+        if primary and not active:
+            raise serializers.ValidationError({"is_active": "The primary branch must stay active. Mark another "
+                                                            "branch as primary first."})
+        # Exactly one primary once one exists: it moves by marking another branch, never by clearing it.
+        if inst and inst.is_primary and not primary:
+            raise serializers.ValidationError({"is_primary": "Mark another branch as primary instead; the "
+                                                             "application always keeps one primary branch."})
         return attrs
 
     def create(self, validated):
         with transaction.atomic():
+            if validated.get("is_active", True) and not Branch.objects.filter(is_primary=True).exists():
+                validated["is_primary"] = True
             if validated.get("is_primary"):
                 Branch.objects.select_for_update().filter(is_primary=True).update(is_primary=False)
             branch = Branch.objects.create(code="TMP", **validated)
@@ -96,6 +143,17 @@ class TableSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
             raise serializers.ValidationError("Capacity must be at least 1.")
         return value
 
+    def validate_location(self, value):
+        value = canonicalize_location(value)
+        if not value:
+            raise serializers.ValidationError(
+                "Location must be Indoor Main, Garden View, or Rooftop Terrace.")
+        existing = (self.instance.location or "") if self.instance else ""
+        if value not in TABLE_LOCATIONS and value != existing:
+            raise serializers.ValidationError(
+                "Location must be Indoor Main, Garden View, or Rooftop Terrace.")
+        return value
+
     def validate(self, attrs):
         attrs = super().validate(attrs)
         number = attrs.get("table_number", getattr(self.instance, "table_number", None))
@@ -105,8 +163,8 @@ class TableSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
         view = attrs.get("table_view", getattr(self.instance, "table_view", None))
         if view is not None and view.branch_id != branch.id:
             raise serializers.ValidationError({"table_view": "This view belongs to a different branch."})
-        if view is not None:
-            attrs["location"] = view.name
+        if self.instance is None and not canonicalize_location(attrs.get("location", "")):
+            attrs["location"] = "Indoor Main"
         return attrs
 
 

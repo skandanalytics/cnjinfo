@@ -9,6 +9,8 @@ import ConfirmModal from '../../components/common/ConfirmModal';
 import Button from '../../components/common/Button';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
+import BranchRequiredState from '../../components/common/BranchRequiredState';
+import { useBranches } from '../../hooks/useBranches';
 import { menuService } from '../../services/menuService';
 import { productService } from '../../services/productService';
 import { useAuth } from '../../hooks/useAuth';
@@ -18,6 +20,7 @@ import { getFrontendCategoryName, normalizeCategoryName } from '../../utils/cate
 export const Menus = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const { hasBranches, loading: branchesLoading } = useBranches();
 
   const [menus, setMenus] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -54,13 +57,13 @@ export const Menus = () => {
   }, []);
 
   const handleAddMenu = async (menuData) => {
-    if (!isAdmin) return;
+    if (!isAdmin || !hasBranches) return;
     await menuService.createMenu(menuData);
     fetchMenus();
   };
 
   const handleAddDish = async (dishData) => {
-    if (!isAdmin) return;
+    if (!isAdmin || !hasBranches) return;
     await productService.createProduct(dishData);
     fetchMenus();
   };
@@ -87,7 +90,7 @@ export const Menus = () => {
         title="Manage Menus" 
         showBackButton
         actions={
-          isAdmin && (
+          isAdmin && hasBranches && (
             <div className="d-flex align-items-center gap-2">
               {menus.length > 0 && (
                 <>
@@ -125,8 +128,10 @@ export const Menus = () => {
         }
       />
 
-      {loading ? (
+      {loading || branchesLoading ? (
         <Loader />
+      ) : !hasBranches ? (
+        <BranchRequiredState />
       ) : menus.length === 0 ? (
         <EmptyState
           title="No Menus Configured"

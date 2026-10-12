@@ -11,6 +11,8 @@ import ConfirmModal from '../../components/common/ConfirmModal';
 import Button from '../../components/common/Button';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
+import BranchRequiredState from '../../components/common/BranchRequiredState';
+import { useBranches } from '../../hooks/useBranches';
 import SearchBar from '../../components/common/SearchBar';
 import Pagination from '../../components/common/Pagination';
 import { productService, clearStaticProductCache } from '../../services/productService';
@@ -26,6 +28,7 @@ export const MenuEditor = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const { hasBranches, loading: branchesLoading } = useBranches();
 
   const [allMenus, setAllMenus] = useState([]);
   const [menu, setMenu] = useState(null);
@@ -45,6 +48,10 @@ export const MenuEditor = () => {
   const [isRenameOpen, setIsRenameOpen] = useState(false);
   const [targetCategoryToRename, setTargetCategoryToRename] = useState(null);
   const [deletingCategory, setDeletingCategory] = useState(null);
+  const [categoryDeleteBusy, setCategoryDeleteBusy] = useState(false);
+  const [categoryDeleteError, setCategoryDeleteError] = useState('');
+  const [dishDeleteBusy, setDishDeleteBusy] = useState(false);
+  const [dishDeleteError, setDishDeleteError] = useState('');
 
   // Reset to page 1 on filter changes
   useEffect(() => {
@@ -179,174 +186,77 @@ export const MenuEditor = () => {
   };
 
   const handleDeleteConfirm = async () => {
-    if (!isAdmin) return;
-    if (deletingDishId) {
-      try {
-        await productService.deleteProduct(deletingDishId);
-        clearStaticProductCache();
-        await fetchDetails();
-      } catch (err) {
-        window.alert(err.message || 'The dish could not be deleted.');
-      } finally {
-        setDeletingDishId(null);
-      }
+    if (!isAdmin || !deletingDishId || dishDeleteBusy) return;
+    setDishDeleteBusy(true);
+    setDishDeleteError('');
+    try {
+      await productService.deleteProduct(deletingDishId);
+      setDeletingDishId(null);
+      clearStaticProductCache();
+      await fetchDetails(false);
+    } catch (err) {
+      setDishDeleteError(err.message || 'The dish could not be deleted.');
+    } finally {
+      setDishDeleteBusy(false);
     }
   };
 
-  const handleRenameCategory = async (newName, newDescription) => {
-    if (!isAdmin || !newName || !newName.trim()) return;
-    const cleanNewName = newName.trim();
-    const catToRename = targetCategoryToRename || currentCategoryObj || { name: currentCategoryName, originalName: currentCategoryName };
-
-    try {
-      setLoading(true);
-
-      const oldNameNorm = normalizeCategoryName(catToRename?.name || currentCategoryName);
-      const oldOrigNorm = normalizeCategoryName(catToRename?.originalName || currentCategoryName);
-
-      // Save category description
-      if (newDescription !== undefined) {
-        try {
-          const descMap = JSON.parse(localStorage.getItem('foodie_category_descriptions') || '{}');
-          descMap[cleanNewName] = newDescription.trim();
-          if (cleanNewName !== (catToRename?.name || currentCategoryName)) {
-            delete descMap[catToRename?.name || currentCategoryName];
-          }
-          localStorage.setItem('foodie_category_descriptions', JSON.stringify(descMap));
-        } catch (e) {}
-      }
-
-      // 1. Find all dishes belonging to this category
-      const targetDishes = dishes.filter(d => {
-        const dNorm = normalizeCategoryName(d.category);
-        const dFeNorm = normalizeCategoryName(getFrontendCategoryName(d.category));
-        return (catToRename?.id && Number(d.categoryId) === Number(catToRename.id)) ||
-          dNorm === oldNameNorm || dFeNorm === oldNameNorm ||
-          dNorm === oldOrigNorm || dFeNorm === oldOrigNorm;
-      });
-
-      // 2. Update category on backend if menu/category ID exists
-      if (catToRename?.id && !isNaN(Number(catToRename.id))) {
-        await menuService.updateMenu(catToRename.id, { 
-          name: cleanNewName, 
-          description: newDescription !== undefined ? newDescription.trim() : catToRename?.description, 
-          status: 'Active' 
-        });
-      }
-
-      // 3. Update category for each affected dish
-      const savedCategories = JSON.parse(localStorage.getItem('foodie_dish_categories') || '{}');
-      for (const d of targetDishes) {
-        savedCategories[d.id] = cleanNewName;
-        try {
-          await productService.updateProduct(d.id, { category: cleanNewName });
-        } catch (err) {
-          console.error("Error updating product category:", err);
-        }
-      }
-      localStorage.setItem('foodie_dish_categories', JSON.stringify(savedCategories));
-
-      clearStaticProductCache();
-      try {
-        window.dispatchEvent(new CustomEvent('foodie_categories_updated'));
-      } catch (e) {}
-      setSelectedCategory(cleanNewName);
-      await fetchDetails();
-      navigate(`/admin/menus/${encodeURIComponent(cleanNewName)}`);
-    } catch (e) {
-      console.error("Error renaming category:", e);
-    } finally {
-      setLoading(false);
+  const handleRenameCategory = async (newName, newDescription, status) => {
+    if (!isAdmin) return;
+    const catToRename = targetCategoryToRename || currentCategoryObj;
+    if (!catToRename?.id || Number.isNaN(Number(catToRename.id))) {
+      throw new Error('This category is not saved yet. Refresh the page and try again.');
     }
+    const updated = await menuService.updateMenu(catToRename.id, {
+      name: newName.trim(),
+      description: newDescription ?? '',
+      status,
+    });
+    clearStaticProductCache();
+    window.dispatchEvent(new CustomEvent('foodie_categories_updated'));
+    await fetchDetails();
+    setSelectedCategory(updated?.name || newName.trim());
+    navigate(`/admin/menus/${catToRename.id}`);
   };
 
   const handleDeleteCategoryConfirm = async () => {
-    if (!isAdmin || !deletingCategory) return;
-    const catToDelete = deletingCategory;
-    setDeletingCategory(null);
+    if (!isAdmin || !deletingCategory || categoryDeleteBusy) return;
+    if (!deletingCategory.id || Number.isNaN(Number(deletingCategory.id))) {
+      setCategoryDeleteError('This category is not saved yet. Refresh the page and try again.');
+      return;
+    }
+    setCategoryDeleteBusy(true);
+    setCategoryDeleteError('');
     try {
-      setLoading(true);
-
-      const targetId = catToDelete?.id || catToDelete?.name || currentCategoryName;
-      const targetName = catToDelete?.name || catToDelete?.originalName || currentCategoryName;
-      const oldNameNorm = normalizeCategoryName(targetName);
-      const oldOrigNorm = normalizeCategoryName(catToDelete?.originalName || targetName);
-
-      // 1. Delete category via menuService (handles backend DB and local storage persistence)
-      await menuService.deleteMenu(targetId, targetName);
-
-      // 2. Remove / reassign category for associated dishes in localStorage & backend
-      const savedCategories = JSON.parse(localStorage.getItem('foodie_dish_categories') || '{}');
-      const targetDishes = dishes.filter(d => {
-        const dNorm = normalizeCategoryName(d.category);
-        const dFeNorm = normalizeCategoryName(getFrontendCategoryName(d.category));
-        return (catToDelete?.id && Number(d.categoryId) === Number(catToDelete.id)) ||
-          dNorm === oldNameNorm || dFeNorm === oldNameNorm ||
-          dNorm === oldOrigNorm || dFeNorm === oldOrigNorm;
-      });
-
-      for (const d of targetDishes) {
-        delete savedCategories[d.id];
-        delete savedCategories[String(d.id)];
-        try {
-          await productService.updateProduct(d.id, { category: 'Other' });
-        } catch (err) {
-          console.error("Error updating product category upon deletion:", err);
-        }
-      }
-      localStorage.setItem('foodie_dish_categories', JSON.stringify(savedCategories));
-
+      await menuService.deleteMenu(deletingCategory.id);
+      setDeletingCategory(null);
       clearStaticProductCache();
-      try {
-        window.dispatchEvent(new CustomEvent('foodie_categories_updated'));
-        window.dispatchEvent(new CustomEvent('foodie_products_updated'));
-        localStorage.setItem('foodie_inventory_sync_trigger', Date.now().toString());
-      } catch (e) {}
-
+      window.dispatchEvent(new CustomEvent('foodie_categories_updated'));
       setSelectedCategory('all');
       await fetchDetails();
       navigate('/admin/menus');
     } catch (e) {
-      console.error("Error deleting category:", e);
+      setCategoryDeleteError(e.message || 'The category could not be deleted.');
     } finally {
-      setLoading(false);
+      setCategoryDeleteBusy(false);
     }
   };
 
   // Derive unique categories from both menus and dishes
   const categoriesList = React.useMemo(() => {
-    let deletedList = [];
-    try {
-      deletedList = JSON.parse(localStorage.getItem('foodie_deleted_categories') || '[]');
-    } catch (e) {}
-
-    const isDeleted = (name, origName, id) => {
-      if (!deletedList || deletedList.length === 0) return false;
-      const idStr = String(id !== undefined && id !== null ? id : '');
-      const norm = normalizeCategoryName(name || '');
-      const origNorm = normalizeCategoryName(origName || '');
-      const feNorm = normalizeCategoryName(getFrontendCategoryName(name || ''));
-
-      return deletedList.some(d => {
-        const dStr = String(d);
-        const dNorm = normalizeCategoryName(dStr);
-        return dStr === idStr || dNorm === norm || dNorm === origNorm || dNorm === feNorm;
-      });
-    };
-
     const map = new Map();
     (allMenus || []).forEach(m => {
       const feName = getFrontendCategoryName(m.name);
       const norm = normalizeCategoryName(feName);
-      if (!isDeleted(feName, m.name, m.id) && !map.has(norm)) {
-        map.set(norm, { id: m.id, name: feName, originalName: m.name, description: m.description || '' });
+      if (!map.has(norm)) {
+        map.set(norm, { id: m.id, name: feName, originalName: m.name, description: m.description || '', status: m.status });
       }
     });
     (dishes || []).forEach(d => {
       const cat = d.category || 'Other';
       const feName = getFrontendCategoryName(cat);
       const norm = normalizeCategoryName(feName);
-      if (!isDeleted(feName, cat, d.categoryId) && !map.has(norm)) {
+      if (!map.has(norm)) {
         map.set(norm, { id: norm, name: feName, originalName: cat });
       }
     });
@@ -439,10 +349,19 @@ export const MenuEditor = () => {
     }
   };
 
-  if (loading && dishes.length === 0) {
+  if ((loading && dishes.length === 0) || branchesLoading) {
     return (
       <AdminLayout>
         <Loader />
+      </AdminLayout>
+    );
+  }
+
+  if (!hasBranches) {
+    return (
+      <AdminLayout>
+        <PageHeader title="Add Menu" showBackButton backUrl="/admin/dashboard" />
+        <BranchRequiredState />
       </AdminLayout>
     );
   }
@@ -459,7 +378,7 @@ export const MenuEditor = () => {
           isAdmin && (
             <div className="d-flex align-items-center gap-2">
               <Button
-                onClick={() => setIsAddCategoryOpen(true)}
+                onClick={() => { if (hasBranches) setIsAddCategoryOpen(true); }}
                 variant="outline"
                 className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold"
               >
@@ -529,15 +448,15 @@ export const MenuEditor = () => {
                     <button
                       type="button"
                       onClick={() => handleCategorySelect(cat)}
-                      className={`btn btn-sm d-flex align-items-center gap-2 rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${isSelected
+                      className={`btn btn-sm d-inline-flex align-items-center gap-2 rounded-pill px-3 py-1.5 fw-bold transition-all border ${isSelected
                         ? 'bg-danger text-white border-danger shadow-sm'
                         : 'bg-light text-dark border-light-subtle shadow-xs'
                         }`}
-                      style={{ fontSize: '13px', cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 }}
+                      style={{ fontSize: '13px', cursor: 'pointer', maxWidth: '220px' }}
                     >
-                      <span>{cat.name}</span>
+                      <span className="text-truncate">{cat.name}</span>
+                      <span className="badge rounded-pill bg-white text-secondary border flex-shrink-0" style={{ fontSize: '10px' }}>{countInCat}</span>
                     </button>
-                    <span className="small text-secondary fw-semibold" title="Dish count">{countInCat}</span>
                   </span>
                 );
               })}
@@ -550,20 +469,10 @@ export const MenuEditor = () => {
       {hasCategories && !isAllSelected && currentCategoryObj && (
         <div className="card rounded-3 border-0 shadow-sm p-3 mb-4 bg-white">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div className="d-flex align-items-center gap-2 flex-wrap">
-              <span
-                className="badge bg-danger text-white fw-bold rounded-pill px-3 py-1.5 d-inline-flex align-items-center gap-1.5"
-                style={{ fontSize: '12px' }}
-              >
-                <FiLayers className="me-1" />
-                <span>Category: {currentCategoryName}</span>
-              </span>
-              <span className="small text-secondary fw-semibold px-2" style={{ fontSize: '12px' }}>
-                Dish count: {menuDishes.length}
-              </span>
-              <span className={`badge rounded-pill px-3 py-1.5 fw-semibold ${menu?.status === 'Active' ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-secondary-subtle text-secondary'}`} style={{ fontSize: '12px' }}>
-                Status: {menu?.status || 'Active'}
-              </span>
+            <div className="d-flex align-items-center gap-3 flex-wrap text-secondary" style={{ fontSize: '13px' }}>
+              <span>Category: <strong className="text-dark">{currentCategoryName}</strong></span>
+              <span>Dish count: <strong className="text-dark">{menuDishes.length}</strong></span>
+              <span>Status: <strong className="text-dark">{menu?.status || currentCategoryObj?.status || 'Active'}</strong></span>
             </div>
 
             {isAdmin && (
@@ -585,6 +494,7 @@ export const MenuEditor = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    setCategoryDeleteError('');
                     setDeletingCategory(currentCategoryObj || { name: currentCategoryName, originalName: currentCategoryName });
                   }}
                   className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1.5 py-1.5 px-3 rounded-pill fw-bold shadow-xs transition-all bg-white text-danger border-danger"
@@ -608,7 +518,21 @@ export const MenuEditor = () => {
               placeholder={`Search dishes in ${currentCategoryName}...`}
               value={search}
               onChange={setSearch}
-              suggestions={(dishes || []).map(d => d.name)}
+              records={(dishes || []).map((dish) => ({
+                id: dish.id,
+                label: dish.name,
+                title: dish.name,
+                subtitle: [dish.category, Number(dish.stock) <= 0 ? 'Out of Stock' : `${dish.stock ?? 0} in stock`].filter(Boolean).join(' · '),
+                price: dish.price,
+                image: dish.image,
+                searchText: [dish.name, dish.category, dish.foodType].filter(Boolean).join(' '),
+              }))}
+              onSelectSuggestion={(item) => {
+                const dish = (dishes || []).find((row) => String(row.id) === String(item?.id));
+                if (!dish) return;
+                setSelectedCategory(dish.category || 'all');
+                setSearch(dish.name);
+              }}
             />
           </div>
           <div className="col-12 col-md-6 col-lg-7 d-flex align-items-center gap-2">
@@ -713,7 +637,7 @@ export const MenuEditor = () => {
                 <DishCard
                   dish={dish}
                   onEdit={() => setEditingDish(dish)}
-                  onDelete={() => setDeletingDishId(dish.id)}
+                  onDelete={() => { setDishDeleteError(''); setDeletingDishId(dish.id); }}
                   isAdmin={isAdmin}
                   onRestock={async (item, qty) => {
                     const { restockFood, explain } = await import('../../services/adminApi');
@@ -743,7 +667,6 @@ export const MenuEditor = () => {
         <AddCategoryModal
           isOpen={isAddCategoryOpen}
           onClose={() => setIsAddCategoryOpen(false)}
-          categories={categoriesList}
           onAdd={handleAddCategory}
         />
       )}
@@ -774,6 +697,7 @@ export const MenuEditor = () => {
           isOpen={isRenameOpen}
           currentCategoryName={targetCategoryToRename?.name || currentCategoryName}
           currentCategoryDescription={targetCategoryToRename?.description || currentCategoryObj?.description || ''}
+          currentCategoryActive={(targetCategoryToRename || currentCategoryObj)?.status !== 'Inactive'}
           onClose={() => {
             setIsRenameOpen(false);
             setTargetCategoryToRename(null);
@@ -787,10 +711,11 @@ export const MenuEditor = () => {
         <ConfirmModal
           isOpen={!!deletingCategory}
           title="Delete Category"
-          message={`Are you sure you want to delete category "${deletingCategory.name}"? Dishes in this category will be moved to "Other". This action cannot be undone.`}
+          message={categoryDeleteError || `Delete category "${deletingCategory.name}"? A category that still has dishes cannot be deleted; delete or move its dishes first.`}
           confirmText="Delete Category"
+          loading={categoryDeleteBusy}
           onConfirm={handleDeleteCategoryConfirm}
-          onClose={() => setDeletingCategory(null)}
+          onClose={() => { if (!categoryDeleteBusy) { setDeletingCategory(null); setCategoryDeleteError(''); } }}
         />
       )}
 
@@ -799,9 +724,11 @@ export const MenuEditor = () => {
         <ConfirmModal
           isOpen={!!deletingDishId}
           title="Delete Dish"
-          message={`Delete "${(dishes.find((d) => d.id === deletingDishId) || {}).name || 'this dish'}" from the menu? Past orders that included it are kept. This does not change another dish's stock.`}
+          message={dishDeleteError || `Delete "${(dishes.find((d) => d.id === deletingDishId) || {}).name || 'this dish'}"? It is removed from the menu with its stock record. Past orders and bills keep the dish name and price.`}
+          confirmText="Delete Dish"
+          loading={dishDeleteBusy}
           onConfirm={handleDeleteConfirm}
-          onClose={() => setDeletingDishId(null)}
+          onClose={() => { if (!dishDeleteBusy) { setDeletingDishId(null); setDishDeleteError(''); } }}
         />
       )}
     </AdminLayout>

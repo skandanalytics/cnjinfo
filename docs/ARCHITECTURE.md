@@ -36,7 +36,7 @@ Existing frontend in `foodie.zip` will be imported **as-is** into `frontend/` (e
 
 `User(role)`, `CustomerProfile(phone)`, `EmployeeProfile(user, branch, department)`, `Restaurant`, `Branch`, `Table(branch, number, capacity, status, qr_code unique)`, `Category`, `Food(category, diet_type, price, discount fields)`, `FoodImage`, `Customization`, `Cart/CartItem`, `Coupon/CouponRedemption`, `Order(branch, customer?, table?, type, status, payment_status, snapshot totals)`, `OrderItem(historical name/price)`, `OrderStatusHistory`, `Payment/PaymentEvent`, `InventoryItem/StockTransaction`, `Invoice`, `AuditLog`.
 
-Constraints: unique `(branch, table number)`; unique active QR code; one open cart per customer; FKs use `PROTECT` for financial records (never cascade-delete orders, payments or invoices); soft deactivation for branches, employees and foods.
+Constraints: unique `(branch, table number)`; unique active QR code; one open cart per customer; FKs use `PROTECT` between financial records (never cascade-delete orders, payments or invoices) and `SET_NULL` plus snapshots from history to configuration, so branches, tables, dishes and employees can be deleted without losing history.
 
 ## 4. Order, payment and table lifecycles
 

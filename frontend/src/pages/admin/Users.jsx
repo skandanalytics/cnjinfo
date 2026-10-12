@@ -3,6 +3,9 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import PageHeader from '../../components/layout/PageHeader';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
+import BranchRequiredState from '../../components/common/BranchRequiredState';
+import SearchBar from '../../components/common/SearchBar';
+import { useBranches } from '../../hooks/useBranches';
 import api from '../../services/api';
 import extractApiErrorMessage from '../../utils/errorUtils';
 import { useAuth } from '../../hooks/useAuth';
@@ -16,7 +19,6 @@ import {
 import {
   FiUsers,
   FiPlus,
-  FiSearch,
   FiMail,
   FiPhone,
   FiEdit2,
@@ -30,8 +32,8 @@ import {
 
 export const Users = () => {
   const { user: currentUser } = useAuth();
+  const { branches: loadedBranches, hasBranches } = useBranches();
   const [employees, setEmployees] = useState([]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [createdName, setCreatedName] = useState('');
   const [pendingDelete, setPendingDelete] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,9 +45,13 @@ export const Users = () => {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [formError, setFormError] = useState('');
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const [branches, setBranches] = useState([]);
+  const actorBranchId = currentUser?.branchId || null;
 
-  // Form State for Add / Edit
-  const [formData, setFormData] = useState({
+  const emptyForm = () => ({
     name: '',
     email: '',
     phone: '',
@@ -54,26 +60,40 @@ export const Users = () => {
     designation: 'Steward',
     department: 'Dining Floor',
     billAccess: 'counter_payment,print_bill',
+    branch: actorBranchId ? String(actorBranchId) : String(branches.find((b) => b.isMainBranch)?.id || ''),
+    status: 'ACTIVE',
   });
 
+  const [formData, setFormData] = useState(emptyForm);
+
   const resetForm = () => {
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      password: '',
-      role: 'STAFF',
-      designation: 'Steward',
-      department: 'Dining Floor',
-      billAccess: 'counter_payment,print_bill',
-    });
+    setFormData(emptyForm());
+    setFormError('');
   };
 
   const handleOpenAddModal = () => {
+    if (!hasBranches) return;
     setEditingUser(null);
     resetForm();
     setIsAddModalOpen(true);
   };
+
+  const handleViewEmployee = async (row) => {
+    setViewingUser(row);
+    try {
+      const { listEmployees } = await import('../../services/adminApi');
+      const rows = await listEmployees();
+      setEmployees(rows);
+      const fresh = rows.find((item) => String(item.id) === String(row.id));
+      if (fresh) setViewingUser(fresh);
+    } catch {
+      /* keep the row already shown */
+    }
+  };
+
+  useEffect(() => {
+    setBranches(loadedBranches || []);
+  }, [loadedBranches]);
 
   const fetchEmployees = async (isInitial = true) => {
     if (isInitial) setLoading(true);
@@ -156,25 +176,29 @@ export const Users = () => {
     e.preventDefault();
     if (isSubmitting) return;
 
+    setFormError('');
     if (
       !formData.name?.trim() ||
-      !formData.email?.trim() ||
       !formData.role?.trim() ||
       !formData.designation?.trim() ||
       !formData.department?.trim() ||
       (!editingUser && !formData.password?.trim())
     ) {
-      alert('Please fill in all mandatory fields (including Password for new employee).');
+      setFormError('Fill in all required fields (a password is required for a new employee).');
       return;
     }
 
-    const cleanPhone = String(formData.phone || '').replace(/\D/g, '').slice(0, 10);
+    const cleanPhone = String(formData.phone || '').replace(/\D/g, '').slice(-10);
     if (!cleanPhone || cleanPhone.length !== 10) {
-      alert('Please enter a valid 10-digit phone number (cannot exceed or be less than 10 digits).');
+      setFormError('Enter a valid 10-digit phone number.');
       return;
     }
     if (formData.role === 'CASHIER' && !(formData.billAccess || '').split(',').filter(Boolean).length) {
-      alert('Select at least one bill option for a cashier.');
+      setFormError('Select at least one bill option for a cashier.');
+      return;
+    }
+    if (!formData.branch && !['ADMIN', 'SUPER_ADMIN'].includes(formData.role)) {
+      setFormError('Choose the branch this employee works at.');
       return;
     }
 
@@ -182,31 +206,47 @@ export const Users = () => {
     try {
       const { saveEmployee } = await import('../../services/adminApi');
       await saveEmployee({ ...formData, phone: cleanPhone }, editingUser);
+      const wasEditing = Boolean(editingUser);
+      const editedId = editingUser?.id;
       setEditingUser(null);
       setIsAddModalOpen(false);
       resetForm();
       await fetchEmployees(false);
-      if (!editingUser) setCreatedName(formData.name.trim());
+      if (wasEditing && viewingUser && String(viewingUser.id) === String(editedId)) {
+        const { listEmployees } = await import('../../services/adminApi');
+        const rows = await listEmployees();
+        setEmployees(rows);
+        setViewingUser(rows.find((item) => String(item.id) === String(editedId)) || viewingUser);
+      }
+      if (!wasEditing) setCreatedName(formData.name.trim());
     } catch (err) {
-      console.error("Failed to save employee:", err);
-      alert(err.message || 'Failed to save employee.');
+      setFormError(err.message || 'The employee could not be saved.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const departmentForRole = (department, role) => {
+    if (rolesForDepartment(department).some((r) => r.value === role)) return department;
+    return DEPARTMENT_OPTIONS.find((d) => rolesForDepartment(d).some((r) => r.value === role)) || department || 'Management';
+  };
+
   // Handle Edit Click
   const handleEditEmployee = (user) => {
+    const role = user.backendRole || 'STAFF';
     setEditingUser(user);
+    setFormError('');
     setFormData({
       name: user.name || '',
       email: user.email || '',
-      phone: user.phone || user.phone_number || '',
+      phone: String(user.phone || user.phone_number || '').replace(/\D/g, '').slice(-10),
       password: '',
-      role: user.backendRole || 'STAFF',
-      designation: displayJobTitle(user.designation) || 'Steward',
-      department: user.department || 'Dining Floor',
+      role,
+      designation: displayJobTitle(user.designation) || '',
+      department: departmentForRole(user.department, role),
       billAccess: user.billAccess || '',
+      branch: user.branch ? String(user.branch) : (['ADMIN', 'SUPER_ADMIN'].includes(role) ? 'ALL' : ''),
+      status: user.status || 'ACTIVE',
     });
   };
 
@@ -241,33 +281,19 @@ export const Users = () => {
   };
 
   // Handle Delete
-  const handleDeleteEmployee = async (userId) => {
-    const targetUserId = typeof userId === 'object' ? userId?.id : userId;
-
+  const handleDeleteEmployee = async () => {
+    if (!pendingDelete || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError('');
     try {
-      if (targetUserId) {
-        const { deactivateEmployee } = await import('../../services/adminApi');
-        await deactivateEmployee(targetUserId);
-      }
-    } catch (err) {
-      console.error("Delete employee failed:", err);
-      const msg = extractApiErrorMessage(err, 'Failed to delete employee from backend.');
-      alert(msg);
-    } finally {
-      try {
-        const local = JSON.parse(localStorage.getItem('foodie_custom_employees') || '[]');
-        const filteredLocal = local.filter(u => u.id !== targetUserId && u.employeeId !== targetUserId);
-        localStorage.setItem('foodie_custom_employees', JSON.stringify(filteredLocal));
-
-        const overrides = JSON.parse(localStorage.getItem('foodie_employee_overrides') || '{}');
-        delete overrides[String(targetUserId)];
-        localStorage.setItem('foodie_employee_overrides', JSON.stringify(overrides));
-
-        window.dispatchEvent(new CustomEvent('foodie_users_updated'));
-        localStorage.setItem('foodie_users_sync_trigger', Date.now().toString());
-      } catch (err) { }
-
+      const { deleteEmployee } = await import('../../services/adminApi');
+      await deleteEmployee(pendingDelete.id);
+      setPendingDelete(null);
       await fetchEmployees(false);
+    } catch (err) {
+      setDeleteError(extractApiErrorMessage(err, err.message || 'The employee could not be deleted.'));
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -279,7 +305,7 @@ export const Users = () => {
         title="Employee Directory & Staff"
         showBackButton
         actions={
-          employees.length > 0 ? (
+          employees.length > 0 && hasBranches ? (
             <button
               className="btn btn-danger btn-sm rounded-pill px-3 py-2 fw-bold d-flex align-items-center gap-1.5 shadow-sm"
               onClick={handleOpenAddModal}
@@ -293,6 +319,8 @@ export const Users = () => {
 
       {loading ? (
         <Loader />
+      ) : !hasBranches ? (
+        <BranchRequiredState />
       ) : employees.length === 0 ? (
         /* Empty State when there are NO employees at all: Only shows the Add New Employee button */
         <div className="card border-0 shadow-sm rounded-4 p-5 bg-white text-center d-flex flex-column align-items-center justify-content-center my-4" style={{ minHeight: '420px' }}>
@@ -312,89 +340,8 @@ export const Users = () => {
           </button>
         </div>
       ) : (
-        /* When employees are present: Render Stat Cards, Tabs, Search Bar, and Table */
+        /* When employees are present: directory, filters, and records */
         <>
-          {/* Overview Stat Cards */}
-          <div className="row g-3 mb-4">
-            <div className="col-12 col-sm-6 col-lg-3">
-              <div className="card rounded-4 border-0 shadow-sm p-3 bg-white h-100">
-                <div className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <span className="small text-secondary fw-bold text-uppercase">Total Employees</span>
-                    <h3 className="fw-bold text-dark mb-0 mt-1">{stats.total}</h3>
-                  </div>
-                  <div className="bg-primary-subtle text-primary p-3 rounded-circle">
-                    <FiUsers size={22} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-12 col-sm-6 col-lg-3">
-              <div className="card rounded-4 border-0 shadow-sm p-3 bg-white h-100">
-                <div className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <span className="small text-secondary fw-bold text-uppercase">Kitchen & Chefs</span>
-                    <h3 className="fw-bold text-danger mb-0 mt-1">{stats.kitchenStaff}</h3>
-                  </div>
-                  <div className="bg-danger-subtle text-danger p-3 rounded-circle">
-                    <FiCoffee size={22} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-12 col-sm-6 col-lg-3">
-              <div className="card rounded-4 border-0 shadow-sm p-3 bg-white h-100">
-                <div className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <span className="small text-secondary fw-bold text-uppercase">Stewards & Floor</span>
-                    <h3 className="fw-bold text-warning mb-0 mt-1">{stats.floorStaff}</h3>
-                  </div>
-                  <div className="bg-warning-subtle text-warning p-3 rounded-circle">
-                    <FiLayers size={22} />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-12 col-sm-6 col-lg-3">
-              <div className="card rounded-4 border-0 shadow-sm p-3 bg-white h-100">
-                <div className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <span className="small text-secondary fw-bold text-uppercase">Cashiers & POS</span>
-                    <h3 className="fw-bold text-info mb-0 mt-1">{stats.billingStaff}</h3>
-                  </div>
-                  <div className="bg-info-subtle text-info p-3 rounded-circle">
-                    <FiCreditCard size={22} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="card border-0 shadow-sm rounded-4 p-3 bg-white mb-3">
-            <label className="form-label small fw-bold text-secondary mb-1" htmlFor="employee-details">Employee details</label>
-            <select
-              id="employee-details"
-              className="form-select rounded-3"
-              value={selectedEmployeeId}
-              onChange={(e) => {
-                const id = e.target.value;
-                setSelectedEmployeeId(id);
-                const match = employees.find((row) => String(row.id) === id);
-                setViewingUser(match || null);
-              }}
-            >
-              <option value="">Select an employee</option>
-              {employees.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.name} · {row.employeeId} · {displayJobTitle(row.designation) || row.backendRole}
-                </option>
-              ))}
-            </select>
-          </div>
-
           {/* Filter Tabs & Search Bar */}
           <div className="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
             <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4 pb-3 border-bottom">
@@ -422,17 +369,23 @@ export const Users = () => {
               </div>
 
               {/* Search Bar */}
-              <div className="position-relative" style={{ width: '260px' }}>
-                <FiSearch className="position-absolute text-muted" style={{ left: '12px', top: '50%', transform: 'translateY(-50%)' }} />
-                <input
-                  type="text"
-                  placeholder="Search staff, ID, role..."
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="form-control form-control-sm rounded-pill border-secondary-subtle ps-5 py-1.5"
-                  style={{ fontSize: '12px' }}
-                />
-              </div>
+              <SearchBar
+                placeholder="Search staff, ID, role..."
+                value={search}
+                onChange={setSearch}
+                records={employees.map((person) => ({
+                  id: person.id,
+                  label: person.name,
+                  title: person.name,
+                  subtitle: [person.employeeId, person.designation || person.role].filter(Boolean).join(' · '),
+                  searchText: [person.name, person.employeeId, person.role, person.designation, person.department, person.phone].filter(Boolean).join(' '),
+                }))}
+                onSelectSuggestion={(item) => {
+                  const row = employees.find((person) => String(person.id) === String(item?.id));
+                  if (row) handleViewEmployee(row);
+                }}
+                style={{ width: '260px' }}
+              />
             </div>
 
             {/* Staff / Employee Table */}
@@ -505,6 +458,10 @@ export const Users = () => {
                             <span className="badge bg-light text-dark border px-2.5 py-1.5 rounded-pill fw-semibold" style={{ fontSize: '11.5px' }}>
                               {u.department || 'General'}
                             </span>
+                            <div className="text-muted mt-1" style={{ fontSize: '11px' }}>
+                              {u.branch_name || 'All branches'}
+                              {u.status && u.status !== 'ACTIVE' ? ` · ${u.status.toLowerCase()}` : ''}
+                            </div>
                           </td>
 
                           <td className="py-3">
@@ -523,7 +480,7 @@ export const Users = () => {
                           <td className="py-3 text-end">
                             <div className="d-flex align-items-center justify-content-end gap-3">
                               <button
-                                onClick={() => setViewingUser(u)}
+                                onClick={() => handleViewEmployee(u)}
                                 className="btn btn-sm btn-light rounded-circle text-primary p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
                                 style={{ width: '34px', height: '34px', border: '1px solid #e2e8f0' }}
                                 title="View Full Details"
@@ -542,7 +499,7 @@ export const Users = () => {
 
                               {(u.role !== 'admin' || String(u.employeeId) !== String(currentUser?.employeeCode)) && (
                                 <button
-                                  onClick={() => setPendingDelete(u)}
+                                  onClick={() => { setDeleteError(''); setPendingDelete(u); }}
                                   className="btn btn-sm btn-light rounded-circle text-danger p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
                                   style={{ width: '34px', height: '34px', border: '1px solid #fee2e2', backgroundColor: '#fef2f2' }}
                                   title="Delete / Remove"
@@ -623,6 +580,14 @@ export const Users = () => {
                       <span className="text-secondary d-block">Account status</span>
                       <strong className="text-dark">{viewingUser.status || 'ACTIVE'}</strong>
                     </div>
+                    <div className="col-6">
+                      <span className="text-secondary d-block">Branch</span>
+                      <strong className="text-dark">{viewingUser.branch_name || 'All branches'}</strong>
+                    </div>
+                    <div className="col-6">
+                      <span className="text-secondary d-block">Employee code</span>
+                      <strong className="text-dark">{viewingUser.employeeId || viewingUser.employee_code || '—'}</strong>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -672,10 +637,9 @@ export const Users = () => {
                     </div>
 
                     <div className="col-12 col-md-6">
-                      <label className="form-label small fw-bold text-secondary">Email Address *</label>
+                      <label className="form-label small fw-bold text-secondary">Email Address</label>
                       <input
                         type="email"
-                        required
                         className="form-control rounded-3"
                         placeholder="e.g. rahul.staff@foodie.com"
                         value={formData.email}
@@ -752,9 +716,15 @@ export const Users = () => {
                         value={formData.role}
                         onChange={(e) => applyRole(e.target.value)}
                       >
-                        {rolesForDepartment(formData.department).map((role) => (
-                          <option key={role.value} value={role.value}>{role.label}</option>
-                        ))}
+                        {(() => {
+                          const roles = rolesForDepartment(formData.department);
+                          const options = roles.some((r) => r.value === formData.role)
+                            ? roles
+                            : [{ value: formData.role, label: formData.role === 'SUPER_ADMIN' ? 'Super Admin' : formData.role }, ...roles];
+                          return options.map((role) => (
+                            <option key={role.value} value={role.value}>{role.label}</option>
+                          ));
+                        })()}
                       </select>
                     </div>
 
@@ -776,6 +746,56 @@ export const Users = () => {
                         })()}
                       </select>
                     </div>
+
+                    <div className="col-12 col-md-6">
+                      <label className="form-label small fw-bold text-secondary">Branch *</label>
+                      <select
+                        className="form-select rounded-3"
+                        value={formData.branch}
+                        disabled={Boolean(actorBranchId)}
+                        onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
+                      >
+                        <option value="">Choose a branch</option>
+                        {['ADMIN', 'SUPER_ADMIN'].includes(formData.role) && !actorBranchId && (
+                          <option value="ALL">All branches (owner-level administrator)</option>
+                        )}
+                        {branches.filter((b) => b.status === 'Active' || String(b.id) === String(formData.branch)).map((b) => (
+                          <option key={b.id} value={b.id}>{b.name}{b.isMainBranch ? ' (primary)' : ''}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="col-12 col-md-6">
+                      <label className="form-label small fw-bold text-secondary">Employment Status *</label>
+                      <select
+                        className="form-select rounded-3"
+                        value={formData.status}
+                        onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                      >
+                        <option value="ACTIVE">Active</option>
+                        <option value="INACTIVE">Inactive</option>
+                        <option value="SUSPENDED">Suspended</option>
+                      </select>
+                    </div>
+
+                    {editingUser && (
+                      <div className="col-12 col-md-6">
+                        <label className="form-label small fw-bold text-secondary">New Password</label>
+                        <input
+                          type="password"
+                          className="form-control rounded-3"
+                          placeholder="Leave blank to keep the current password"
+                          value={formData.password || ''}
+                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        />
+                      </div>
+                    )}
+
+                    {formError && (
+                      <div className="col-12">
+                        <div className="alert alert-danger py-2 small mb-0">{formError}</div>
+                      </div>
+                    )}
 
                     {formData.role === 'CASHIER' && (
                       <div className="col-12">
@@ -855,23 +875,22 @@ export const Users = () => {
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content border-0 rounded-4 shadow">
               <div className="modal-body p-4">
-                <h5 className="fw-bold text-dark">Remove {pendingDelete.name}?</h5>
+                <h5 className="fw-bold text-dark">Delete {pendingDelete.name}?</h5>
                 <p className="text-secondary mb-0">
-                  This deactivates the account. Order history stays. You cannot remove your own account or the last administrator.
+                  The employee and their login are removed. Orders they took keep their name. You cannot delete your
+                  own account, the last administrator, or someone with an equal or higher role.
                 </p>
+                {deleteError && <div className="alert alert-danger py-2 small mt-3 mb-0">{deleteError}</div>}
               </div>
               <div className="modal-footer border-0">
-                <button type="button" className="btn btn-light rounded-pill px-4" onClick={() => setPendingDelete(null)}>Cancel</button>
+                <button type="button" className="btn btn-light rounded-pill px-4" disabled={deleteBusy} onClick={() => setPendingDelete(null)}>Cancel</button>
                 <button
                   type="button"
                   className="btn btn-danger rounded-pill px-4 fw-bold"
-                  onClick={() => {
-                    const target = pendingDelete;
-                    setPendingDelete(null);
-                    handleDeleteEmployee(target.id);
-                  }}
+                  disabled={deleteBusy}
+                  onClick={handleDeleteEmployee}
                 >
-                  Delete
+                  {deleteBusy ? 'Deleting...' : 'Delete'}
                 </button>
               </div>
             </div>

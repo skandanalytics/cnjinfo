@@ -248,3 +248,154 @@ html, body {
   background-color: rgba(255, 255, 255, 0.2) !important;
   color: #ffffff !important;
 }
+
+.foodie-invoice {
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  color: #1f2933;
+  background: #fff;
+  font-family: "Segoe UI", "Nirmala UI", "Noto Sans", sans-serif;
+  font-size: 14px;
+  line-height: 1.4;
+}
+.foodie-invoice-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 8px;
+  border-bottom: 3px solid #be123c;
+}
+.foodie-invoice-brand {
+  color: #be123c;
+  font-weight: 800;
+  font-size: 28px;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+.foodie-invoice-kicker {
+  color: #be123c;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+}
+.foodie-invoice-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 12px 2px;
+  border-bottom: 1px solid #f1d5dc;
+}
+.foodie-invoice-meta > div {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.foodie-invoice-items {
+  width: 100%;
+  margin: 14px 0 8px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.foodie-invoice-items th:first-child,
+.foodie-invoice-items td:first-child { width: 46%; }
+.foodie-invoice-items th:nth-child(2),
+.foodie-invoice-items td:nth-child(2) { width: 12%; }
+.foodie-invoice-items th,
+.foodie-invoice-items td {
+  padding: 8px 6px;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+.foodie-invoice-items th {
+  background: #be123c;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+}
+.foodie-invoice-items tbody tr:nth-child(even) { background: #fff7f8; }
+.foodie-invoice-items tbody tr { border-bottom: 1px solid #f1d5dc; }
+.foodie-invoice-extra {
+  color: #52606d;
+  font-size: 12px;
+  font-weight: 400;
+}
+.foodie-invoice-totals {
+  width: min(100%, 360px);
+  margin-left: auto;
+  margin-top: 12px;
+  padding: 4px 10px;
+  background: #fff7f8;
+  border: 1px solid #f1d5dc;
+  break-inside: avoid;
+}
+.foodie-invoice-totals > div { padding: 3px 0; }
+.foodie-invoice-pay {
+  margin-top: 14px;
+  break-inside: avoid;
+}
+.foodie-invoice-pay > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 0;
+}
+.foodie-invoice-foot {
+  margin: 4px 0 0;
+  text-align: center;
+  color: #52606d;
+  font-size: 12px;
+}
+@media (max-width: 576px) {
+  .foodie-invoice-meta { flex-direction: column; gap: 8px; }
+  .foodie-invoice-meta .text-end { text-align: left !important; }
+  .foodie-invoice-brand { font-size: 22px; }
+  .foodie-invoice-items { font-size: 12px; }
+  .foodie-invoice-totals { width: 100%; }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  html.foodie-printing,
+  body.foodie-printing {
+    overflow: visible !important;
+    height: auto !important;
+    min-height: 0 !important;
+    background: #fff !important;
+  }
+
+  body.foodie-printing > *:not(#foodie-print-root) {
+    display: none !important;
+  }
+
+  body.foodie-printing #foodie-print-root {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  body.foodie-printing #foodie-print-root .foodie-invoice {
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+    width: 100% !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    box-shadow: none !important;
+    page-break-before: auto;
+    page-break-after: auto;
+    break-inside: auto;
+  }
+}

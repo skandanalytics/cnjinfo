@@ -169,8 +169,9 @@ class OrderTests(CartBase):
         self.move(mine, "SERVED")
         self.assertNotIn(mine, {row["id"] for row in self.chef_a.get("/api/kitchen/queue/").json()})
         self.assertEqual(self.cust.get("/api/kitchen/queue/").status_code, 403)
-        self.assertEqual(self.chef_a.post("/api/orders/", {"branch": self.a.id, "idempotency_key": "x",
-                                                           "payment_method": "COUNTER"}, format="json").status_code, 403)
+        empty = self.chef_a.post("/api/orders/", {"branch": self.a.id, "idempotency_key": "x",
+                                                 "payment_method": "COUNTER"}, format="json")
+        self.assertEqual((empty.status_code, empty.json()["code"]), (400, "cart_empty"))
 
     def test_guests_and_an_unready_cart_cannot_place(self):
         guest = self.g.post("/api/orders/", {"branch": self.a.id, "idempotency_key": "g",

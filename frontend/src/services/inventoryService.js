@@ -78,7 +78,7 @@ export const inventoryService = {
   deleteInventoryItem: async (id) => {
     const { isStaffScreen } = await import('./adminApi');
     if (isStaffScreen()) {
-      throw new Error('Inventory records stay in the stock ledger. Deactivate the dish instead of deleting the stock row.');
+      throw new Error('A stock record cannot be deleted on its own. Delete the dish from Add Menu to remove it together with its stock.');
     }
     try {
       // 1. Authoritative backend deletion from /restaurant/inventory/

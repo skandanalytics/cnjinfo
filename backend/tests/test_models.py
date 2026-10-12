@@ -69,10 +69,25 @@ class SchemaTests(TestCase):
         t2 = DiningTable.objects.create(branch=self.branch, table_number="T2", capacity=2)
         self.assertNotEqual(self.table.qr_code, t2.qr_code)
 
-    def test_branch_with_history_cannot_be_deleted(self):
-        make_order(self.branch)
+    def test_branch_with_configuration_cannot_be_deleted_directly(self):
+        # Tables, categories and dishes still point at it; deletion goes through branches.services.
         with self.assertRaises(ProtectedError):
             self.branch.delete()
+
+    def test_deleting_a_branch_keeps_its_orders_with_a_snapshot(self):
+        empty = make_branch("B9")
+        order = Order.objects.create(order_number="H9", branch=empty, branch_name=empty.name, order_type="TAKEAWAY")
+        empty.delete()
+        order.refresh_from_db()
+        self.assertEqual((order.branch_id, order.branch_name), (None, "Branch B9"))
+
+    def test_dine_in_order_keeps_its_label_after_the_table_is_deleted(self):
+        t = DiningTable.objects.create(branch=self.branch, table_number="T7", capacity=2)
+        order = make_order(self.branch, table=t, order_type="DINE_IN", number="H8")
+        Order.objects.filter(pk=order.pk).update(table_label="T7")
+        t.delete()
+        order.refresh_from_db()
+        self.assertEqual((order.table_id, order.table_label), (None, "T7"))
 
     # menu
     def test_food_category_must_match_branch(self):

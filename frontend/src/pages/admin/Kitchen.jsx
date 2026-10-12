@@ -22,12 +22,6 @@ export const Kitchen = () => {
   const [loadingDetailsId, setLoadingDetailsId] = useState(null);
   const [liveTicketItems, setLiveTicketItems] = useState({});
 
-  const isWaiter = user?.role === 'employee' && (
-    /steward|waiter/i.test(String(user?.designation || '')) ||
-    String(user?.department || '').toLowerCase().includes('dining')
-  );
-  const [showAllOrders, setShowAllOrders] = useState(true);
-
   // Determine initial branch from user's assigned branch or fallback to main branch
   const userAssignedBranch = user?.branchId || user?.restaurant || user?.restaurant_id || null;
   const isBranchRestricted = Boolean(user?.role === 'employee' && userAssignedBranch);
@@ -104,6 +98,8 @@ export const Kitchen = () => {
     setUpdatingAction(status);
     try {
       await updateStatus(id, status);
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
     } catch (e) {
       console.error("Failed to update kitchen status:", e);
     }
@@ -444,29 +440,6 @@ export const Kitchen = () => {
       }
     }
 
-    if (!showAllOrders && user) {
-      const empIdStr = String(user.id || '').trim();
-      const empUsername = String(user.username || user.name || '').toLowerCase().trim();
-      
-      let ordEmpId = String(ord.placedById || '');
-      if (!ordEmpId && ord.takenBy && typeof ord.takenBy === 'object') {
-        ordEmpId = String(ord.takenBy.id || ord.takenBy.user || '');
-      } else if (!ordEmpId && ord.employee && typeof ord.employee === 'object') {
-        ordEmpId = String(ord.employee.id || ord.employee.user || '');
-      } else if (!ordEmpId) {
-        ordEmpId = String(ord.placedByName || ord.employee || ord.employee_id || ord.taken_by || ord.takenBy || '');
-      }
-
-      const ordEmpStr = ordEmpId.toLowerCase().trim();
-      
-      const matchesUser = empIdStr && (ordEmpId === empIdStr);
-      const matchesName = empUsername && (ordEmpStr === empUsername || ordEmpStr.includes(empUsername));
-
-      if (!matchesUser && !matchesName) {
-        return false;
-      }
-    }
-
     return true;
   });
 
@@ -513,16 +486,6 @@ export const Kitchen = () => {
                   })}
                 </select>
               </div>
-            )}
-            {isWaiter && (
-              <button
-                type="button"
-                className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1 ${showAllOrders ? 'btn-primary' : 'btn-outline-primary'}`}
-                onClick={() => setShowAllOrders(!showAllOrders)}
-              >
-                <i className="bi bi-eye"></i>
-                <span>{showAllOrders ? 'Show My Orders' : 'View All Orders'}</span>
-              </button>
             )}
             <button
               type="button"
@@ -869,23 +832,26 @@ export const Kitchen = () => {
                         })()}
                       </div>
 
-                      <div className="d-flex align-items-center justify-content-between mt-2">
+                      <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
                         {String(ord.status).toLowerCase() === 'served' && (
-                          <Button size="sm" variant="primary" className="py-1 px-3" onClick={() => handleAction(ord.id, 'Completed')}>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            className="py-1 px-3 text-nowrap"
+                            style={{ fontSize: '12px', whiteSpace: 'nowrap', borderRadius: '999px' }}
+                            onClick={() => handleAction(ord.id, 'Completed')}
+                          >
                             Mark Completed
                           </Button>
                         )}
                         <button
                           type="button"
                           onClick={() => setEBillOrder(ord)}
-                          className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1.5 fw-bold btn btn-sm d-inline-flex align-items-center"
-                          style={{ fontSize: '11px', cursor: 'pointer' }}
+                          className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold btn btn-sm d-inline-flex align-items-center text-nowrap"
+                          style={{ fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap', height: '31px' }}
                         >
                           <i className="bi bi-receipt me-1"></i>View E-Bill
                         </button>
-                        <span className="text-muted small fw-medium" style={{ fontSize: '11px' }}>
-                          {ord.time || 'Completed'}
-                        </span>
                       </div>
                     </div>
                   ))

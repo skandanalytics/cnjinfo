@@ -3,6 +3,7 @@ import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+import { TABLE_LOCATIONS, TABLE_LOCATION_VALUES } from '../../constants/tableLocations';
 
 export const EditTableModal = ({
   isOpen,
@@ -10,25 +11,18 @@ export const EditTableModal = ({
   onClose,
   onSave,
   existingTables = [],
-  viewOptions = [],
 }) => {
   const [numberDigits, setNumberDigits] = useState('');
   const [capacity, setCapacity] = useState('');
   const [area, setArea] = useState('Indoor Main');
-  const [linkedMenus, setLinkedMenus] = useState('Main Menu');
   const [status, setStatus] = useState('Available');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const areas = (viewOptions.length ? viewOptions : [
-    { id: null, name: 'Indoor Main' },
-  ]).map((view) => ({ value: view.name, label: view.name, id: view.id }));
-
-  const menuOptions = [
-    { value: 'Main Menu', label: 'Main Menu' },
-    { value: 'Bar Menu', label: 'Bar Menu' },
-    { value: 'Desserts Menu', label: 'Desserts Menu' }
-  ];
+  const currentArea = table?.location || table?.area || '';
+  const areas = (currentArea && !TABLE_LOCATION_VALUES.includes(currentArea)
+    ? [{ value: currentArea, label: `${currentArea} (choose a standard location)` }, ...TABLE_LOCATIONS]
+    : TABLE_LOCATIONS);
 
   const statuses = [
     { value: 'Available', label: 'Available' },
@@ -61,8 +55,7 @@ export const EditTableModal = ({
       }
       setNumberDigits(initialDigits.slice(0, 3));
       setCapacity(table.capacity !== undefined ? String(table.capacity) : '4');
-      setArea(table.area || 'Indoor Main');
-      setLinkedMenus(table.linkedMenus || 'Main Menu');
+      setArea(table.location || table.area || '');
       setStatus(table.status || 'Available');
       setErrorMsg('');
     }
@@ -98,6 +91,11 @@ export const EditTableModal = ({
       return;
     }
 
+    if (!area) {
+      setErrorMsg('Choose Indoor Main, Garden View, or Rooftop Terrace.');
+      return;
+    }
+
     const capNum = parseInt(capacity, 10);
     if (isNaN(capNum) || capNum <= 0) {
       setErrorMsg('Seating capacity must be at least 1 seat.');
@@ -115,8 +113,7 @@ export const EditTableModal = ({
         name: `Table ${formattedNum}`,
         capacity: capNum,
         area,
-        tableViewId: areas.find((option) => option.value === area)?.id || null,
-        linkedMenus,
+        location: area,
         status
       });
       setErrorMsg('');
@@ -254,13 +251,7 @@ export const EditTableModal = ({
           options={areas}
           value={area}
           onChange={(e) => setArea(e.target.value)}
-        />
-
-        <Select 
-          label="Linked Menu"
-          options={menuOptions}
-          value={linkedMenus}
-          onChange={(e) => setLinkedMenus(e.target.value)}
+          required
         />
 
         <Select 

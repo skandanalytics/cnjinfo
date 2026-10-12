@@ -1,98 +1,192 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { FiSearch, FiX } from 'react-icons/fi';
+import formatCurrency from '../../utils/formatCurrency';
+import { getImageUrl } from '../../utils/imageUtils';
+
+function asRecord(entry) {
+  if (entry && typeof entry === 'object') {
+    const title = String(entry.title || entry.name || entry.label || '').trim();
+    const label = String(entry.label || title).trim();
+    return {
+      id: entry.id,
+      label,
+      title: title || label,
+      subtitle: entry.subtitle || '',
+      image: entry.image || '',
+      price: entry.price,
+      searchText: String(entry.searchText || [title, entry.subtitle, label].filter(Boolean).join(' ')),
+      raw: entry,
+    };
+  }
+  const text = String(entry || '').trim();
+  return text ? { id: text, label: text, title: text, subtitle: '', image: '', price: undefined, searchText: text, raw: text } : null;
+}
 
 export const SearchBar = ({
-  placeholder = "Search...",
-  value = "",
+  placeholder = 'Search...',
+  value = '',
   onChange,
-  className = "",
+  className = '',
   style = {},
   disabled = false,
   suggestions = [],
+  records = [],
   data = [],
-  onSelectSuggestion
+  onSelectSuggestion,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [box, setBox] = useState(null);
   const containerRef = useRef(null);
   const inputRef = useRef(null);
 
-  // Extract raw string suggestions
-  const rawList = Array.isArray(suggestions) && suggestions.length > 0
-    ? suggestions
-    : (Array.isArray(data) ? data.map(item => typeof item === 'string' ? item : (item?.name || item?.title || item?.code || item?.id || '')) : []);
-
-  // Filter unique suggestions matching search value
+  const source = (Array.isArray(records) && records.length > 0)
+    ? records
+    : (Array.isArray(suggestions) && suggestions.length > 0 ? suggestions : data);
+  const catalog = (Array.isArray(source) ? source : []).map(asRecord).filter(Boolean);
   const query = String(value || '').trim().toLowerCase();
-  const matchingSuggestions = query.length > 0 && !disabled
-    ? Array.from(new Set(rawList.filter(Boolean).map(s => String(s).trim()))).filter(item =>
-        item.toLowerCase().includes(query)
-      ).slice(0, 8)
+  const seen = new Set();
+  const matches = query && !disabled
+    ? catalog.filter((item) => {
+      if (!item.searchText.toLowerCase().includes(query)) return false;
+      const key = `${item.id}|${item.title}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 8)
     : [];
 
+  const placeDropdown = () => {
+    const node = containerRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    setBox({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+  };
+
   useEffect(() => {
-    const handleClickOutside = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-      }
+    const handleClickOutside = (event) => {
+      const menu = document.getElementById('foodie-search-suggestions');
+      if (containerRef.current?.contains(event.target) || menu?.contains(event.target)) return;
+      setIsOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSelect = (suggestion) => {
-    if (onChange) onChange(suggestion);
-    if (onSelectSuggestion) onSelectSuggestion(suggestion);
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    placeDropdown();
+    window.addEventListener('resize', placeDropdown);
+    window.addEventListener('scroll', placeDropdown, true);
+    return () => {
+      window.removeEventListener('resize', placeDropdown);
+      window.removeEventListener('scroll', placeDropdown, true);
+    };
+  }, [isOpen, query, matches.length]);
+
+  const handleSelect = (item) => {
+    if (onChange) onChange(item.label);
+    if (onSelectSuggestion) onSelectSuggestion(item.raw);
     setIsOpen(false);
     setHighlightedIndex(-1);
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (event) => {
     if (disabled) return;
-    if (!isOpen || matchingSuggestions.length === 0) {
-      if (e.key === 'ArrowDown' && matchingSuggestions.length > 0) {
-        setIsOpen(true);
-      }
-      return;
-    }
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightedIndex(prev => (prev < matchingSuggestions.length - 1 ? prev + 1 : 0));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightedIndex(prev => (prev > 0 ? prev - 1 : matchingSuggestions.length - 1));
-    } else if (e.key === 'Enter') {
-      if (highlightedIndex >= 0 && highlightedIndex < matchingSuggestions.length) {
-        e.preventDefault();
-        handleSelect(matchingSuggestions[highlightedIndex]);
-      } else {
-        setIsOpen(false);
-      }
-    } else if (e.key === 'Escape') {
+    if (event.key === 'Escape') {
       setIsOpen(false);
       setHighlightedIndex(-1);
+      return;
+    }
+    if (!isOpen || matches.length === 0) {
+      if (event.key === 'ArrowDown' && query) setIsOpen(true);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev < matches.length - 1 ? prev + 1 : 0));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : matches.length - 1));
+    } else if (event.key === 'Enter' && highlightedIndex >= 0 && highlightedIndex < matches.length) {
+      event.preventDefault();
+      handleSelect(matches[highlightedIndex]);
     }
   };
 
-  const renderHighlight = (text, matchQuery) => {
-    if (!matchQuery) return text;
-    const parts = text.split(new RegExp(`(${matchQuery.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
-    return parts.map((part, i) =>
-      part.toLowerCase() === matchQuery.toLowerCase() ? (
-        <strong key={i} className="text-danger fw-bold">{part}</strong>
-      ) : (
-        part
-      )
-    );
+  const renderHighlight = (text) => {
+    const sourceText = String(text || '');
+    if (!query) return sourceText;
+    const parts = sourceText.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+    return parts.map((part, index) => (
+      part.toLowerCase() === query
+        ? <strong key={index} className="text-danger fw-bold">{part}</strong>
+        : <span key={index}>{part}</span>
+    ));
   };
+
+  const dropdown = isOpen && query ? (
+    <div
+      id="foodie-search-suggestions"
+      className="bg-white border border-light-subtle rounded-4 shadow-lg overflow-hidden py-1"
+      style={{
+        position: 'fixed',
+        top: box?.top || 0,
+        left: box?.left || 0,
+        width: box?.width || 240,
+        zIndex: 2000,
+        maxHeight: '320px',
+        overflowY: 'auto',
+      }}
+    >
+      <div className="px-3 py-1.5 text-muted small fw-semibold border-bottom bg-light d-flex align-items-center justify-content-between" style={{ fontSize: '10.5px' }}>
+        <span>SUGGESTIONS</span>
+        <span>{matches.length} found</span>
+      </div>
+      {matches.length === 0 ? (
+        <div className="px-3 py-3 text-secondary small">No matching results</div>
+      ) : matches.map((item, index) => (
+        <div
+          key={`${item.id}-${index}`}
+          onMouseDown={(event) => {
+            event.preventDefault();
+            handleSelect(item);
+          }}
+          onMouseEnter={() => setHighlightedIndex(index)}
+          className={`px-3 py-2 d-flex align-items-center gap-2 ${highlightedIndex === index ? 'bg-danger-subtle' : ''}`}
+          style={{ cursor: 'pointer' }}
+        >
+          {item.image ? (
+            <img
+              src={getImageUrl(item.image)}
+              alt=""
+              className="rounded-2 flex-shrink-0"
+              style={{ width: 36, height: 36, objectFit: 'cover' }}
+            />
+          ) : null}
+          <div className="flex-grow-1 text-truncate">
+            <div className="text-truncate fw-semibold text-dark" style={{ fontSize: '12.5px' }}>{renderHighlight(item.title)}</div>
+            {item.subtitle ? (
+              <div className="text-secondary text-truncate" style={{ fontSize: '11px' }}>{item.subtitle}</div>
+            ) : null}
+          </div>
+          {item.price !== undefined && item.price !== null && item.price !== '' ? (
+            <span className="fw-bold text-danger flex-shrink-0" style={{ fontSize: '12px' }}>
+              {typeof item.price === 'number' ? formatCurrency(item.price) : item.price}
+            </span>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  ) : null;
 
   return (
     <div ref={containerRef} className={`position-relative ${className}`} style={{ ...style, minWidth: '160px' }}>
-      <FiSearch 
-        className="position-absolute top-50 start-0 translate-middle-y ms-3" 
+      <FiSearch
+        className="position-absolute top-50 start-0 translate-middle-y ms-3"
         style={{ color: disabled ? '#94a3b8' : 'var(--primary-color)', zIndex: 3 }}
-        size={18} 
+        size={18}
       />
       <input
         ref={inputRef}
@@ -101,22 +195,25 @@ export const SearchBar = ({
         className="form-control rounded-pill py-2.5 ps-5 pe-5 text-secondary border border-light-subtle shadow-sm"
         placeholder={placeholder}
         value={value || ''}
-        onChange={(e) => {
-          if (onChange) onChange(e.target.value);
+        onChange={(event) => {
+          if (onChange) onChange(event.target.value);
           setIsOpen(true);
           setHighlightedIndex(-1);
         }}
         onFocus={() => {
-          if (query.length > 0) setIsOpen(true);
+          if (query) setIsOpen(true);
         }}
         onKeyDown={handleKeyDown}
-        style={{ 
-          fontSize: '13px', 
+        style={{
+          fontSize: '13px',
           backgroundColor: disabled ? '#f1f5f9' : '#ffffff',
           cursor: disabled ? 'not-allowed' : 'text',
-          opacity: disabled ? 0.75 : 1
+          opacity: disabled ? 0.75 : 1,
         }}
         autoComplete="off"
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-autocomplete="list"
       />
       {value && !disabled && (
         <button
@@ -124,7 +221,7 @@ export const SearchBar = ({
           onClick={() => {
             if (onChange) onChange('');
             setIsOpen(false);
-            if (inputRef.current) inputRef.current.focus();
+            inputRef.current?.focus();
           }}
           className="btn btn-link position-absolute top-50 end-0 translate-middle-y me-2 p-1 text-secondary text-decoration-none border-0 bg-transparent"
           style={{ cursor: 'pointer', zIndex: 3 }}
@@ -133,39 +230,7 @@ export const SearchBar = ({
           <FiX size={16} />
         </button>
       )}
-
-      {/* Autocomplete Suggestion Dropdown */}
-      {isOpen && matchingSuggestions.length > 0 && (
-        <div 
-          className="position-absolute start-0 w-100 mt-1 bg-white border border-light-subtle rounded-4 shadow-lg overflow-hidden py-1"
-          style={{ zIndex: 1050, maxHeight: '240px', overflowY: 'auto' }}
-        >
-          <div className="px-3 py-1.5 text-muted small fw-semibold border-bottom bg-light d-flex align-items-center justify-content-between" style={{ fontSize: '10.5px' }}>
-            <span>SUGGESTIONS</span>
-            <span>{matchingSuggestions.length} found</span>
-          </div>
-          {matchingSuggestions.map((suggestion, idx) => (
-            <div
-              key={idx}
-              onMouseDown={(e) => {
-                e.preventDefault();
-                handleSelect(suggestion);
-              }}
-              onMouseEnter={() => setHighlightedIndex(idx)}
-              className={`px-3 py-2 d-flex align-items-center justify-content-between cursor-pointer transition-all ${
-                highlightedIndex === idx ? 'bg-danger-subtle text-danger' : 'text-dark hover-bg-light'
-              }`}
-              style={{ fontSize: '12.5px', cursor: 'pointer' }}
-            >
-              <div className="d-flex align-items-center gap-2 text-truncate">
-                <FiSearch size={13} className="text-secondary opacity-75 flex-shrink-0" />
-                <span className="text-truncate">{renderHighlight(suggestion, query)}</span>
-              </div>
-              <span className="text-muted small ms-2" style={{ fontSize: '10px' }}>Select ↵</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {dropdown && box ? createPortal(dropdown, document.body) : null}
     </div>
   );
 };

@@ -82,16 +82,31 @@ class CategoryTests(MenuBase):
                          ["Desserts"])
         self.assertEqual(rows(self.admin_a.get(f"/api/categories/?search=dess"))[0]["dish_count"], 1)
 
-    def test_delete_unused_removes_but_used_deactivates(self):
+    def test_delete_empty_removes_and_non_empty_is_refused(self):
         empty = self.cat(name="Empty").json()["id"]
         self.assertEqual(self.admin_a.delete(f"/api/categories/{empty}/").status_code, 204)
         self.assertFalse(Category.objects.filter(pk=empty).exists())
         used = self.cat(name="Used").json()["id"]
-        self.food(used)
+        fid = self.food(used).json()["id"]
         r = self.admin_a.delete(f"/api/categories/{used}/")
-        self.assertEqual((r.status_code, r.json()["deactivated"]), (200, True))
-        self.assertFalse(Category.objects.get(pk=used).is_active)
-        self.assertTrue(Food.objects.filter(category_id=used).exists())  # dishes keep their history
+        self.assertEqual((r.status_code, r.json()["code"]), (409, "category_not_empty"))
+        self.assertTrue(Category.objects.get(pk=used).is_active)  # neither deactivated nor emptied
+        self.assertTrue(Food.objects.filter(pk=fid).exists())
+        self.assertEqual(self.admin_a.delete(f"/api/foods/{fid}/").status_code, 204)
+        self.assertEqual(self.admin_a.delete(f"/api/categories/{used}/").status_code, 204)
+
+    def test_create_without_parent_is_top_level(self):
+        r = self.cat(name="Soups")
+        self.assertEqual(r.status_code, 201, r.content)
+        self.assertIsNone(Category.objects.get(pk=r.json()["id"]).parent_id)
+
+    def test_edit_name_description_and_status(self):
+        cid = self.cat(name="Soups").json()["id"]
+        r = self.admin_a.patch(f"/api/categories/{cid}/", {"name": "Hot Soups", "description": "Warm bowls",
+                                                            "is_active": False}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        c = Category.objects.get(pk=cid)
+        self.assertEqual((c.name, c.description, c.is_active), ("Hot Soups", "Warm bowls", False))
 
 
 class FoodTests(MenuBase):
@@ -164,26 +179,48 @@ class FoodTests(MenuBase):
         self.assertEqual(self.admin_a.delete(f"/api/foods/{fid}/").status_code, 204)
         self.assertFalse(Food.objects.filter(pk=fid).exists())
 
-    def test_delete_referenced_by_order_deactivates_and_preserves_history(self):
+    def test_edit_keeps_history_and_delete_removes_the_dish_but_not_past_orders(self):
         fid = self.food(self.c1).json()["id"]
         food = Food.objects.get(pk=fid)
         order = Order.objects.create(order_number="H1", branch=self.a, order_type="TAKEAWAY", status="COMPLETED")
         OrderItem.objects.create(order=order, food=food, food_name="Masala Dosa", unit_price=80, quantity=1,
                                  line_total=80)
-        r = self.admin_a.delete(f"/api/foods/{fid}/")
-        self.assertEqual((r.status_code, r.json()["deactivated"]), (200, True))
-        food.refresh_from_db()
-        self.assertFalse(food.is_active)
         # later menu edits never touch the historical order line
-        self.admin_a.patch(f"/api/foods/{fid}/", {"name": "Renamed", "price": "999"}, format="json")
+        r = self.admin_a.patch(f"/api/foods/{fid}/", {"name": "Renamed", "price": "999", "category": self.c2,
+                                                       "image_url": "https://img.example.com/d.jpg"}, format="json")
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual((r.json()["name"], r.json()["category"], r.json()["primary_image"]),
+                         ("Renamed", self.c2, "https://img.example.com/d.jpg"))
         item = OrderItem.objects.get(order=order)
         self.assertEqual((item.food_name, item.unit_price), ("Masala Dosa", Decimal("80.00")))
 
-    def test_delete_referenced_by_cart_deactivates(self):
+        from apps.inventory.models import InventoryItem, StockTransaction
+        from apps.inventory.services import restock
+        inv = InventoryItem.objects.create(branch=self.a, food=food, quantity=0)
+        restock(inv.id, 5)
+        self.assertEqual(self.admin_a.delete(f"/api/foods/{fid}/").status_code, 204)
+        self.assertFalse(Food.objects.filter(pk=fid).exists())  # deleted, not hidden or set to zero stock
+        self.assertFalse(InventoryItem.objects.filter(pk=inv.id).exists())
+        item.refresh_from_db()
+        self.assertEqual((item.food_id, item.food_name, item.line_total), (None, "Masala Dosa", Decimal("80.00")))
+        ledger = StockTransaction.objects.get(transaction_type="RESTOCK")
+        self.assertEqual((ledger.item_id, ledger.food_name, ledger.quantity_change), (None, "Renamed", 5))
+
+    def test_delete_refused_while_in_an_unfinished_order(self):
+        fid = self.food(self.c1).json()["id"]
+        order = Order.objects.create(order_number="H2", branch=self.a, order_type="TAKEAWAY", status="PREPARING")
+        OrderItem.objects.create(order=order, food_id=fid, food_name="Masala Dosa", unit_price=80, quantity=1,
+                                 line_total=80)
+        r = self.admin_a.delete(f"/api/foods/{fid}/")
+        self.assertEqual((r.status_code, r.json()["code"]), (409, "dish_in_active_order"))
+        self.assertTrue(Food.objects.get(pk=fid).is_active)
+
+    def test_delete_removes_the_dish_from_carts(self):
         fid = self.food(self.c1).json()["id"]
         cart = Cart.objects.create(guest_token="g1", branch=self.a)
         CartItem.objects.create(cart=cart, food_id=fid, quantity=1)
-        self.assertEqual(self.admin_a.delete(f"/api/foods/{fid}/").json()["deactivated"], True)
+        self.assertEqual(self.admin_a.delete(f"/api/foods/{fid}/").status_code, 204)
+        self.assertFalse(CartItem.objects.filter(cart=cart).exists())
 
 
 class ImageTests(MenuBase):

@@ -210,7 +210,17 @@ export const Orders = () => {
                 placeholder="Search Order ID or Table..."
                 value={search}
                 onChange={setSearch}
-                suggestions={orders.map(o => `Order #${o.id}`).concat(orders.map(o => `Table ${o.table}`))}
+                records={(orders || []).map((order) => ({
+                  id: order.id,
+                  label: String(order.orderNumber || order.id),
+                  title: `Order ${order.orderNumber || order.id}`,
+                  subtitle: [order.status, order.orderType || (order.table ? `Table ${order.table}` : '')].filter(Boolean).join(' · '),
+                  searchText: [order.id, order.orderNumber, order.table, order.status, order.orderType, order.customerPhone].filter(Boolean).join(' '),
+                }))}
+                onSelectSuggestion={(item) => {
+                  const found = (orders || []).find((order) => String(order.id) === String(item?.id));
+                  if (found) setSelectedOrder(found);
+                }}
               />
             </div>
           ) : null
@@ -269,6 +279,9 @@ export const Orders = () => {
           onClose={() => setSelectedOrder(null)}
           onStatusChange={updateStatus}
           onViewEBill={() => setEBillOrder(selectedOrder)}
+          onPaymentRecorded={async () => {
+            await fetchOrders(false);
+          }}
         />
       )}
 

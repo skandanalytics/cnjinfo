@@ -8,7 +8,7 @@ import { FiCornerDownRight, FiPhone, FiLock, FiCheckCircle, FiCoffee, FiShopping
 import { tableService } from '../../services/tableService';
 import api from '../../services/api';
 import { COUNTRY_CODES, detectUserCountryCode, fetchGeolocationCountryCode } from '../../utils/countryCodes';
-import { availableTables } from '../../services/customerCheckout';
+import { availableTables, resolvePublicBranchId, selectableTables } from '../../services/customerCheckout';
 import {
   DINE_IN, NO_TABLES_MESSAGE, TAKEAWAY, hasScannedTable, rememberScannedTableQr, setOrderType, setSelectedTableId,
 } from '../../utils/orderContext';
@@ -100,41 +100,51 @@ export const Welcome = () => {
     }
     setCheckingTables(true);
     try {
-      let branchId = sessionStorage.getItem('foodie_public_branch');
+      const branchId = await resolvePublicBranchId();
       if (!branchId) {
-        const listed = await api.get('/public/branches/');
-        const rows = Array.isArray(listed.data) ? listed.data : [];
-        const pick = rows.find((row) => row.is_primary) || (rows.length === 1 ? rows[0] : null);
-        if (!pick) {
-          setAvailabilityError(rows.length
-            ? 'More than one restaurant is open. Scan your table QR so we know which one you are at.'
-            : 'No restaurant is open for dine-in right now.');
-          return;
-        }
-        branchId = String(pick.id);
-        sessionStorage.setItem('foodie_public_branch', branchId);
-        sessionStorage.setItem('foodie_branch_source', 'chosen');
+        setAvailabilityError('No restaurant is open for dine-in right now.');
+        return;
       }
       const tables = await availableTables(branchId);
+      const open = selectableTables(tables);
       if (!tables.length) {
         setAvailabilityMessage(NO_TABLES_MESSAGE);
         return;
       }
-      if (tables.length === 1) {
-        claimTable(tables[0]);
+      if (!open.length) {
+        setAvailabilityMessage('Tables are listed, but none are free for a new dine-in order.');
         return;
       }
-      setTableChoices(tables);
-    } catch {
-      setAvailabilityError('Could not check table availability. Check your connection and try again.');
+      if (open.length === 1) {
+        claimTable(open[0]);
+        return;
+      }
+      setTableChoices(open);
+    } catch (err) {
+      setAvailabilityError(err.message || 'Could not check table availability.');
     } finally {
       setCheckingTables(false);
     }
   };
 
-  const handleSelectOrderType = (type) => {
+  const handleSelectOrderType = async (type) => {
     if (type === DINE_IN) {
       startDineIn();
+      return;
+    }
+    setAvailabilityError('');
+    try {
+      const branchId = await resolvePublicBranchId();
+      if (branchId) {
+        const menu = await api.get(`/public/branches/${branchId}/menu/`);
+        const foods = Array.isArray(menu.data?.foods) ? menu.data.foods : [];
+        if (!foods.some((food) => food.is_orderable)) {
+          setAvailabilityError('Takeaway ordering is unavailable because no dishes are currently available.');
+          return;
+        }
+      }
+    } catch (err) {
+      setAvailabilityError(err.response?.data?.detail || 'Takeaway ordering could not be started.');
       return;
     }
     setSelectedTableId(null);
@@ -164,11 +174,11 @@ export const Welcome = () => {
         setOrderType(DINE_IN);
         setDineInAvailable(true);
         setQrDisabled(false);
-      }).catch(() => {
+      }).catch((err) => {
         rememberScannedTableQr(null);
         setDineInAvailable(false);
         setQrDisabled(true);
-        setError('This table QR is currently unavailable or disabled.');
+        setError(err.response?.data?.detail || 'This table QR is currently unavailable or disabled.');
       });
     }
     // setTable is recreated on every provider render, so it must not be a dependency here.

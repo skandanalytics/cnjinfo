@@ -9,7 +9,9 @@ import ConfirmModal from '../../components/common/ConfirmModal';
 import Button from '../../components/common/Button';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
+import BranchRequiredState from '../../components/common/BranchRequiredState';
 import { tableService } from '../../services/tableService';
+import { useBranches } from '../../hooks/useBranches';
 import { productService } from '../../services/productService';
 import { menuService } from '../../services/menuService';
 import { useAuth } from '../../hooks/useAuth';
@@ -29,34 +31,41 @@ export const Tables = () => {
   const statusFilterParam = (searchParams.get('status') || searchParams.get('filter') || '').toLowerCase();
   const isAvailableOnly = statusFilterParam === 'available';
 
+  const { loading: branchesLoading, hasBranches } = useBranches();
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hasDishes, setHasDishes] = useState(true);
-  const [activeArea, setActiveArea] = useState('All');
-  const [views, setViews] = useState([]);
-  const [newViewName, setNewViewName] = useState('');
-  const [viewError, setViewError] = useState('');
+  const [targetBranchId, setTargetBranchId] = useState(null);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingTable, setEditingTable] = useState(null);
   const [deletingTable, setDeletingTable] = useState(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [qrModalTable, setQrModalTable] = useState(null);
+  const [qrEnabled, setQrEnabled] = useState(true);
 
-  const areas = ['All', ...views.map((view) => view.name)];
-
-  const loadViews = async () => {
-    try {
-      const { listTableViews } = await import('../../services/adminApi');
-      const rows = await listTableViews();
-      setViews(Array.isArray(rows) ? rows : []);
-    } catch (err) {
-      setViews([]);
-    }
-  };
+  useEffect(() => {
+    const loadQr = () => {
+      import('../../services/staffClient').then(({ staffJson }) => staffJson('/settings/'))
+        .then((data) => setQrEnabled(data?.qr_enabled !== false))
+        .catch(() => setQrEnabled(true));
+    };
+    loadQr();
+    window.addEventListener('foodie_settings_updated', loadQr);
+    return () => window.removeEventListener('foodie_settings_updated', loadQr);
+  }, []);
 
   useEffect(() => {
     sessionStorage.removeItem('foodie_staff_ordering');
-    loadViews();
-  }, []);
+    (async () => {
+      try {
+        const { currentBranchId } = await import('../../services/adminApi');
+        setTargetBranchId(await currentBranchId());
+      } catch {
+        setTargetBranchId(null);
+      }
+    })();
+  }, [hasBranches]);
 
   const fetchTables = async () => {
     setLoading(true);
@@ -66,14 +75,9 @@ export const Tables = () => {
         productService.getProducts(true).catch(() => []),
         menuService.getMenus().catch(() => [])
       ]);
-      if (Array.isArray(data) && data.length > 0) {
-        setTables(data);
-      } else if (Array.isArray(data)) {
-        setTables(data);
-      }
-      const hasCats = (catData || []).length > 0;
-      const hasProds = (dishesData || []).length > 0;
-      setHasDishes(hasCats && hasProds);
+      setTables(Array.isArray(data) ? data : []);
+      const orderable = (dishesData || []).some((dish) => Number(dish.stock) > 0 && dish.status !== 'Out of Stock');
+      setHasDishes(orderable);
     } catch (e) {
       console.error("fetchTables error:", e);
     }
@@ -87,12 +91,9 @@ export const Tables = () => {
         productService.getProducts(true).catch(() => []),
         menuService.getMenus().catch(() => [])
       ]);
-      if (Array.isArray(data) && data.length > 0) {
-        setTables(data);
-      }
-      const hasCats = (catData || []).length > 0;
-      const hasProds = (dishesData || []).length > 0;
-      setHasDishes(hasCats && hasProds);
+      if (Array.isArray(data)) setTables(data);
+      const orderable = (dishesData || []).some((dish) => Number(dish.stock) > 0 && dish.status !== 'Out of Stock');
+      setHasDishes(orderable);
     } catch (e) {
       console.error("fetchTablesSilently error:", e);
     }
@@ -112,102 +113,42 @@ export const Tables = () => {
   }, []);
 
   const handleAddTable = async (tableData) => {
-    if (!isAdmin) return;
-    try {
-      const created = await tableService.createTable(tableData);
-      if (created) {
-        setTables(prev => {
-          const canon = tableService.getCanonicalTableNumber(created.number);
-          const filtered = prev.filter(t => tableService.getCanonicalTableNumber(t.number) !== canon);
-          return [...filtered, created].sort((a, b) => {
-            const aNum = parseInt(String(a.number || '').replace(/[^0-9]/g, '') || '0', 10);
-            const bNum = parseInt(String(b.number || '').replace(/[^0-9]/g, '') || '0', 10);
-            if (!isNaN(aNum) && !isNaN(bNum) && aNum !== bNum) {
-              return aNum - bNum;
-            }
-            return String(a.number).localeCompare(String(b.number));
-          });
-        });
-      }
-      setActiveArea('All');
-      await fetchTablesSilently();
-    } catch (e) {
-      console.error("Failed to add table:", e);
-      throw e;
-    }
+    if (!isAdmin || !hasBranches) return;
+    await tableService.createTable(tableData);
+    await fetchTablesSilently();
   };
 
   const handleEditSave = async (id, tableData) => {
     if (!isAdmin) return;
-    const cleanNum = tableService.getCanonicalTableNumber(tableData.number);
-    setTables(prev => prev.map(t => {
-      if (String(t.id) === String(id)) {
-        return {
-          ...t,
-          ...tableData,
-          number: cleanNum,
-          table_number: cleanNum,
-          name: `Table ${cleanNum}`
-        };
-      }
-      return t;
-    }));
-    try {
-      await tableService.updateTable(id, tableData);
-      await fetchTablesSilently();
-    } catch (e) {
-      console.error("Failed to update table:", e);
-      await fetchTables();
-      throw e;
-    }
+    await tableService.updateTable(id, tableData);
+    await fetchTablesSilently();
   };
 
   const handleDeleteConfirm = async () => {
-    if (!isAdmin) return;
-    if (deletingTable) {
-      const targetId = deletingTable.id;
-      const targetNum = deletingTable.number || deletingTable.table_number;
-      const canonNum = tableService.getCanonicalTableNumber(targetNum || targetId);
+    if (!isAdmin || !deletingTable || deleteBusy) return;
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      await tableService.deleteTable(deletingTable.id);
       setDeletingTable(null);
-      // Optimistically remove table from UI immediately
-      setTables(prev => prev.filter(t => 
-        String(t.id) !== String(targetId) && 
-        tableService.getCanonicalTableNumber(t.number) !== canonNum
-      ));
-      try {
-        await tableService.deleteTable(targetId, targetNum);
-        await fetchTablesSilently();
-      } catch (e) {
-        console.error("Failed to delete table:", e);
-        await fetchTables();
-      }
+      await fetchTablesSilently();
+    } catch (e) {
+      setDeleteError(e.message || 'The table could not be deleted.');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
   const handleStatusChange = async (id, status) => {
-    setTables(prev => prev.map(t => {
-      if (String(t.id) === String(id)) {
-        return {
-          ...t,
-          status,
-          isAvailable: status === 'Available',
-          is_available: status === 'Available',
-          orderId: status === 'Occupied' ? t.orderId : undefined,
-          reservationName: status === 'Reserved' ? t.reservationName : undefined
-        };
-      }
-      return t;
-    }));
-
     try {
       await tableService.updateTableStatus(id, status);
-      await fetchTablesSilently();
     } catch (e) {
-      console.error("Failed to update table status", e);
-      alert("Unable to update table status. Please try again.");
-      await fetchTablesSilently();
+      window.alert(e.message || 'The table status could not be changed.');
     }
+    await fetchTablesSilently();
   };
+
+  const sameBranchTables = (branchId) => (branchId ? tables.filter((t) => String(t.branch) === String(branchId)) : tables);
 
   const startStaffOrder = async ({ orderType, table }) => {
     const { currentBranchId } = await import('../../services/adminApi');
@@ -248,12 +189,18 @@ export const Tables = () => {
       const isAvail = st === 'available' || t.isAvailable === true || t.is_available === true;
       if (!isAvail) return false;
     }
-    if (activeArea === 'All') return true;
-    const view = views.find((item) => item.name === activeArea);
-    return (view && t.tableViewId === view.id) || (t.area || '') === activeArea;
+    return true;
   });
 
-  if (loading && (!tables || tables.length === 0)) {
+  const branchGroups = filteredTables.reduce((groups, t) => {
+    const key = String(t.branch || '');
+    if (!groups.has(key)) groups.set(key, { name: t.branch_name || 'Branch', tables: [] });
+    groups.get(key).tables.push(t);
+    return groups;
+  }, new Map());
+  const showBranchHeadings = branchGroups.size > 1;
+
+  if ((loading || branchesLoading) && (!tables || tables.length === 0)) {
     return (
       <AdminLayout>
         <Loader />
@@ -261,7 +208,20 @@ export const Tables = () => {
     );
   }
 
+  if (!hasBranches) {
+    return (
+      <AdminLayout>
+        <PageHeader title="Manage Tables" showBackButton />
+        <BranchRequiredState />
+      </AdminLayout>
+    );
+  }
+
   const handleTakeawayOrder = async () => {
+    if (!hasDishes) {
+      window.alert('Takeaway ordering is unavailable because no dishes are currently available.');
+      return;
+    }
     try {
       await startStaffOrder({ orderType: 'TAKEAWAY' });
     } catch (err) {
@@ -280,11 +240,13 @@ export const Tables = () => {
               <Button 
                 onClick={handleTakeawayOrder} 
                 variant="outline" 
+                disabled={!hasDishes}
+                title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable because no dishes are currently available.'}
                 className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs"
               >
                 <FiShoppingCart /> Takeaway Order
               </Button>
-              {isAdmin && (
+              {isAdmin && hasBranches && (
                 <Button 
                   onClick={() => setIsAddOpen(true)} 
                   variant="primary" 
@@ -307,7 +269,6 @@ export const Tables = () => {
           <AddTableModal
             isOpen={isAddOpen}
             existingTables={tables}
-            viewOptions={views}
             onClose={() => setIsAddOpen(false)}
             onAdd={handleAddTable}
           />
@@ -326,11 +287,13 @@ export const Tables = () => {
             <Button 
               onClick={handleTakeawayOrder} 
               variant="outline" 
+              disabled={!hasDishes}
+              title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable because no dishes are currently available.'}
               className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs"
             >
               <FiShoppingCart /> Takeaway Order
             </Button>
-            {isAdmin && (
+            {isAdmin && hasBranches && (
               <Button 
                 onClick={() => setIsAddOpen(true)} 
                 variant="primary" 
@@ -342,6 +305,12 @@ export const Tables = () => {
           </div>
         }
       />
+
+      {!hasDishes && (
+        <div className="alert alert-warning rounded-3 py-2 px-3 mb-3 small">
+          Takeaway ordering is unavailable because no dishes are currently available.
+        </div>
+      )}
 
       {isAvailableOnly && (
         <div className="alert alert-info rounded-3 py-2 px-3 d-flex align-items-center justify-content-between mb-3 small shadow-xs">
@@ -360,71 +329,21 @@ export const Tables = () => {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="d-flex flex-wrap gap-2 mb-4 border-bottom pb-3">
-        {areas.map((area) => {
-          const count = area === 'All'
-            ? tables.length
-            : tables.filter(t => (t.area || '') === area).length;
-
-          return (
-            <button
-              key={area}
-              onClick={() => setActiveArea(area)}
-              className={`btn btn-sm rounded-pill px-3.5 py-1.5 border-0 fw-bold transition-all ${
-                activeArea === area ? 'bg-danger text-white' : 'bg-white text-secondary border'
-              }`}
-              style={{ fontSize: '12px' }}
-            >
-              {area} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      {isAdmin && (
-        <form
-          className="d-flex flex-wrap align-items-center gap-2 mb-3"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const name = newViewName.trim();
-            if (!name) return;
-            try {
-              const { createTableView } = await import('../../services/adminApi');
-              const created = await createTableView(name);
-              setNewViewName('');
-              setViewError('');
-              await loadViews();
-              if (created?.name) setActiveArea(created.name);
-            } catch (err) {
-              setViewError(err.message || 'Could not add that view.');
-            }
-          }}
-        >
-          <input
-            className="form-control form-control-sm rounded-pill"
-            style={{ maxWidth: '220px' }}
-            placeholder="New floor or view name"
-            value={newViewName}
-            onChange={(e) => setNewViewName(e.target.value)}
-          />
-          <button type="submit" className="btn btn-sm btn-outline-danger rounded-pill fw-bold">Add view</button>
-          {viewError && <span className="text-danger small">{viewError}</span>}
-        </form>
-      )}
-
       {/* Grid */}
       {loading ? (
         <Loader />
       ) : filteredTables.length === 0 ? (
         <EmptyState
           title="No Tables Found"
-          description="There are no tables assigned to this dining area."
+          description="There are no available tables right now."
           icon="bi-border-all"
         />
       ) : (
+        Array.from(branchGroups.entries()).map(([branchKey, group]) => (
+        <div key={branchKey} className="mb-4">
+          {showBranchHeadings && <h6 className="fw-bold text-dark mb-3">{group.name}</h6>}
         <div className="row g-3">
-          {filteredTables.map((table) => {
+          {group.tables.map((table) => {
             const canonNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
             const tableIdStr = String(table.id || '').trim();
             const activeOrderForTable = (orders || []).find(o => {
@@ -447,8 +366,8 @@ export const Tables = () => {
                   onSelect={handleTakeOrder}
                   onStatusChange={handleStatusChange}
                   onEdit={(t) => setEditingTable(t)}
-                  onDelete={(t) => setDeletingTable(t)}
-                  onViewQR={(t) => setQrModalTable(t)}
+                  onDelete={(t) => { setDeleteError(''); setDeletingTable(t); }}
+                  onViewQR={qrEnabled ? (t) => setQrModalTable(t) : undefined}
                   isAdmin={isAdmin}
                   showActions
                   hasDishes={hasDishes}
@@ -458,14 +377,15 @@ export const Tables = () => {
             );
           })}
         </div>
+        </div>
+        ))
       )}
 
       {/* Modals */}
       {isAdmin && isAddOpen && (
         <AddTableModal
           isOpen={isAddOpen}
-          existingTables={tables}
-          viewOptions={views}
+          existingTables={sameBranchTables(targetBranchId)}
           onClose={() => setIsAddOpen(false)}
           onAdd={handleAddTable}
         />
@@ -474,15 +394,14 @@ export const Tables = () => {
       {isAdmin && editingTable && (
         <EditTableModal
           isOpen={!!editingTable}
-          viewOptions={views}
           table={editingTable}
-          existingTables={tables}
+          existingTables={sameBranchTables(editingTable.branch)}
           onClose={() => setEditingTable(null)}
           onSave={handleEditSave}
         />
       )}
 
-      {qrModalTable && (
+      {qrEnabled && qrModalTable && (
         <QRDisplayModal
           isOpen={!!qrModalTable}
           table={qrModalTable}
@@ -495,9 +414,13 @@ export const Tables = () => {
         <ConfirmModal
           isOpen={!!deletingTable}
           title="Delete Table"
-          message={`Are you sure you want to delete Table ${deletingTable.number || deletingTable.id}? This action cannot be undone.`}
+          message={deleteError
+            ? deleteError
+            : `Delete Table ${deletingTable.number || deletingTable.id}? Past orders keep the table number. A table with an order in progress cannot be deleted.`}
+          confirmText="Delete Table"
+          loading={deleteBusy}
           onConfirm={handleDeleteConfirm}
-          onClose={() => setDeletingTable(null)}
+          onClose={() => { if (!deleteBusy) { setDeletingTable(null); setDeleteError(''); } }}
         />
       )}
     </AdminLayout>

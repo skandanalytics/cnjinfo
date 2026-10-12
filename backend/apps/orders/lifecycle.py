@@ -59,6 +59,27 @@ def _release_if_idle(table):
         table.save(update_fields=["status", "updated_at"])
 
 
+def _invoice_contact(order):
+    branch = order.branch if order.branch_id else None
+    payments = list(order.payments.all())
+    successful = [payment for payment in payments if payment.status == "SUCCESS"]
+    chosen = successful or payments
+    method = ""
+    if chosen:
+        method = max(chosen, key=lambda payment: payment.id).get_method_display()
+    customer_name = ""
+    if order.customer_id and getattr(order, "customer", None):
+        customer_name = order.customer.name or ""
+    return {
+        "branch_address": branch.address if branch else "",
+        "branch_phone": branch.contact_number if branch else "",
+        "branch_city": branch.city if branch else "",
+        "branch_email": branch.email if branch else "",
+        "customer_name": customer_name,
+        "payment_method": method,
+    }
+
+
 def serialize_order(order):
     items = [{
         "id": i.id, "food_id": i.food_id, "name": i.food_name, "quantity": i.quantity,
@@ -71,19 +92,23 @@ def serialize_order(order):
                for h in order.status_history.all()]
     return {
         "id": order.id, "order_number": order.order_number, "branch_id": order.branch_id,
+        "branch_name": order.branch_name,
         "order_type": order.order_type, "status": order.status, "payment_status": order.payment_status,
-        "table": {"id": order.table_id, "label": order.table_label} if order.table_id else None,
+        "table": ({"id": order.table_id, "label": order.table_label}
+                  if order.table_id or order.table_label else None),
         "customer_phone": order.customer_phone,
         "placed_by": order.placed_by_id,
-        "placed_by_name": order.placed_by.name if order.placed_by_id else None,
+        "placed_by_name": order.placed_by_name or (order.placed_by.name if order.placed_by_id else None),
         "items": items, "history": history,
         "items_subtotal": str(order.items_subtotal), "customization_total": str(order.customization_total),
         "dish_discount_total": str(order.dish_discount_total),
         "coupon_discount_total": str(order.coupon_discount_total), "takeaway_charge": str(order.takeaway_charge),
         "taxable_amount": str(order.taxable_amount), "gst_rate": str(order.gst_rate),
         "gst_amount": str(order.gst_amount), "service_charge_rate": str(order.service_charge_rate),
-        "service_charge_amount": str(order.service_charge_amount), "total_amount": str(order.total_amount),
+        "service_charge_amount": str(order.service_charge_amount),
+        "round_off": str(order.round_off), "total_amount": str(order.total_amount),
         "cancel_reason": order.cancel_reason, "created_at": order.created_at, "completed_at": order.completed_at,
+        **_invoice_contact(order),
     }
 
 
@@ -109,6 +134,11 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
         user=user, branch=branch, status=Cart.Status.ACTIVE).first()
     if cart is None or not cart.items.exists():
         raise OrderError("Your cart is empty.", "cart_empty")
+    if cart.order_type == Order.Type.TAKEAWAY:
+        from apps.carts.services import _branch_has_orderable_food
+        if not _branch_has_orderable_food(branch):
+            raise OrderError("Takeaway ordering is unavailable because no dishes are currently available.",
+                             "no_dishes", 409)
     view = evaluate(cart)
     if not view["can_checkout"]:
         raise OrderError("Your cart needs attention before checkout.", "cart_invalid", 409)
@@ -120,11 +150,13 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
 
     order = Order(
         order_number=f"TMP{uuid4().hex[:12]}",
-        branch=branch, customer=None if assisted else user, customer_phone="" if assisted else user.phone,
+        branch=branch, branch_name=branch.name,
+        customer=None if assisted else user, customer_phone="" if assisted else user.phone,
         table=cart.table, table_label=(f"{cart.table.table_number}" if cart.table_id else ""),
         order_type=cart.order_type,
         source=Order.Source.EMPLOYEE if assisted else Order.Source.CUSTOMER,
-        placed_by=user if assisted else None, status=Order.Status.PENDING,
+        placed_by=user if assisted else None, placed_by_name=(user.name or user.phone) if assisted else "",
+        status=Order.Status.PENDING,
         # COUNTER stays UNPAID until staff records it. Online stays PENDING here; the Payment row is
         # created when the customer starts payment. Missing Razorpay keys do not block placing the order.
         payment_status=(Order.PaymentStatus.UNPAID if payment_method == "COUNTER" else Order.PaymentStatus.PENDING),
@@ -134,7 +166,7 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
         takeaway_charge=priced["takeaway_charge"], taxable_amount=priced["taxable_amount"],
         gst_rate=priced["gst_rate"], gst_amount=priced["gst_amount"],
         service_charge_rate=priced["service_charge_rate"], service_charge_amount=priced["service_charge_amount"],
-        total_amount=priced["total_amount"],
+        round_off=priced["round_off"], total_amount=priced["total_amount"],
     )
     try:
         with transaction.atomic():
@@ -167,8 +199,11 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
                                       note="Order placed")
     if order.table_id:
         claimed = DiningTable.objects.select_for_update().get(pk=order.table_id)
-        if not claimed.is_active or claimed.status == DiningTable.Status.OCCUPIED:
-            raise OrderError("This table was just taken. Choose another table or Takeaway.", "table_unavailable", 409)
+        # Occupied is allowed: a seated table can take another order (same or another diner).
+        # The table stays occupied until the last unfinished order is cancelled or staff vacate it.
+        if not claimed.is_active:
+            raise OrderError("This table is no longer available. Choose another table or Takeaway.",
+                             "table_unavailable", 409)
         _occupy(claimed)
     cart.status = Cart.Status.CONVERTED
     cart.save(update_fields=["status", "active_slot", "updated_at"])
@@ -183,7 +218,8 @@ def _money_fields(priced):
         "takeaway_charge": priced["takeaway_charge"], "taxable_amount": priced["taxable_amount"],
         "gst_rate": priced["gst_rate"], "gst_amount": priced["gst_amount"],
         "service_charge_rate": priced["service_charge_rate"],
-        "service_charge_amount": priced["service_charge_amount"], "total_amount": priced["total_amount"],
+        "service_charge_amount": priced["service_charge_amount"],
+        "round_off": priced["round_off"], "total_amount": priced["total_amount"],
     }
 
 
@@ -215,7 +251,7 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key):
     table = DiningTable.objects.select_for_update().filter(pk=table_id).first()
     if table is None or not can_access_branch(staff_user, table.branch_id):
         raise OrderError("Not found.", "not_found", 404)
-    if not table.is_active or table.status == DiningTable.Status.OCCUPIED:
+    if not table.is_active:
         raise OrderError("This table is not available for a new order.", "table_unavailable", 409)
     lines = [Line(row["food"], row["quantity"], [], "") for row in item_rows]
     try:
@@ -223,9 +259,11 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key):
     except PricingError as exc:
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
     order = Order(
-        order_number=f"TMP{uuid4().hex[:12]}", branch=table.branch, customer=None, customer_phone="",
+        order_number=f"TMP{uuid4().hex[:12]}", branch=table.branch, branch_name=table.branch.name,
+        customer=None, customer_phone="",
         table=table, table_label=table.table_number, order_type=Order.Type.DINE_IN,
-        source=Order.Source.EMPLOYEE, placed_by=staff_user, status=Order.Status.PENDING,
+        source=Order.Source.EMPLOYEE, placed_by=staff_user, placed_by_name=staff_user.name or staff_user.phone,
+        status=Order.Status.PENDING,
         payment_status=Order.PaymentStatus.UNPAID, idempotency_key=idempotency_key or None,
         **_money_fields(priced),
     )
@@ -272,7 +310,9 @@ def change_status(order_id, new_status, actor, reason=""):
     order.save()
     OrderStatusHistory.objects.create(order=order, from_status=previous, to_status=new_status, changed_by=actor,
                                       note=reason.strip())
-    if new_status == Order.Status.CANCELLED:
+    if new_status in (Order.Status.CANCELLED, Order.Status.COMPLETED):
+        # Free the table only when no other unfinished order still uses it. A reservation is left alone
+        # because _release_if_idle only changes OCCUPIED tables. Payment status is not changed here.
         _release_if_idle(order.table)
     if new_status == Order.Status.COMPLETED:
         # E-bill only after completion. Payment may still be UNPAID; the SRS does not block completion on payment.

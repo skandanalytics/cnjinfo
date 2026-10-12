@@ -11,18 +11,6 @@ import api from '../services/api';
 import { placeOrder as placeCustomerOrder } from '../services/customerCheckout';
 import { getOrderType } from '../utils/orderContext';
 
-const formatInstructions = (item) => {
-  const parts = [];
-  if (item.instructions && item.instructions.trim()) {
-    parts.push(item.instructions.trim());
-  }
-  if (item.extraIngredients && item.extraIngredients.length > 0) {
-    const ingText = item.extraIngredients.map(ing => `${ing.name} (+₹${ing.price})`).join(', ');
-    parts.push(`Add-ons: ${ingText}`);
-  }
-  return parts.join(' | ');
-};
-
 const parseInstructions = (text) => {
   if (!text) {
     return { instructions: "", extraIngredients: [] };
@@ -52,6 +40,60 @@ const parseInstructions = (text) => {
 
   return { instructions, extraIngredients };
 };
+
+function normalizeAddons(list) {
+  if (!Array.isArray(list)) return [];
+  return list.map((option) => {
+    if (!option || typeof option !== 'object') return null;
+    const id = option.id;
+    const name = option.name;
+    if (id == null || !name) return null;
+    const price = Number(option.extra_price ?? option.price ?? 0);
+    return { id, name, price, extra_price: Number.isFinite(price) ? price : 0 };
+  }).filter(Boolean);
+}
+
+function optionKey(extras) {
+  return normalizeAddons(extras).map((extra) => String(extra.id)).sort().join(',');
+}
+
+function findLine(items, key) {
+  const text = String(key);
+  const direct = items.find((row) => String(row.lineId) === text || String(row.cartItemId) === text);
+  if (direct) return direct;
+  const byFood = items.filter((row) => Number(row.id) === Number(key));
+  return byFood.length === 1 ? byFood[0] : null;
+}
+
+function mergeServerItems(serverItems, previous) {
+  return (serverItems || []).map((line) => {
+    const foodId = line.food_id ?? line.food;
+    const selected = Array.isArray(line.options) ? normalizeAddons(line.options) : null;
+    const hasCatalog = line.available_customizations !== undefined;
+    const catalog = hasCatalog ? normalizeAddons(line.available_customizations) : null;
+    const notes = line.special_instructions ?? '';
+    const prev = (previous || []).find((row) => String(row.cartItemId) === String(line.item_id || line.id))
+      || (previous || []).find((row) => (
+        Number(row.id) === Number(foodId)
+        && optionKey(row.extraIngredients) === optionKey(selected || [])
+        && String(row.instructions || '') === String(notes)
+      ));
+    return {
+      ...(prev || {}),
+      id: foodId,
+      name: prev?.name || line.name,
+      image: prev?.image || line.image,
+      quantity: line.quantity,
+      cartItemId: line.item_id || line.id,
+      lineId: String(line.item_id || line.id),
+      instructions: notes,
+      extraIngredients: selected != null ? selected : (prev?.extraIngredients || []),
+      customizations: catalog != null ? catalog : (Array.isArray(prev?.customizations) ? prev.customizations : []),
+      finalUnitPrice: line.final_unit_price != null ? Number(line.final_unit_price) : prev?.finalUnitPrice,
+      lineTotal: line.line_total != null ? Number(line.line_total) : prev?.lineTotal,
+    };
+  });
+}
 
 export const CartContext = createContext();
 
@@ -222,10 +264,9 @@ export const CartProvider = ({ children }) => {
             for (const item of unmergedGuestItems) {
               try {
                 if (!existingFoodIds.has(Number(item.id))) {
-                  const formattedText = formatInstructions(item);
                   await cartService.addItemToCart(activeCart.id, item.id, item.quantity, getProductSellingPrice(item), {
-                    instructions: formattedText,
-                    extraIngredients: item.extraIngredients
+                    instructions: item.instructions || '',
+                    optionIds: (item.extraIngredients || []).map((extra) => extra.id).filter(Boolean),
                   });
                 }
               } catch (err) {
@@ -244,19 +285,27 @@ export const CartProvider = ({ children }) => {
           const allProducts = await productService.getProducts();
 
           const mappedItems = (backendItems || []).map(bi => {
-            const prod = allProducts.find(p => Number(p.id) === Number(bi.food || bi.food_item));
-            if (prod) {
-              const rawInstructions = bi.special_instructions || bi.instructions || "";
-              const parsed = parseInstructions(rawInstructions);
-              return {
-                ...prod,
-                quantity: bi.quantity,
-                cartItemId: bi.id || bi.cart_item_id,
-                instructions: parsed.instructions,
-                extraIngredients: parsed.extraIngredients
-              };
-            }
-            return null;
+            const prod = allProducts.find(p => Number(p.id) === Number(bi.food || bi.food_item || bi.food_id));
+            const selected = Array.isArray(bi.options) ? normalizeAddons(bi.options) : [];
+            const parsed = selected.length ? { instructions: bi.special_instructions || '', extraIngredients: selected } : parseInstructions(bi.special_instructions || '');
+            const catalog = bi.available_customizations !== undefined
+              ? normalizeAddons(bi.available_customizations)
+              : normalizeAddons(prod?.customizations);
+            if (!prod && !bi.name) return null;
+            return {
+              ...(prod || {}),
+              id: bi.food_id || bi.food || bi.food_item,
+              name: prod?.name || bi.name,
+              image: prod?.image || bi.image,
+              quantity: bi.quantity,
+              cartItemId: bi.id || bi.item_id,
+              lineId: String(bi.id || bi.item_id),
+              instructions: selected.length ? (bi.special_instructions || '') : parsed.instructions,
+              extraIngredients: selected.length ? selected : parsed.extraIngredients,
+              customizations: catalog,
+              finalUnitPrice: bi.final_unit_price != null ? Number(bi.final_unit_price) : undefined,
+              lineTotal: bi.line_total != null ? Number(bi.line_total) : undefined,
+            };
           }).filter(Boolean);
 
           if (mappedItems.length > 0) {
@@ -335,7 +384,7 @@ export const CartProvider = ({ children }) => {
     setOutOfStockModalData(null);
   };
 
-  const addToCart = async (item, quantity = 1, customizations = {}) => {
+  const addToCart = async (item, quantity = 1) => {
     if (!item) return false;
     const maxStock = typeof item.stock === 'number' ? item.stock : 20;
     const isOut = maxStock <= 0 || item.status === 'Out of Stock' || item.status === 'OUT_OF_STOCK' || item.is_available === false;
@@ -348,12 +397,22 @@ export const CartProvider = ({ children }) => {
       return false;
     }
 
-    const existing = cartItems.find((i) => Number(i.id) === Number(item.id));
-    const currentInCart = existing ? existing.quantity : 0;
+    const notes = item.instructions || '';
+    const extras = normalizeAddons(item.extraIngredients);
+    const wantedKey = optionKey(extras);
+    const catalog = Array.isArray(item.customizations) ? normalizeAddons(item.customizations) : null;
+    const sameFoodQty = cartItems
+      .filter((row) => Number(row.id) === Number(item.id))
+      .reduce((sum, row) => sum + Number(row.quantity || 0), 0);
+    const existing = cartItems.find((row) => (
+      Number(row.id) === Number(item.id)
+      && optionKey(row.extraIngredients) === wantedKey
+      && (row.instructions || '') === notes
+    ));
 
     let qtyToAdd = quantity;
-    if (currentInCart + qtyToAdd > maxStock) {
-      if (currentInCart >= maxStock) {
+    if (sameFoodQty + qtyToAdd > maxStock) {
+      if (sameFoodQty >= maxStock) {
         showOutOfStockModal({
           item,
           stock: maxStock,
@@ -361,7 +420,7 @@ export const CartProvider = ({ children }) => {
         });
         return false;
       }
-      qtyToAdd = maxStock - currentInCart;
+      qtyToAdd = maxStock - sameFoodQty;
       showOutOfStockModal({
         item,
         stock: maxStock,
@@ -369,45 +428,47 @@ export const CartProvider = ({ children }) => {
       });
     }
 
-    const instructions = item.instructions || "";
-    const extraIngredients = item.extraIngredients || [];
+    const localLineId = existing?.lineId || `local-${item.id}-${wantedKey}-${Date.now()}`;
 
-    // 1. Optimistic UI update
     setCartItems((prev) => {
-      const exist = prev.find((i) => Number(i.id) === Number(item.id));
-      let updated;
-      if (exist) {
-        updated = prev.map((i) =>
-          Number(i.id) === Number(item.id) ? {
-            ...i,
-            quantity: i.quantity + qtyToAdd,
-            customizations: { ...i.customizations, ...customizations },
-            instructions: instructions || i.instructions,
-            extraIngredients: extraIngredients.length > 0 ? extraIngredients : i.extraIngredients
-          } : i
-        );
-      } else {
-        updated = [...prev, { ...item, quantity: qtyToAdd, customizations, instructions, extraIngredients }];
-      }
+      const exist = prev.find((row) => (
+        Number(row.id) === Number(item.id)
+        && optionKey(row.extraIngredients) === wantedKey
+        && (row.instructions || '') === notes
+      ));
+      const updated = exist
+        ? prev.map((row) => (
+          row === exist
+            ? {
+              ...row,
+              quantity: row.quantity + qtyToAdd,
+              customizations: catalog || (Array.isArray(row.customizations) ? row.customizations : []),
+              extraIngredients: extras.length ? extras : (row.extraIngredients || []),
+            }
+            : row
+        ))
+        : [...prev, {
+          ...item,
+          quantity: qtyToAdd,
+          customizations: catalog || [],
+          instructions: notes,
+          extraIngredients: extras,
+          lineId: localLineId,
+        }];
       saveCartToStorage(updated);
       return updated;
     });
 
-    // 2. Backend sync in background
     if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
       try {
         const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
-        const formattedText = formatInstructions({ instructions, extraIngredients });
         const added = await cartService.addItemToCart(activeCart.id, item.id, qtyToAdd, getProductSellingPrice(item), {
-          instructions: formattedText,
-          extraIngredients
+          instructions: notes,
+          optionIds: extras.map((extra) => extra.id).filter(Boolean),
         });
-
-        if (added?.cart_item_id) {
+        if (Array.isArray(added?.items)) {
           setCartItems((prev) => {
-            const updated = prev.map((i) =>
-              Number(i.id) === Number(item.id) ? { ...i, cartItemId: added.cart_item_id } : i
-            );
+            const updated = mergeServerItems(added.items, prev);
             saveCartToStorage(updated);
             return updated;
           });
@@ -416,8 +477,8 @@ export const CartProvider = ({ children }) => {
         console.error("Error adding to database cart:", err);
         setCartItems((prev) => {
           const updated = prev
-            .map((i) => (Number(i.id) === Number(item.id) ? { ...i, quantity: i.quantity - qtyToAdd } : i))
-            .filter((i) => i.quantity > 0);
+            .map((row) => (String(row.lineId) === String(localLineId) ? { ...row, quantity: row.quantity - qtyToAdd } : row))
+            .filter((row) => row.quantity > 0);
           saveCartToStorage(updated);
           return updated;
         });
@@ -433,63 +494,77 @@ export const CartProvider = ({ children }) => {
   };
 
   const updateItemInstructionsAndExtras = async (id, instructions, extraIngredients = []) => {
-    // 1. Optimistic UI update
+    const selected = normalizeAddons(extraIngredients);
+    const previous = cartItems;
     setCartItems((prev) => {
-      const updated = prev.map((i) =>
-        i.id === id ? { ...i, instructions, extraIngredients } : i
-      );
+      const target = findLine(prev, id);
+      if (!target) return prev;
+      const updated = prev.map((row) => (
+        row === target ? { ...row, instructions, extraIngredients: selected } : row
+      ));
       saveCartToStorage(updated);
       return updated;
     });
 
-    // 2. Backend sync in background
     if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
       try {
-        const item = cartItems.find((i) => i.id === id);
+        const item = findLine(previous, id);
         let cartItemId = item?.cartItemId;
         if (!cartItemId && item) {
           const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
           const backendItems = await cartService.getCartItems(activeCart.id);
-          const found = backendItems.find(bi => Number(bi.food || bi.food_item) === Number(id));
-          if (found) {
-            cartItemId = found.id || found.cart_item_id;
-          }
+          const found = backendItems.find((bi) => (
+            String(bi.id) === String(item.cartItemId)
+            || (Number(bi.food || bi.food_item || bi.food_id) === Number(item.id) && optionKey(bi.options) === optionKey(item.extraIngredients))
+          ));
+          if (found) cartItemId = found.id || found.item_id;
         }
 
-        if (cartItemId) {
-          const formattedText = formatInstructions({ instructions, extraIngredients });
-          await api.patch(`/orders/cart-items/${cartItemId}/`, { special_instructions: formattedText });
+        if (!cartItemId) throw new Error('This cart item could not be updated.');
+        const res = await api.patch(`/cart/items/${cartItemId}/`, {
+          special_instructions: instructions || '',
+          options: selected.map((extra) => extra.id).filter(Boolean),
+        });
+        const view = res.data?.data || res.data;
+        if (Array.isArray(view?.items)) {
+          setCartItems((prev) => {
+            const updated = mergeServerItems(view.items, prev);
+            saveCartToStorage(updated);
+            return updated;
+          });
         }
       } catch (e) {
         console.error("Error updating instructions on backend:", e);
+        setCartItems(previous);
+        saveCartToStorage(previous);
+        window.alert(e?.response?.data?.detail || e.message || 'The add-ons could not be saved.');
       }
     }
   };
 
   const removeFromCart = async (id) => {
-    const idNum = Number(id);
-    if (isNaN(idNum)) return false;
-
-    // Prevent duplicate DELETE requests caused by double-click or multiple triggers
-    if (deletingIdsRef.current.has(idNum)) return false;
-    deletingIdsRef.current.add(idNum);
+    const item = findLine(cartItems, id);
+    if (!item) return false;
+    const lockKey = String(item.lineId || item.cartItemId || item.id);
+    if (deletingIdsRef.current.has(lockKey)) return false;
+    deletingIdsRef.current.add(lockKey);
 
     try {
-      const item = cartItems.find(i => Number(i.id) === idNum);
-      if (!item) return false;
-
       let backendSuccess = true;
 
       if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
         let cartItemId = item.cartItemId;
-        if (!cartItemId || String(cartItemId).startsWith('local_')) {
+        if (!cartItemId || String(cartItemId).startsWith('local')) {
           try {
             const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
             if (activeCart && activeCart.id && !activeCart._localOnly) {
               const backendItems = await cartService.getCartItems(activeCart.id);
-              const found = backendItems.find(bi => Number(bi.food || bi.food_item) === idNum);
+              const found = backendItems.find((bi) => (
+                Number(bi.food || bi.food_id) === Number(item.id)
+                && optionKey(bi.options) === optionKey(item.extraIngredients)
+              ));
               if (found) {
-                cartItemId = found.id || found.cart_item_id;
+                cartItemId = found.id || found.item_id;
               }
             }
           } catch (e) {
@@ -504,7 +579,7 @@ export const CartProvider = ({ children }) => {
             try {
               const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
               const backendItems = await cartService.getCartItems(activeCart.id);
-              const stillExists = backendItems.some(bi => Number(bi.food || bi.food_item) === idNum);
+              const stillExists = backendItems.some((bi) => String(bi.id || bi.item_id) === String(cartItemId));
               backendSuccess = !stillExists;
             } catch (e) {
               backendSuccess = false;
@@ -520,7 +595,8 @@ export const CartProvider = ({ children }) => {
       if (backendSuccess) {
         // Update local cart state ONLY after verified backend deletion
         setCartItems(prev => {
-          const updated = prev.filter(i => Number(i.id) !== idNum);
+          const target = findLine(prev, lockKey);
+          const updated = prev.filter(i => i !== target);
           saveCartToStorage(updated);
           return updated;
         });
@@ -538,12 +614,12 @@ export const CartProvider = ({ children }) => {
         return false;
       }
     } finally {
-      deletingIdsRef.current.delete(idNum);
+      deletingIdsRef.current.delete(lockKey);
     }
   };
 
   const increaseQuantity = async (id) => {
-    const item = cartItems.find(i => Number(i.id) === Number(id));
+    const item = findLine(cartItems, id);
     if (!item) return;
 
     const maxStock = typeof item.stock === 'number' ? item.stock : 20;
@@ -562,7 +638,8 @@ export const CartProvider = ({ children }) => {
 
     // 1. Optimistic UI update
     setCartItems(prev => {
-      const updated = prev.map(i => Number(i.id) === Number(id) ? { ...i, quantity: newQty } : i);
+      const target = findLine(prev, id);
+      const updated = prev.map(i => i === target ? { ...i, quantity: newQty } : i);
       saveCartToStorage(updated);
       return updated;
     });
@@ -574,14 +651,21 @@ export const CartProvider = ({ children }) => {
         if (!cartItemId) {
           const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
           const backendItems = await cartService.getCartItems(activeCart.id);
-          const found = backendItems.find(bi => Number(bi.food || bi.food_item) === Number(id));
+          const found = backendItems.find((bi) => Number(bi.food || bi.food_id) === Number(item.id) && optionKey(bi.options) === optionKey(item.extraIngredients));
           if (found) {
-            cartItemId = found.id || found.cart_item_id;
+            cartItemId = found.id || found.item_id;
           }
         }
 
         if (cartItemId) {
-          await cartService.updateItemQuantity(cartItemId, newQty, sellingPrice);
+          const view = await cartService.updateItemQuantity(cartItemId, newQty, sellingPrice);
+          if (Array.isArray(view?.items)) {
+            setCartItems((prev) => {
+              const updated = mergeServerItems(view.items, prev);
+              saveCartToStorage(updated);
+              return updated;
+            });
+          }
         }
       } catch (e) {
         console.error(e);
@@ -590,7 +674,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const decreaseQuantity = async (id) => {
-    const item = cartItems.find(i => Number(i.id) === Number(id));
+    const item = findLine(cartItems, id);
     if (!item) return;
 
     const currentQty = item.quantity;
@@ -604,7 +688,8 @@ export const CartProvider = ({ children }) => {
 
     // 1. Optimistic UI update
     setCartItems((prev) => {
-      const updated = prev.map((i) => (Number(i.id) === Number(id) ? { ...i, quantity: newQty } : i));
+      const target = findLine(prev, id);
+      const updated = prev.map((i) => (i === target ? { ...i, quantity: newQty } : i));
       saveCartToStorage(updated);
       return updated;
     });
@@ -616,14 +701,21 @@ export const CartProvider = ({ children }) => {
         if (!cartItemId) {
           const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
           const backendItems = await cartService.getCartItems(activeCart.id);
-          const found = backendItems.find(bi => Number(bi.food || bi.food_item) === Number(id));
+          const found = backendItems.find((bi) => Number(bi.food || bi.food_id) === Number(item.id) && optionKey(bi.options) === optionKey(item.extraIngredients));
           if (found) {
-            cartItemId = found.id || found.cart_item_id;
+            cartItemId = found.id || found.item_id;
           }
         }
 
         if (cartItemId) {
-          await cartService.updateItemQuantity(cartItemId, newQty, sellingPrice);
+          const view = await cartService.updateItemQuantity(cartItemId, newQty, sellingPrice);
+          if (Array.isArray(view?.items)) {
+            setCartItems((prev) => {
+              const updated = mergeServerItems(view.items, prev);
+              saveCartToStorage(updated);
+              return updated;
+            });
+          }
         }
       } catch (e) {
         console.error(e);
@@ -632,7 +724,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const updateQuantity = async (id, newQty) => {
-    const item = cartItems.find(i => Number(i.id) === Number(id));
+    const item = findLine(cartItems, id);
     if (!item) return;
 
     const parsedQty = parseInt(newQty, 10);
@@ -654,7 +746,8 @@ export const CartProvider = ({ children }) => {
     }
 
     setCartItems(prev => {
-      const updated = prev.map(i => Number(i.id) === Number(id) ? { ...i, quantity: finalQty } : i);
+      const target = findLine(prev, id);
+      const updated = prev.map(i => i === target ? { ...i, quantity: finalQty } : i);
       saveCartToStorage(updated);
       return updated;
     });
@@ -665,13 +758,20 @@ export const CartProvider = ({ children }) => {
         if (!cartItemId) {
           const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
           const backendItems = await cartService.getCartItems(activeCart.id);
-          const found = backendItems.find(bi => Number(bi.food || bi.food_item) === Number(id));
+          const found = backendItems.find((bi) => Number(bi.food || bi.food_id) === Number(item.id) && optionKey(bi.options) === optionKey(item.extraIngredients));
           if (found) {
-            cartItemId = found.id || found.cart_item_id;
+            cartItemId = found.id || found.item_id;
           }
         }
         if (cartItemId) {
-          await cartService.updateItemQuantity(cartItemId, finalQty, sellingPrice);
+          const view = await cartService.updateItemQuantity(cartItemId, finalQty, sellingPrice);
+          if (Array.isArray(view?.items)) {
+            setCartItems((prev) => {
+              const updated = mergeServerItems(view.items, prev);
+              saveCartToStorage(updated);
+              return updated;
+            });
+          }
         }
       } catch (e) {
         console.error(e);
@@ -832,7 +932,7 @@ export const CartProvider = ({ children }) => {
       const firstTime = await isFirstTimeCustomer(user);
 
       // If returning customer has WELCOME100 applied, remove it immediately
-      if (!firstTime && coupon && coupon.code === 'WELCOME100') {
+      if (!firstTime && coupon && (coupon.isFirstTimeOffer || coupon.is_first_time_offer)) {
         if (isMounted) setCoupon(null);
         return;
       }
@@ -884,35 +984,25 @@ export const CartProvider = ({ children }) => {
 
   const applyCoupon = async (code) => {
     const codeUpper = (code || '').trim().toUpperCase();
-    const currentSubtotal = getBillBreakdown().subtotal;
-
-    // Strict Single Coupon Enforcement: If already applied, avoid re-applying same code
+    if (!codeUpper) return { success: false, message: 'Enter a coupon code.' };
     if (coupon && coupon.code === codeUpper) {
-      return {
-        success: true,
-        message: `Coupon "${codeUpper}" is already applied.`
-      };
+      return { success: true, message: `Coupon "${codeUpper}" is already applied.` };
     }
-
-    // Check WELCOME100 first-time customer rule via backend order history
-    if (codeUpper === 'WELCOME100') {
-      const firstTime = await isFirstTimeCustomer(user);
-      if (!firstTime) {
-        return {
-          success: false,
-          message: "WELCOME100 coupon is valid for first-time customers only."
-        };
-      }
-    }
-
+    const branch = typeof window !== 'undefined' ? sessionStorage.getItem('foodie_public_branch') : null;
+    if (!branch) return { success: false, message: 'Choose a restaurant before applying a coupon.' };
     try {
-      const validatedCoupon = await couponService.validateCoupon(codeUpper, currentSubtotal, user);
+      const res = await api.post('/cart/coupon/', { branch: Number(branch), code: codeUpper });
+      const pricing = res.data?.pricing || {};
+      const applied = (pricing.coupons || []).find((row) => String(row.code).toUpperCase() === codeUpper);
+      const rejected = (pricing.rejected_coupons || []).find((row) => String(row.code).toUpperCase() === codeUpper);
+      if (!applied) {
+        return { success: false, message: rejected?.reason || 'This coupon cannot be applied to this order.' };
+      }
       userRemovedCouponRef.current = false;
-      // Single Coupon Exclusivity: Applying new coupon automatically replaces previous coupon (e.g. WELCOME100 and another voucher can never be combined)
-      setCoupon(validatedCoupon.coupon || validatedCoupon);
+      setCoupon({ code: applied.code, discount: Number(applied.discount || 0), isAutomatic: Boolean(applied.auto_applied) });
       return { success: true, message: `Coupon "${codeUpper}" applied successfully!` };
     } catch (err) {
-      return { success: false, message: err.message || "Failed to apply coupon" };
+      return { success: false, message: err.response?.data?.detail || err.message || 'Failed to apply coupon' };
     }
   };
 

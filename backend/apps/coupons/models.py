@@ -52,7 +52,8 @@ class Coupon(models.Model):
 class CouponRedemption(models.Model):
     """History of coupon use; also the source of used-count, so it cannot drift."""
 
-    coupon = models.ForeignKey(Coupon, on_delete=models.PROTECT, related_name="redemptions")
+    coupon = models.ForeignKey(Coupon, on_delete=models.SET_NULL, null=True, blank=True, related_name="redemptions")
+    coupon_code = models.CharField(max_length=50, blank=True)  # snapshot; kept after the coupon is deleted
     order = models.ForeignKey("orders.Order", on_delete=models.PROTECT, related_name="coupon_redemptions")
     customer = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                  related_name="+")

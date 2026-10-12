@@ -3,33 +3,22 @@ import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+import { TABLE_LOCATIONS, TABLE_LOCATION_VALUES } from '../../constants/tableLocations';
 
 export const AddTableModal = ({
   isOpen,
   onClose,
   onAdd,
   existingTables = [],
-  viewOptions = [],
 }) => {
   const [numberDigits, setNumberDigits] = useState('');
   const [capacity, setCapacity] = useState('4');
   const [area, setArea] = useState('Indoor Main');
-  const [linkedMenus, setLinkedMenus] = useState('Main Menu');
   const [status, setStatus] = useState('Available');
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const areas = (viewOptions.length ? viewOptions : [
-    { id: null, name: 'Indoor Main' },
-    { id: null, name: 'Garden View' },
-    { id: null, name: 'Rooftop Terrace' },
-  ]).map((view) => ({ value: view.name, label: view.name, id: view.id }));
-
-  const menuOptions = [
-    { value: 'Main Menu', label: 'Main Menu' },
-    { value: 'Bar Menu', label: 'Bar Menu' },
-    { value: 'Desserts Menu', label: 'Desserts Menu' }
-  ];
+  const areas = TABLE_LOCATIONS;
 
   const statuses = [
     { value: 'Available', label: 'Available' },
@@ -87,6 +76,11 @@ export const AddTableModal = ({
       return;
     }
 
+    if (!TABLE_LOCATION_VALUES.includes(area)) {
+      setErrorMsg('Choose Indoor Main, Garden View, or Rooftop Terrace.');
+      return;
+    }
+
     const capNum = parseInt(capacity, 10);
     if (isNaN(capNum) || capNum <= 0) {
       setErrorMsg('Seating capacity must be at least 1 seat.');
@@ -104,14 +98,11 @@ export const AddTableModal = ({
         name: `Table ${formattedNum}`,
         capacity: capNum,
         area,
-        tableViewId: areas.find((option) => option.value === area)?.id || null,
-        linkedMenus,
+        location: area,
         status
       });
       setNumberDigits('');
       setCapacity('4');
-      setArea('Indoor Main');
-      setLinkedMenus('Main Menu');
       setStatus('Available');
       setErrorMsg('');
       onClose();
@@ -262,13 +253,7 @@ export const AddTableModal = ({
           options={areas}
           value={area}
           onChange={(e) => setArea(e.target.value)}
-        />
-
-        <Select 
-          label="Linked Menu"
-          options={menuOptions}
-          value={linkedMenus}
-          onChange={(e) => setLinkedMenus(e.target.value)}
+          required
         />
 
         <Select 

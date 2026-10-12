@@ -96,18 +96,41 @@ def add_item(cart, food_id, quantity, option_ids=(), instructions=""):
 
 @transaction.atomic
 def set_quantity(item, quantity):
-    if not 1 <= quantity <= MAX_QTY_PER_LINE:
+    return update_line(item, quantity=quantity)
+
+
+@transaction.atomic
+def update_line(item, quantity=None, option_ids=None, instructions=None):
+    """Update quantity, selected add-ons, or notes on an existing cart line. Totals are repriced on read."""
+    qty = item.quantity if quantity is None else quantity
+    if not 1 <= qty <= MAX_QTY_PER_LINE:
         raise CartError(f"Quantity must be between 1 and {MAX_QTY_PER_LINE}.", "quantity_limit")
-    _validate_line(item.cart, item.food_id, quantity, [o.pk for o in item.options.all()])
-    item.quantity = quantity
-    item.save(update_fields=["quantity", "updated_at"])
+    opts = _option_ids(item) if option_ids is None else list(dict.fromkeys(option_ids))
+    _validate_line(item.cart, item.food_id, qty, opts)
+    item.quantity = qty
+    fields = ["quantity", "updated_at"]
+    if instructions is not None:
+        item.special_instructions = (instructions or "").strip()
+        fields.append("special_instructions")
+    item.save(update_fields=fields)
+    if option_ids is not None:
+        item.options.set(opts)
     return item
+
+
+def _branch_has_orderable_food(branch):
+    from apps.menu.models import Food
+    from apps.menu.pricing_helpers import is_orderable
+    foods = Food.objects.filter(branch=branch, is_active=True, is_sold_out=False).select_related("inventory")
+    return any(is_orderable(food) for food in foods)
 
 
 def set_context(cart, order_type, qr_code=None, table_id=None):
     """Dine-In needs a table of this branch: the scanned QR, or a table that is currently available.
     Takeaway never has a table."""
     if order_type == Cart.OrderType.TAKEAWAY:
+        if not _branch_has_orderable_food(cart.branch):
+            raise CartError("Takeaway ordering is unavailable because no dishes are currently available.", "no_dishes")
         cart.order_type, cart.table = order_type, None
     else:
         table = None
@@ -117,9 +140,9 @@ def set_context(cart, order_type, qr_code=None, table_id=None):
             if table is None:
                 raise CartError("Invalid or inactive QR code for this branch.", "qr_invalid")
         elif table_id is not None:
+            # Occupied and reserved tables can take another order. Inactive tables cannot.
             table = DiningTable.objects.filter(
-                pk=table_id, branch=cart.branch, is_active=True, qr_is_active=True,
-                status=DiningTable.Status.AVAILABLE).first()
+                pk=table_id, branch=cart.branch, is_active=True).first()
             if table is None:
                 raise CartError("That table is not available for dine-in.", "table_unavailable")
         elif cart.table_id is None:
@@ -160,15 +183,19 @@ def remove_coupon(cart):
 
 
 def _line_info(item, image):
+    selected = [{"id": o.pk, "name": o.name, "extra_price": str(o.extra_price)} for o in item.options.all()]
+    available = [{"id": o.pk, "name": o.name, "extra_price": str(o.extra_price)}
+                 for o in item.food.customizations.all() if o.is_active]
     return {"item_id": item.pk, "food_id": item.food_id, "name": item.food.name, "quantity": item.quantity,
             "image": image, "special_instructions": item.special_instructions,
-            "options": [o.pk for o in item.options.all()]}
+            "options": selected, "available_customizations": available}
 
 
 def evaluate(cart, request=None, code_override=None):
     """Price the cart. Lines that can't be ordered any more stay in the cart, are flagged in `issues`, and are
     left out of the totals (nothing is silently discarded). `can_checkout` is only true when everything is valid."""
-    items = list(cart.items.select_related("food").prefetch_related("options", "food__images").order_by("id"))
+    items = list(cart.items.select_related("food").prefetch_related(
+        "options", "food__images", "food__customizations").order_by("id"))
     customer = cart.user if cart.user_id else None
     codes = code_override if code_override is not None else [c.code for c in cart.coupons.all()]
 
@@ -254,3 +281,15 @@ def merge_guest_carts(user, guest_token):
             g.save()
         merged.append(g.branch_id)
     return merged
+
+
+def purge_carts(queryset):
+    """Delete carts and their lines without nulling the owner (that would break ck_cart_has_owner)."""
+    ids = list(queryset.values_list("pk", flat=True))
+    if not ids:
+        return 0
+    Cart.coupons.through.objects.filter(cart_id__in=ids).delete()
+    CartItem.options.through.objects.filter(cartitem__cart_id__in=ids).delete()
+    CartItem.objects.filter(cart_id__in=ids).delete()
+    deleted, _ = Cart.objects.filter(pk__in=ids).delete()
+    return deleted

@@ -15,7 +15,7 @@ from apps.coupons.models import Coupon
 
 from .images import display_image, uploaded_url
 from .models import Category, Food
-from .pricing_helpers import current_discount, is_orderable, money, stock_status
+from .pricing_helpers import current_discount, inventory_of, is_orderable, money, stock_status
 
 MENU_SORTS = {"price", "-price", "discount", "name"}
 
@@ -32,6 +32,7 @@ def public_food(food, request, now=None):
         "discount_percent": str(percent), "has_discount": disc is not None,
         "calories": food.calories, "protein_grams": None if food.protein_grams is None else str(food.protein_grams),
         "is_orderable": is_orderable(food), "stock_status": stock_status(food),
+        "quantity": None if inventory_of(food) is None else inventory_of(food).quantity,
         "primary_image": display_image(food, request),
         "images": [{"id": i.id, "url": uploaded_url(request, i), "is_primary": i.is_primary} for i in imgs],
         "customizations": [{"id": o.id, "name": o.name, "extra_price": str(o.extra_price)}
@@ -98,10 +99,10 @@ class PublicMenuView(PublicThrottled):
                       for c in Category.objects.filter(branch=branch, is_active=True)]
         offers = [{"code": c.code, "description": c.description, "discount_type": c.discount_type,
                    "discount_value": str(c.discount_value), "min_order_value": str(c.min_order_value),
-                   "valid_to": c.valid_to, "is_first_time_offer": c.is_first_time_auto,
-                   "auto_apply": c.auto_apply}
-                  for c in Coupon.objects.filter(branch=branch, is_active=True, valid_from__lte=now,
-                                                 valid_to__gte=now).order_by("min_order_value")]
+                   "max_discount": None if c.max_discount is None else str(c.max_discount),
+                   "valid_from": c.valid_from, "valid_to": c.valid_to, "is_active": c.is_active,
+                   "is_first_time_offer": c.is_first_time_auto, "auto_apply": c.auto_apply}
+                  for c in Coupon.objects.filter(branch=branch).order_by("min_order_value", "code")]
         return Response({"branch": {"id": branch.id, "name": branch.name}, "categories": categories,
                          "foods": rows, "offers": offers})
 

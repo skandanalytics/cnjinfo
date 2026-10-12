@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import formatCurrency from '../../utils/formatCurrency';
 import QuantityControl from './QuantityControl';
 import { FiTrash2 } from 'react-icons/fi';
@@ -18,6 +18,42 @@ export const CartItem = ({
   const [instructionText, setInstructionText] = useState(item.instructions || '');
   const [selectedExtras, setSelectedExtras] = useState(item.extraIngredients || []);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [fetchedAddons, setFetchedAddons] = useState(null);
+  const [addonError, setAddonError] = useState('');
+  const [addonLoading, setAddonLoading] = useState(!Array.isArray(item.customizations));
+
+  useEffect(() => {
+    if (!showEdit) {
+      setInstructionText(item.instructions || '');
+      setSelectedExtras(item.extraIngredients || []);
+    }
+  }, [item.instructions, item.extraIngredients, item.lineId, showEdit]);
+
+  useEffect(() => {
+    if (Array.isArray(item.customizations)) {
+      setFetchedAddons(null);
+      setAddonError('');
+      setAddonLoading(false);
+      return undefined;
+    }
+    let cancelled = false;
+    setAddonLoading(true);
+    setAddonError('');
+    import('../../services/productService')
+      .then(({ productService }) => productService.getProductById(item.id))
+      .then((product) => {
+        if (cancelled) return;
+        setFetchedAddons(Array.isArray(product?.customizations) ? product.customizations : []);
+        setAddonLoading(false);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFetchedAddons(null);
+        setAddonError('Add-ons could not be loaded. Please try again.');
+        setAddonLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [item.id, item.customizations, item.lineId]);
 
   const handleRemove = async () => {
     if (isRemoving) return;
@@ -30,6 +66,17 @@ export const CartItem = ({
   };
 
   const foodType = normalizeFoodType(item.foodType || item.type || (item.is_veg === false || item.is_veg === 'false' ? 'non-veg' : 'veg'));
+  const sourceAddons = Array.isArray(item.customizations) ? item.customizations : (fetchedAddons || []);
+  const addonCatalog = sourceAddons
+    .map((option) => ({
+      id: option.id,
+      name: option.name,
+      price: Number(option.extra_price ?? option.price ?? 0),
+    }))
+    .filter((option) => option.id && option.name);
+  const savedExtraPerUnit = (item.extraIngredients || []).reduce((sum, extra) => sum + Number(extra.price || extra.extra_price || 0), 0);
+  const baseUnit = getProductSellingPrice(item);
+  const displayUnit = item.finalUnitPrice != null ? Number(item.finalUnitPrice) : baseUnit + savedExtraPerUnit;
 
   return (
     <div className="card rounded-3 border-0 shadow-sm p-3 mb-3 bg-white d-flex flex-row align-items-center gap-3">
@@ -70,12 +117,12 @@ export const CartItem = ({
                   {formatCurrency(item.price)}
                 </span>
                 <span className="fw-bold text-danger" style={{ fontSize: '14px' }}>
-                  {formatCurrency(getProductSellingPrice(item))}
+                  {formatCurrency(displayUnit)}
                 </span>
               </>
             ) : (
               <span className="fw-bold text-danger" style={{ fontSize: '14px' }}>
-                {formatCurrency(item.price)}
+                {formatCurrency(displayUnit)}
               </span>
             )}
           </div>
@@ -119,7 +166,7 @@ export const CartItem = ({
                 <button 
                   type="button" 
                   onClick={() => {
-                    onUpdateInstructions(item.id, "", []);
+                    onUpdateInstructions(item.lineId || item.cartItemId || item.id, "", []);
                     setInstructionText("");
                     setSelectedExtras([]);
                   }} 
@@ -195,15 +242,20 @@ export const CartItem = ({
               {/* Extra toppings list */}
               <label className="small fw-bold text-dark d-block mb-1.5" style={{ fontSize: '11px' }}>Add Extra Ingredients & Toppings</label>
               <div className="d-flex flex-column gap-2 mb-3 p-2.5 rounded-3 border" style={{ backgroundColor: '#f8fafc' }}>
-                {[
-                  { name: 'Extra Cheese', price: 30 },
-                  { name: 'Extra Paneer', price: 50 },
-                  { name: 'Extra Sauce', price: 20 }
-                ].map(addon => {
-                  const isChecked = selectedExtras.some(ing => ing.name === addon.name);
+                {addonLoading && (
+                  <span className="text-secondary small">Loading add-ons…</span>
+                )}
+                {!addonLoading && addonError && (
+                  <span className="text-danger small">{addonError}</span>
+                )}
+                {!addonLoading && !addonError && addonCatalog.length === 0 && (
+                  <span className="text-secondary small">No add-ons are available for this dish.</span>
+                )}
+                {addonCatalog.map(addon => {
+                  const isChecked = selectedExtras.some((ing) => String(ing.id) === String(addon.id));
                   return (
                     <label
-                      key={addon.name}
+                      key={addon.id}
                       className="d-flex align-items-center justify-content-between cursor-pointer mb-0 p-2 rounded-2 transition-all"
                       style={{
                         backgroundColor: isChecked ? '#fff1f2' : '#ffffff',
@@ -216,22 +268,19 @@ export const CartItem = ({
                           type="checkbox"
                           checked={isChecked}
                           onChange={() => {
-                            setSelectedExtras(prev => 
-                              isChecked 
-                                ? prev.filter(ing => ing.name !== addon.name)
-                                : [...prev, addon]
+                            setSelectedExtras(prev =>
+                              isChecked
+                                ? prev.filter((ing) => String(ing.id) !== String(addon.id))
+                                : [...prev.filter((ing) => String(ing.id) !== String(addon.id)), addon]
                             );
                           }}
                           className="form-check-input mt-0"
                           style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: 'var(--primary-color)' }}
                         />
                         <span className="small fw-semibold" style={{ fontSize: '11.5px', color: isChecked ? '#991b1b' : '#334155' }}>
-                          {addon.name}
+                          {addon.name} (+{formatCurrency(addon.price)})
                         </span>
                       </div>
-                      <span className="badge rounded-pill fw-bold" style={{ backgroundColor: isChecked ? '#fee2e2' : '#f1f5f9', color: isChecked ? '#dc2626' : '#64748b', fontSize: '10.5px' }}>
-                        + ₹{addon.price}
-                      </span>
                     </label>
                   );
                 })}
@@ -282,7 +331,7 @@ export const CartItem = ({
                 <button 
                   type="button" 
                   onClick={() => {
-                    onUpdateInstructions(item.id, instructionText, selectedExtras);
+                    onUpdateInstructions(item.lineId || item.cartItemId || item.id, instructionText, selectedExtras);
                     setShowEdit(false);
                   }} 
                   className="btn btn-sm btn-danger py-1.5 px-3 text-white fw-bold" 

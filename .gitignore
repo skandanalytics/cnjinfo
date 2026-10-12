@@ -4,5 +4,6 @@ __pycache__/
 .env
 backend/media/
 backend/staticfiles/
+db_backups/
 node_modules/
 dist/

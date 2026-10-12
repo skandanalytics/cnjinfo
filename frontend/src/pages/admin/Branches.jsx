@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import PageHeader from '../../components/layout/PageHeader';
 import Badge from '../../components/common/Badge';
@@ -8,7 +9,6 @@ import Modal from '../../components/common/Modal';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import SearchBar from '../../components/common/SearchBar';
-import ConfirmModal from '../../components/common/ConfirmModal';
 import { 
   FiPlus, 
   FiEdit2, 
@@ -30,6 +30,7 @@ import { useAuth } from '../../hooks/useAuth';
 export const Branches = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,6 +41,8 @@ export const Branches = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
   const [deletingBranch, setDeletingBranch] = useState(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const [saveLoading, setSaveLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
@@ -82,6 +85,15 @@ export const Branches = () => {
       window.removeEventListener('foodie_branches_updated', handleUpdate);
     };
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get('add') === '1' && isAdmin && !loading) {
+      handleOpenAdd();
+      const next = new URLSearchParams(searchParams);
+      next.delete('add');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, isAdmin, loading]);
 
   const handleOpenAdd = () => {
     setEditingBranch(null);
@@ -169,15 +181,29 @@ export const Branches = () => {
     }
   };
 
+  const openDelete = (branch) => {
+    setDeletingBranch(branch);
+    setDeleteError('');
+  };
+
+  const closeDelete = () => {
+    if (deleteLoading) return;
+    setDeletingBranch(null);
+    setDeleteError('');
+  };
+
   const handleDeleteConfirm = async () => {
-    if (!deletingBranch) return;
+    if (!deletingBranch || deleteLoading) return;
+    setDeleteLoading(true);
+    setDeleteError('');
     try {
       await branchService.deleteBranch(deletingBranch.id);
       setDeletingBranch(null);
       await fetchBranches(false);
     } catch (err) {
-      alert(err.message || 'Failed to delete branch.');
-      setDeletingBranch(null);
+      setDeleteError(err.message || 'The branch could not be deleted.');
+    } finally {
+      setDeleteLoading(false);
     }
   };
 
@@ -368,11 +394,12 @@ export const Branches = () => {
 
             <div className="col-12 col-md-4">
               <Input 
-                label="Tables on record"
+                label="Total Tables"
                 name="tablesCount"
                 type="number"
+                min={0}
                 value={formData.tablesCount}
-                readOnly
+                onChange={handleFormChange}
               />
             </div>
 
@@ -395,11 +422,17 @@ export const Branches = () => {
                   name="isMainBranch"
                   checked={formData.isMainBranch}
                   onChange={handleFormChange}
+                  disabled={Boolean(editingBranch?.isMainBranch)}
                 />
                 <label className="form-check-label small fw-semibold text-dark" htmlFor="isMainBranchCheck">
                   Set as Primary / Main Headquarters Branch
                 </label>
               </div>
+              {editingBranch?.isMainBranch && (
+                <div className="form-text small">
+                  This is the primary branch. To change it, mark another branch as primary.
+                </div>
+              )}
             </div>
           </div>
         </form>
@@ -439,7 +472,7 @@ export const Branches = () => {
         <EmptyState 
           icon={<FiHome size={48} className="text-secondary" />}
           title="No Branches Found"
-          description="There are currently no branches added yet."
+          description="Create a branch first to manage tables, meals, categories, employees, offers, and coupons."
         />
         {renderBranchModal()}
       </AdminLayout>
@@ -459,7 +492,14 @@ export const Branches = () => {
                 <SearchBar 
                   placeholder="Search branch name, code, city..." 
                   value={search} 
-                  onChange={setSearch} 
+                  onChange={setSearch}
+                  records={branches.map((branch) => ({
+                    id: branch.id,
+                    label: branch.name,
+                    title: branch.name,
+                    subtitle: [branch.code, branch.status].filter(Boolean).join(' · '),
+                    searchText: [branch.name, branch.code, branch.city, branch.status, branch.address].filter(Boolean).join(' '),
+                  }))}
                   style={{ width: '260px' }}
                 />
 
@@ -615,17 +655,15 @@ export const Branches = () => {
                         <FiEdit2 size={13} className="me-1.5" /> Edit Branch
                       </button>
 
-                      {!branch.isMainBranch && (
-                        <button
-                          type="button"
-                          onClick={() => setDeletingBranch(branch)}
-                          className="btn btn-sm btn-link text-danger p-0 text-decoration-none d-flex align-items-center"
-                          style={{ fontSize: '12px' }}
-                          title={`Delete branch ${branch.name}`}
-                        >
-                          <FiTrash2 size={13} className="me-1" /> Delete
-                        </button>
-                      )}
+                      <button
+                        type="button"
+                        onClick={() => openDelete(branch)}
+                        className="btn btn-sm btn-link text-danger p-0 text-decoration-none d-flex align-items-center"
+                        style={{ fontSize: '12px' }}
+                        title={`Delete branch ${branch.name}`}
+                      >
+                        <FiTrash2 size={13} className="me-1" /> Delete
+                      </button>
                     </div>
                   )}
                 </div>
@@ -638,16 +676,33 @@ export const Branches = () => {
       {/* Add / Edit Branch Modal */}
       {renderBranchModal()}
 
-      {/* Delete Branch Confirm Modal */}
       {deletingBranch && (
-        <ConfirmModal 
+        <Modal
           isOpen={!!deletingBranch}
           title="Delete Branch"
-          message={`Are you sure you want to delete "${deletingBranch.name}" (${deletingBranch.code})? This branch location will be removed from your management list.`}
-          confirmText="Delete Branch"
-          onConfirm={handleDeleteConfirm}
-          onClose={() => setDeletingBranch(null)}
-        />
+          onClose={closeDelete}
+          size="md"
+          footerActions={(
+            <>
+              <Button variant="light" onClick={closeDelete} disabled={deleteLoading}>Cancel</Button>
+              <Button variant="danger" onClick={handleDeleteConfirm} loading={deleteLoading}>Delete Branch</Button>
+            </>
+          )}
+        >
+          <p className="text-dark small mb-2">
+            Delete <strong>{deletingBranch.name}</strong> ({deletingBranch.code})?
+          </p>
+          <p className="text-secondary small mb-3">
+            Its employees, coupons, categories, dishes, stock records and tables are deleted. Past orders,
+            payments and bills are kept with the branch name. A branch with orders still in progress cannot be deleted.
+            If this is the primary branch, another remaining branch becomes primary automatically.
+          </p>
+          {deleteError && (
+            <div className="alert alert-danger py-2 small mb-0 d-flex align-items-center gap-2">
+              <FiAlertCircle /> {deleteError}
+            </div>
+          )}
+        </Modal>
       )}
     </AdminLayout>
   );

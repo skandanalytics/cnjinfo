@@ -91,8 +91,36 @@ export async function placeOrder(orderType, paymentMethod) {
 }
 
 export async function availableTables(branchId) {
-  const res = await api.get(`/public/branches/${branchId}/tables/`);
-  return Array.isArray(res.data) ? res.data : [];
+  try {
+    const res = await api.get(`/public/branches/${branchId}/tables/`);
+    return Array.isArray(res.data) ? res.data : [];
+  } catch (err) {
+    const status = err?.response?.status;
+    const detail = err?.response?.data?.detail;
+    const error = new Error(detail || (status === 404
+      ? 'This restaurant is not available.'
+      : 'Could not check table availability.'));
+    error.status = status;
+    throw error;
+  }
+}
+
+export async function resolvePublicBranchId() {
+  const listed = await api.get('/public/branches/');
+  const rows = Array.isArray(listed.data) ? listed.data : [];
+  const saved = sessionStorage.getItem('foodie_public_branch');
+  const current = rows.find((row) => String(row.id) === String(saved));
+  if (current) return String(current.id);
+  sessionStorage.removeItem('foodie_public_branch');
+  const pick = rows.find((row) => row.is_primary) || (rows.length === 1 ? rows[0] : null);
+  if (!pick) return null;
+  sessionStorage.setItem('foodie_public_branch', String(pick.id));
+  sessionStorage.setItem('foodie_branch_source', 'chosen');
+  return String(pick.id);
+}
+
+export function selectableTables(tables) {
+  return (tables || []).filter((table) => table.available === true || table.status === 'AVAILABLE');
 }
 
 export async function fetchCustomerOrder(orderId) {

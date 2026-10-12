@@ -10,7 +10,7 @@ class BranchBoundSerializerMixin:
     """Serializer mixin for models with a `branch` FK.
 
     - Branch-limited staff always create inside their own branch (a different one is rejected).
-    - Owner-level staff must say which branch.
+    - Owner-level staff may name a branch; otherwise the primary branch is used.
     - A record's branch cannot be changed after creation.
     Declare `branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all(), required=False)`.
     """
@@ -26,7 +26,15 @@ class BranchBoundSerializerMixin:
                     raise serializers.ValidationError({"branch": "You can only create records in your own branch."})
                 attrs["branch"] = Branch.objects.get(pk=allowed)
             elif branch is None:
-                raise serializers.ValidationError({"branch": "Branch is required."})
+                primary = Branch.objects.filter(is_primary=True).first()
+                if primary is None:
+                    if not Branch.objects.exists():
+                        raise serializers.ValidationError(
+                            {"branch": "Create a branch first to manage tables, meals, categories, "
+                                       "employees, offers, and coupons."})
+                    raise serializers.ValidationError(
+                        {"branch": "Choose a branch, or mark one branch as primary to use it by default."})
+                attrs["branch"] = primary
             if not attrs["branch"].is_active:
                 raise serializers.ValidationError({"branch": "Branch is inactive."})
         elif "branch" in attrs and attrs["branch"].id != self.instance.branch_id:

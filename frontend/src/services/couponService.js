@@ -167,27 +167,42 @@ export const couponService = {
   getCoupons: async () => {
     const { isStaffScreen, listCoupons } = await import('./adminApi');
     if (isStaffScreen()) return listCoupons();
-    const branchSource = sessionStorage.getItem('foodie_branch_source');
-    const branchId = sessionStorage.getItem('foodie_public_branch');
-    if (branchId && (branchSource === 'qr' || branchSource === 'chosen')) {
-      const menu = await api.get(`/public/branches/${branchId}/menu/`);
-      const offers = Array.isArray(menu.data?.offers) ? menu.data.offers : [];
-      return offers.map(c => {
-        const isPct = c.discount_type === 'PERCENT';
-        const discVal = parseFloat(c.discount_value || 0);
-        const minVal = parseFloat(c.min_order_value || 0);
-        return {
-          id: c.code, code: c.code, discount: discVal, discount_value: discVal,
-          type: isPct ? 'percentage' : 'fixed', discount_type: isPct ? 'PERCENTAGE' : 'FIXED',
-          minOrderValue: minVal, minimum_order_amount: minVal, status: 'Active',
-          description: c.description || (isPct ? `${discVal}% off` : `Flat ₹${discVal} off`),
-          autoApply: Boolean(c.auto_apply),
-          isFirstTimeOffer: Boolean(c.is_first_time_offer),
-          valid_until: c.valid_to,
-        };
-      });
+    let branchId = sessionStorage.getItem('foodie_public_branch');
+    if (!branchId) {
+      const listed = await api.get('/public/branches/').catch(() => ({ data: [] }));
+      const rows = Array.isArray(listed.data) ? listed.data : [];
+      const pick = rows.find((row) => row.is_primary) || (rows.length === 1 ? rows[0] : null);
+      if (!pick) return [];
+      branchId = String(pick.id);
+      sessionStorage.setItem('foodie_public_branch', branchId);
+      sessionStorage.setItem('foodie_branch_source', 'chosen');
     }
-    return [];
+    const menu = await api.get(`/public/branches/${branchId}/menu/`);
+    const offers = Array.isArray(menu.data?.offers) ? menu.data.offers : [];
+    return offers.map((c) => {
+      const isPct = c.discount_type === 'PERCENT';
+      const discVal = parseFloat(c.discount_value || 0);
+      const minVal = parseFloat(c.min_order_value || 0);
+      const maxVal = c.max_discount != null ? parseFloat(c.max_discount) : null;
+      return {
+        id: c.code,
+        code: c.code,
+        discount: discVal,
+        discount_value: discVal,
+        type: isPct ? 'percentage' : 'fixed',
+        discount_type: isPct ? 'PERCENTAGE' : 'FIXED',
+        minOrderValue: minVal,
+        minimum_order_amount: minVal,
+        maxDiscount: maxVal,
+        status: c.is_active === false ? 'Inactive' : 'Active',
+        is_active: c.is_active !== false,
+        description: c.description || (isPct ? `${discVal}% off` : `Flat ₹${discVal} off`),
+        autoApply: Boolean(c.auto_apply),
+        isFirstTimeOffer: Boolean(c.is_first_time_offer),
+        valid_from: c.valid_from,
+        valid_until: c.valid_to,
+      };
+    });
   },
 
   createCoupon: async (couponData) => {

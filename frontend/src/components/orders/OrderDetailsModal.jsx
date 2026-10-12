@@ -10,11 +10,13 @@ export const OrderDetailsModal = ({
   order,
   onClose,
   onStatusChange,
-  onViewEBill
+  onViewEBill,
+  onPaymentRecorded,
 }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'employee';
   const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState(null);
 
   if (!order) return null;
 
@@ -29,7 +31,7 @@ export const OrderDetailsModal = ({
     try {
       await onStatusChange(order.id, nextStatus, reason);
     } catch (e) {
-      window.alert(e.message || 'The status could not be updated.');
+      setNotice({ kind: 'error', text: e.message || 'The status could not be updated.' });
     }
     setLoading(false);
     onClose();
@@ -41,9 +43,10 @@ export const OrderDetailsModal = ({
     try {
       const { recordCounterPayment } = await import('../../services/adminApi');
       await recordCounterPayment(order.id);
-      window.alert('Counter payment recorded for the order total.');
+      setNotice({ kind: 'success', text: 'Payment marked as paid successfully.' });
+      if (onPaymentRecorded) await onPaymentRecorded();
     } catch (e) {
-      window.alert(e.message || 'Counter payment was not recorded.');
+      setNotice({ kind: 'error', text: e.message || 'Counter payment was not recorded.' });
     }
     setLoading(false);
     onClose();
@@ -93,7 +96,7 @@ export const OrderDetailsModal = ({
               <span className="badge bg-success rounded-pill px-3 py-2">Paid</span>
             ) : String(order.status || '').toLowerCase() !== 'cancelled' && (
               <Button variant="outline-danger" onClick={handleCounterPay} disabled={loading}>
-                Record counter payment
+                Mark as Paid
               </Button>
             )}
           </div>
@@ -104,6 +107,9 @@ export const OrderDetailsModal = ({
 
   return (
     <Modal isOpen={isOpen} title={`Order details #${order.id}`} onClose={onClose} footerActions={getActionButtons()} size="lg">
+      {notice && (
+        <div className={`alert ${notice.kind === 'error' ? 'alert-danger' : 'alert-success'} py-2 small fw-semibold`} role="status">{notice.text}</div>
+      )}
       <div className="row g-4">
         {/* Left Column: Items and summary */}
         <div className="col-12 col-md-7">

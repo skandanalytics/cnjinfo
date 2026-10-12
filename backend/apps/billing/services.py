@@ -2,6 +2,7 @@
 from django.core.files.base import ContentFile
 from django.db import IntegrityError, transaction
 
+from apps.orders.lifecycle import _invoice_contact
 from apps.orders.models import Order
 
 from .models import Invoice
@@ -23,17 +24,23 @@ def breakdown(order):
         "quantity": item.quantity,
         "unit_price": str(item.unit_price),
         "line_total": str(item.line_total),
+        "customizations": item.customizations or [],
     } for item in order.items.all()]
+    contact = _invoice_contact(order)
     return {
         "order_id": order.id,
         "order_number": order.order_number,
-        "branch": {
+        "branch": ({
             "id": branch.id, "name": branch.name, "code": branch.code,
             "address": branch.address, "city": branch.city, "phone": branch.contact_number, "email": branch.email,
-        },
+        } if branch else {
+            "id": None, "name": order.branch_name, "code": "", "address": "", "city": "", "phone": "", "email": "",
+        }),
         "order_type": order.order_type, "table_label": order.table_label, "placed_at": placed,
+        "customer_name": contact.get("customer_name") or "",
         "status": order.status,
         "payment_status": order.payment_status,
+        "payment_method": contact.get("payment_method") or "",
         "items": items,
         "items_subtotal": str(order.items_subtotal),
         "customization_total": str(order.customization_total),
@@ -45,6 +52,7 @@ def breakdown(order):
         "gst_amount": str(order.gst_amount),
         "service_charge_rate": str(order.service_charge_rate),
         "service_charge_amount": str(order.service_charge_amount),
+        "round_off": str(order.round_off),
         "total_amount": str(order.total_amount),
     }
 

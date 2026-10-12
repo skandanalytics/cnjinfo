@@ -5,6 +5,8 @@ import PageHeader from '../../components/layout/PageHeader';
 import Badge from '../../components/common/Badge';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
+import BranchRequiredState from '../../components/common/BranchRequiredState';
+import { useBranches } from '../../hooks/useBranches';
 import SearchBar from '../../components/common/SearchBar';
 import Modal from '../../components/common/Modal';
 import ConfirmModal from '../../components/common/ConfirmModal';
@@ -15,10 +17,12 @@ import { menuService } from '../../services/menuService';
 import { useAuth } from '../../hooks/useAuth';
 import api from '../../services/api';
 import { getFrontendCategoryName, normalizeCategoryName } from '../../utils/categoryUtils';
-import { FiAlertTriangle, FiAlertCircle, FiCheckCircle, FiPackage, FiFilter, FiTrash2 } from 'react-icons/fi';
+import { classifyStock } from '../../utils/stockStatus';
+import { FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiPackage, FiFilter, FiTrash2 } from 'react-icons/fi';
 
 export const Inventory = () => {
   const { user } = useAuth();
+  const { hasBranches, loading: branchesLoading } = useBranches();
   const canManageStock = user?.role === 'admin' || user?.role === 'employee' || !user?.role;
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -37,10 +41,6 @@ export const Inventory = () => {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [stockStatusFilter, setStockStatusFilter] = useState(getInitialStatus);
 
-  // Edit stock modal state
-  const [editingItem, setEditingItem] = useState(null);
-  const [newStockVal, setNewStockVal] = useState('');
-  
   // Restock modal state
   const [restockingItem, setRestockingItem] = useState(null);
   const [restockQuantity, setRestockQuantity] = useState('');
@@ -144,97 +144,25 @@ export const Inventory = () => {
     }
 
     const numericQty = Number(restockQuantity);
-    if (isNaN(numericQty) || numericQty <= 0) {
-      setValidationError('Please enter a valid positive quantity.');
+    if (!Number.isInteger(numericQty) || numericQty <= 0) {
+      setValidationError('Enter a positive whole number.');
       return;
     }
-
-    const id = restockingItem.id;
-    const nextStock = Number(restockingItem.stock || 0) + numericQty;
-    const nextStatus = nextStock > 5 ? 'In Stock' : nextStock > 0 ? 'Low Stock' : 'Out of Stock';
 
     setSaveLoading(true);
-    // Save locally immediately
     try {
-      const savedStocks = JSON.parse(localStorage.getItem('foodie_dish_stocks') || '{}');
-      savedStocks[id] = nextStock;
-      savedStocks[String(id)] = nextStock;
-      if (!isNaN(Number(id))) savedStocks[Number(id)] = nextStock;
-      if (restockingItem.name) {
-        savedStocks[restockingItem.name] = nextStock;
-        savedStocks[restockingItem.name.trim().toLowerCase()] = nextStock;
+      const { restockFood, explain } = await import('../../services/adminApi');
+      try {
+        await restockFood(restockingItem.id, numericQty);
+      } catch (err) {
+        throw new Error(explain(err));
       }
-      localStorage.setItem('foodie_dish_stocks', JSON.stringify(savedStocks));
-    } catch (e) {}
-
-    // Optimistically and immediately update local state without needing page refresh
-    setStockItems(prev => prev.map(i => i.id === id ? { ...i, stock: nextStock, status: nextStatus } : i));
-    setRestockingItem(null);
-    setSaveLoading(false);
-    
-    try {
-      await inventoryService.updateStock(id, nextStock);
-      await fetchInventorySilently();
-    } catch (e) {
-      window.alert(e.message || 'Restock failed.');
-      await fetchInventorySilently();
-    }
-  };
-
-  const handleStartEditStock = (item) => {
-    setEditingItem(item);
-    setNewStockVal(String(item.stock || 0));
-    setValidationError('');
-  };
-
-  const handleSaveStock = async (e) => {
-    e.preventDefault();
-    setValidationError('');
-
-    if (!newStockVal.trim()) {
-      setValidationError('Stock level cannot be empty.');
-      return;
-    }
-
-    const numericVal = Number(newStockVal);
-    if (isNaN(numericVal)) {
-      setValidationError('Stock level must be a numeric value.');
-      return;
-    }
-
-    if (numericVal < 0) {
-      setValidationError('Stock level cannot be negative.');
-      return;
-    }
-
-    const nextStock = Math.floor(numericVal);
-    const nextStatus = nextStock > 5 ? 'In Stock' : nextStock > 0 ? 'Low Stock' : 'Out of Stock';
-    const itemId = editingItem.id;
-    const itemName = editingItem.name;
-
-    // Save locally immediately
-    try {
-      const savedStocks = JSON.parse(localStorage.getItem('foodie_dish_stocks') || '{}');
-      savedStocks[itemId] = nextStock;
-      savedStocks[String(itemId)] = nextStock;
-      if (!isNaN(Number(itemId))) savedStocks[Number(itemId)] = nextStock;
-      if (itemName) {
-        savedStocks[itemName] = nextStock;
-        savedStocks[itemName.trim().toLowerCase()] = nextStock;
-      }
-      localStorage.setItem('foodie_dish_stocks', JSON.stringify(savedStocks));
-    } catch (e) {}
-
-    // Optimistically and immediately update UI state
-    setStockItems(prev => prev.map(i => i.id === itemId ? { ...i, stock: nextStock, status: nextStatus } : i));
-    setEditingItem(null);
-
-    try {
-      await inventoryService.updateStock(itemId, nextStock);
+      setRestockingItem(null);
       await fetchInventorySilently();
     } catch (err) {
-      window.alert(err.message || 'Stock could not be updated.');
-      await fetchInventorySilently();
+      setValidationError(err.message || 'Restock failed.');
+    } finally {
+      setSaveLoading(false);
     }
   };
 
@@ -260,18 +188,13 @@ export const Inventory = () => {
   }, [allMenus, stockItems]);
 
   // Derived stock status statistics
+  const isOutOfStockItem = (item) => classifyStock(item.stock) === 'Out of Stock';
+  const isLowStockItem = (item) => classifyStock(item.stock) === 'Low Stock';
+
   const totalCount = stockItems.length;
-  const outOfStockItems = useMemo(() => {
-    return stockItems.filter(i => Number(i.stock || 0) <= 0 || i.status === 'Out of Stock' || i.status === 'OUT_OF_STOCK');
-  }, [stockItems]);
-
-  const lowStockItems = useMemo(() => {
-    return stockItems.filter(i => Number(i.stock || 0) > 0 && Number(i.stock || 0) <= 5 && i.status !== 'Out of Stock' && i.status !== 'OUT_OF_STOCK');
-  }, [stockItems]);
-
-  const inStockItems = useMemo(() => {
-    return stockItems.filter(i => Number(i.stock || 0) > 5 && i.status !== 'Out of Stock' && i.status !== 'OUT_OF_STOCK');
-  }, [stockItems]);
+  const outOfStockItems = useMemo(() => stockItems.filter(isOutOfStockItem), [stockItems]);
+  const lowStockItems = useMemo(() => stockItems.filter(isLowStockItem), [stockItems]);
+  const inStockItems = useMemo(() => stockItems.filter((item) => !isOutOfStockItem(item) && !isLowStockItem(item)), [stockItems]);
 
   // Combine search, category, and highlighted stock status toggle filter
   const filteredItems = stockItems.filter((item) => {
@@ -297,10 +220,9 @@ export const Inventory = () => {
         (filterCatNorm.includes(itemCatNorm) && itemCatNorm.length > 3);
     }
 
-    const currentStock = Number(item.stock || 0);
-    const isOut = currentStock <= 0 || item.status === 'Out of Stock' || item.status === 'OUT_OF_STOCK';
-    const isLow = currentStock > 0 && currentStock <= 5 && !isOut;
-    const isIn = currentStock > 5 && !isOut;
+    const isOut = isOutOfStockItem(item);
+    const isLow = isLowStockItem(item);
+    const isIn = !isOut && !isLow;
 
     let matchesStatus = true;
     if (stockStatusFilter === 'OUT_OF_STOCK') {
@@ -309,6 +231,8 @@ export const Inventory = () => {
       matchesStatus = isLow;
     } else if (stockStatusFilter === 'IN_STOCK') {
       matchesStatus = isIn;
+    } else if (stockStatusFilter === 'ALERTS') {
+      matchesStatus = isOut || isLow;
     }
 
     return matchesSearch && matchesCategory && matchesStatus;
@@ -316,12 +240,26 @@ export const Inventory = () => {
 
   return (
     <AdminLayout>
-      {loading ? (
+      {loading || branchesLoading ? (
         <div className="py-5 text-center">
           <Loader />
           <p className="text-muted small mt-2">Loading inventory data...</p>
         </div>
-      ) : stockItems.length === 0 ? null : (
+      ) : !hasBranches ? (
+        <>
+          <PageHeader title="Inventory Management" showBackButton />
+          <BranchRequiredState />
+        </>
+      ) : stockItems.length === 0 ? (
+        <>
+          <PageHeader title="Inventory Management" showBackButton />
+          <EmptyState
+            icon="bi-box"
+            title="No inventory items"
+            description="Inventory appears after dishes are added to a branch menu."
+          />
+        </>
+      ) : (
         <>
           <PageHeader 
             title="Inventory Management" 
@@ -331,8 +269,14 @@ export const Inventory = () => {
                 <SearchBar 
                   placeholder="Search items..." 
                   value={search} 
-                  onChange={setSearch} 
-                  suggestions={stockItems.map(i => i.name)}
+                  onChange={setSearch}
+                  records={stockItems.map((item) => ({
+                    id: item.id,
+                    label: item.name,
+                    title: item.name,
+                    subtitle: `${item.stock ?? 0} available · ${classifyStock(item.stock)}`,
+                    searchText: [item.name, item.category, item.status].filter(Boolean).join(' '),
+                  }))}
                   style={{ width: '220px' }}
                 />
                 <div className="d-flex align-items-center gap-2">
@@ -407,18 +351,17 @@ export const Inventory = () => {
                   </div>
                 </div>
                 <div className={`mt-2 small fw-bold ${stockStatusFilter === 'OUT_OF_STOCK' ? 'text-white' : 'text-danger'}`} style={{ fontSize: '11px' }}>
-                  {stockStatusFilter === 'OUT_OF_STOCK' ? '✓ Filter active (Click to clear)' : '⚠ Click to toggle Out of Stock'}
+                  {stockStatusFilter === 'OUT_OF_STOCK' ? 'Showing out of stock (click to clear)' : 'Click to view Out of Stock'}
                 </div>
               </div>
             </div>
 
-            {/* Low Stock Card / Toggle (HIGHLIGHTED) */}
             <div className="col-12 col-sm-6 col-xl-3">
-              <div 
+              <div
                 onClick={() => handleToggleStatus('LOW_STOCK')}
                 className={`card rounded-4 border-0 p-3 h-100 transition-all cursor-pointer ${
-                  stockStatusFilter === 'LOW_STOCK' 
-                    ? 'shadow-lg border border-2 border-warning bg-warning text-dark' 
+                  stockStatusFilter === 'LOW_STOCK'
+                    ? 'shadow-lg border border-2 border-warning bg-warning text-dark'
                     : lowStockItems.length > 0
                       ? 'shadow-sm bg-white border border-warning-subtle'
                       : 'shadow-sm bg-white'
@@ -428,7 +371,7 @@ export const Inventory = () => {
                 <div className="d-flex align-items-center justify-content-between">
                   <div>
                     <span className={`small fw-bold text-uppercase d-block mb-1 ${stockStatusFilter === 'LOW_STOCK' ? 'text-dark opacity-90' : 'text-warning-emphasis'}`}>
-                      Low Stock (1-5)
+                      Low Stock
                     </span>
                     <h3 className={`fw-bold mb-0 ${stockStatusFilter === 'LOW_STOCK' ? 'text-dark' : 'text-warning-emphasis'}`}>
                       {lowStockItems.length}
@@ -439,7 +382,7 @@ export const Inventory = () => {
                   </div>
                 </div>
                 <div className={`mt-2 small fw-bold ${stockStatusFilter === 'LOW_STOCK' ? 'text-dark' : 'text-warning-emphasis'}`} style={{ fontSize: '11px' }}>
-                  {stockStatusFilter === 'LOW_STOCK' ? '✓ Filter active (Click to clear)' : '⚡ Click to toggle Low Stock'}
+                  {stockStatusFilter === 'LOW_STOCK' ? 'Showing low stock (click to clear)' : 'Click to view Low Stock'}
                 </div>
               </div>
             </div>
@@ -458,7 +401,7 @@ export const Inventory = () => {
                 <div className="d-flex align-items-center justify-content-between">
                   <div>
                     <span className={`small fw-bold text-uppercase d-block mb-1 ${stockStatusFilter === 'IN_STOCK' ? 'text-white opacity-90' : 'text-success'}`}>
-                      In Stock (&gt; 5)
+                      In Stock (6 or more)
                     </span>
                     <h3 className={`fw-bold mb-0 ${stockStatusFilter === 'IN_STOCK' ? 'text-white' : 'text-success'}`}>
                       {inStockItems.length}
@@ -488,8 +431,12 @@ export const Inventory = () => {
             
             {filteredItems.length === 0 ? (
               <EmptyState
-                title="No Items Found"
-                description="There are no inventory items matching the selected search or category filters."
+                title={stockStatusFilter === 'OUT_OF_STOCK' ? 'No Out of Stock Items' : stockStatusFilter === 'LOW_STOCK' ? 'No Low Stock Items' : 'No Items Found'}
+                description={stockStatusFilter === 'OUT_OF_STOCK'
+                  ? 'No dishes are out of stock for the current branch.'
+                  : stockStatusFilter === 'LOW_STOCK'
+                    ? 'No dishes have between 1 and 5 units left.'
+                    : 'There are no inventory items matching the selected search or category filters.'}
                 icon="bi-box-seam"
               />
             ) : (
@@ -519,21 +466,12 @@ export const Inventory = () => {
                         </td>
                         <td>{item.category}</td>
                         <td className="fw-bold">
-                          <span className={item.stock <= 0 ? 'text-danger fw-bold' : item.stock <= 5 ? 'text-warning-emphasis' : 'text-dark'}>
+                          <span className={isOutOfStockItem(item) ? 'text-danger fw-bold' : isLowStockItem(item) ? 'text-warning-emphasis' : 'text-dark'}>
                             {item.stock <= 0 ? 'Out of Stock' : `${item.stock} Units`}
                           </span>
-                          {canManageStock && (
-                            <button 
-                              onClick={() => handleStartEditStock(item)}
-                              className="btn btn-link btn-sm text-danger ms-2 p-0 border-0 fw-semibold text-decoration-none"
-                              style={{ fontSize: '11px' }}
-                            >
-                              [ Edit ]
-                            </button>
-                          )}
                         </td>
                         <td>
-                          <Badge status={item.stock <= 0 ? 'Out of Stock' : item.stock <= 5 ? 'Low Stock' : 'In Stock'} style={{ fontSize: '10px' }} />
+                          <Badge status={isOutOfStockItem(item) ? 'Out of Stock' : isLowStockItem(item) ? 'Low Stock' : 'In Stock'} style={{ fontSize: '10px' }} />
                         </td>
                         {canManageStock && (
                           <td className="text-end">
@@ -564,52 +502,6 @@ export const Inventory = () => {
             )}
           </div>
         </>
-      )}
-
-      {/* Edit Stock Modal */}
-      {canManageStock && editingItem && (
-        <Modal 
-          isOpen={!!editingItem} 
-          title="Edit Stock Level" 
-          onClose={() => setEditingItem(null)}
-          footerActions={
-            <>
-              <Button variant="light" onClick={() => setEditingItem(null)} disabled={saveLoading}>
-                Cancel
-              </Button>
-              <Button variant="primary" onClick={handleSaveStock} loading={saveLoading}>
-                Save
-              </Button>
-            </>
-          }
-        >
-          <form onSubmit={handleSaveStock}>
-            <div className="mb-3">
-              <label className="form-label small fw-semibold text-secondary">Product Name</label>
-              <input type="text" className="form-control rounded-3 py-2 bg-light border-0" value={editingItem.name} readOnly disabled />
-            </div>
-            
-            <div className="mb-3">
-              <label className="form-label small fw-semibold text-secondary">Current Stock</label>
-              <input type="text" className="form-control rounded-3 py-2 bg-light border-0" value={editingItem.stock} readOnly disabled />
-            </div>
-
-            <Input 
-              label="New Stock Level" 
-              type="number"
-              placeholder="e.g. 40" 
-              value={newStockVal} 
-              onChange={(e) => {
-                setNewStockVal(e.target.value);
-                setValidationError('');
-              }} 
-              required 
-            />
-            {validationError && (
-              <div className="text-danger small fw-semibold mt-1 mb-2">{validationError}</div>
-            )}
-          </form>
-        </Modal>
       )}
 
       {/* Restock Modal */}
@@ -672,7 +564,7 @@ export const Inventory = () => {
               await inventoryService.deleteInventoryItem(deletingItem.id);
               await fetchInventorySilently();
             } catch (e) {
-              console.error("Delete inventory error:", e);
+              window.alert(e.message || 'The inventory record could not be deleted.');
             }
             setDeleteLoading(false);
             setDeletingItem(null);

@@ -1,4 +1,5 @@
-﻿from django.db.models import Count
+﻿from django.db import transaction
+from django.db.models import Count, Q
 from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.response import Response
@@ -11,11 +12,13 @@ from apps.accounts.services import client_ip, record_audit
 from .models import Category, CustomizationOption, DishDiscount, Food, FoodImage
 from .serializers import (CategorySerializer, CustomizationSerializer, DishDiscountSerializer, FoodImageSerializer,
                           FoodSerializer)
+from .services import delete_foods, foods_in_active_orders
 
 
 class CategoryViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
     audit_entity = "Category"
-    queryset = Category.objects.select_related("branch").annotate(dish_count=Count("foods"))
+    queryset = Category.objects.select_related("branch").annotate(
+        dish_count=Count("foods", filter=Q(foods__is_active=True)))
     serializer_class = CategorySerializer
     permission_classes = [StaffReadAdminWrite]
     filterset_fields = ["branch", "is_active"]
@@ -23,15 +26,24 @@ class CategoryViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
     ordering_fields = ["display_order", "name", "id"]
 
     def destroy(self, request, *args, **kwargs):
-        """Never-used categories are deleted; categories that hold dishes are deactivated (history is kept)."""
+        """A category that still lists dishes is not deleted; the admin deletes or moves them first. Dishes that
+        were already removed from the menu (inactive) are deleted with it."""
         category = self.get_object()
-        if category.foods.exists():
-            category.is_active = False
-            category.save(update_fields=["is_active", "updated_at"])
-            self.audit("deactivate", category)
-            return Response({"detail": "Category contains dishes, so it was deactivated.", "deactivated": True})
-        self.audit("delete", category)
-        category.delete()
+        listed = category.foods.filter(is_active=True).count()
+        if listed:
+            noun = "dish" if listed == 1 else "dishes"
+            return Response({"detail": f"This category still has {listed} {noun}. Delete them or move them to "
+                                       "another category first.", "code": "category_not_empty"},
+                            status=status.HTTP_409_CONFLICT)
+        hidden = category.foods.filter(is_active=False)
+        if foods_in_active_orders(hidden):
+            return Response({"detail": "A dish from this category is in an order that is still in progress.",
+                             "code": "dish_in_active_order"}, status=status.HTTP_409_CONFLICT)
+        with transaction.atomic():
+            delete_foods(hidden)
+            category.children.update(parent=None)
+            self.audit("delete", category)
+            category.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -47,18 +59,16 @@ class FoodViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
     ordering_fields = ["name", "price", "created_at"]
 
     def destroy(self, request, *args, **kwargs):
-        """Dishes that were ordered, carted or stocked are deactivated; others are deleted."""
+        """Deletes the dish. Past orders keep their item snapshot and the stock ledger keeps its rows."""
         food = self.get_object()
-        referenced = (food.order_items.exists() or food.cart_items.exists()
-                      or hasattr(food, "inventory"))
-        if referenced:
-            food.is_active = False
-            food.save(update_fields=["is_active", "updated_at"])
-            self.audit("deactivate", food)
-            return Response({"detail": "Dish is referenced by orders or stock, so it was deactivated.",
-                             "deactivated": True})
-        self.audit("delete", food)
-        food.delete()
+        target = Food.objects.filter(pk=food.pk)
+        if foods_in_active_orders(target):
+            return Response({"detail": "This dish is in an order that is still in progress. Complete or cancel "
+                                       "that order before deleting the dish.", "code": "dish_in_active_order"},
+                            status=status.HTTP_409_CONFLICT)
+        with transaction.atomic():
+            self.audit("delete", food)
+            delete_foods(target)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 

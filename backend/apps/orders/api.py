@@ -2,7 +2,7 @@ from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import IsCustomer, IsStaffMember, get_active_employee
+from apps.accounts.permissions import ADMIN_ROLES, IsCustomer, IsStaffMember, get_active_employee
 from apps.accounts.scoping import allowed_branch_id, can_access_branch
 from apps.accounts.services import record_audit
 from apps.branches.models import Branch
@@ -19,6 +19,12 @@ class PlaceOrderSerializer(serializers.Serializer):
 
 def _error(exc):
     return Response({"detail": exc.detail, "code": exc.code}, status=exc.http_status)
+
+
+def _sees_every_order(user):
+    """Admins and branch managers see every order in their branch. Other staff see orders they placed."""
+    employee = get_active_employee(user)
+    return employee is not None and employee.role in ADMIN_ROLES
 
 
 class OrderListCreateView(APIView):
@@ -51,8 +57,8 @@ class OrderListCreateView(APIView):
             qs = Order.objects.all()
             if emp.branch_id is not None:
                 qs = qs.filter(branch_id=emp.branch_id)
-            # Employee history is the orders that employee placed. The kitchen queue stays branch-wide.
-            if request.query_params.get("mine") == "1":
+            # Staff below manager only receive orders they placed. A query parameter cannot widen that.
+            if emp.role not in ADMIN_ROLES or request.query_params.get("mine") == "1":
                 qs = qs.filter(placed_by=user)
         status_filter = request.query_params.get("status")
         if status_filter:
@@ -125,9 +131,11 @@ class OrderDetailView(APIView):
             return None
         if user.user_type == "CUSTOMER":
             return order if order.customer_id == user.id else None
-        if can_access_branch(user, order.branch_id):
-            return order
-        return None
+        if not can_access_branch(user, order.branch_id):
+            return None
+        if not _sees_every_order(user) and order.placed_by_id != user.id:
+            return None
+        return order
 
 
 class OrderTransitionView(APIView):
@@ -136,6 +144,8 @@ class OrderTransitionView(APIView):
     def post(self, request, pk):
         order = Order.objects.filter(pk=pk).first()
         if order is None or not can_access_branch(request.user, order.branch_id):
+            return Response({"detail": "Not found."}, status=404)
+        if not _sees_every_order(request.user) and order.placed_by_id != request.user.id:
             return Response({"detail": "Not found."}, status=404)
         new_status = request.data.get("status", "")
         if new_status not in Order.Status.values:
@@ -154,9 +164,12 @@ class KitchenQueueView(APIView):
 
     def get(self, request):
         emp = get_active_employee(request.user)
-        qs = Order.objects.filter(status__in=[Order.Status.PENDING, Order.Status.PREPARING, Order.Status.READY])
+        qs = Order.objects.filter(status__in=[Order.Status.PENDING, Order.Status.PREPARING, Order.Status.READY,
+                                              Order.Status.SERVED, Order.Status.COMPLETED])
         if emp.branch_id is not None:
             qs = qs.filter(branch_id=emp.branch_id)
+        if emp.role not in ADMIN_ROLES:
+            qs = qs.filter(placed_by=request.user)
         wanted = request.query_params.get("status")
         if wanted:
             qs = qs.filter(status=wanted)
