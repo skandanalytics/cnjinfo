@@ -1,0 +1,9 @@
+Watching for file changes with StatReloader
+Not Found: /
+HTTP GET / 404 [0.05, 127.0.0.1:49682]
+Unauthorized: /api/
+HTTP GET /api/ 401 [0.01, 127.0.0.1:49682]
+DEV OTP for +918985506125 is 459312
+HTTP POST /api/auth/otp/send/ 200 [0.52, 127.0.0.1:56378]
+Not Found: /api/users/otp/request/
+HTTP POST /api/users/otp/request/ 404 [0.18, 127.0.0.1:51832]
