@@ -254,9 +254,6 @@ const mapProductToFrontend = (food, categories, inventory, images) => {
     foodType: resolvedType,
     rating: food.rating || 4.5,
     calories: food.calories !== undefined ? food.calories : null,
-    protein: food.protein !== undefined && food.protein !== null
-      ? food.protein
-      : (food.protein_grams !== undefined && food.protein_grams !== null ? food.protein_grams : null),
     popular: isTopSellingDish,
     isPopular: isTopSellingDish,
     isTopSelling: isTopSellingDish,

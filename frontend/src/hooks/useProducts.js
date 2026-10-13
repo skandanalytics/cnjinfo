@@ -38,17 +38,29 @@ export const useProducts = () => {
     window.addEventListener('foodie_products_updated', handleSync);
     window.addEventListener('foodie_inventory_updated', handleSync);
     window.addEventListener('foodie_categories_updated', handleSync);
-    window.addEventListener('foodie_orders_updated', handleSync);
+    window.addEventListener('foodie_offers_updated', handleSync);
     window.addEventListener('foodie_top_selling_updated', handleSync);
-    window.addEventListener('storage', handleSync);
+    const handleStorage = (event) => {
+      const key = event.key || '';
+      if (
+        key === 'foodie_data_sync'
+        || key === 'foodie_inventory_sync_trigger'
+        || key.startsWith('foodie_dish')
+        || key.startsWith('foodie_categor')
+        || key.startsWith('foodie_offer')
+      ) {
+        handleSync();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
 
     return () => {
       window.removeEventListener('foodie_products_updated', handleSync);
       window.removeEventListener('foodie_inventory_updated', handleSync);
       window.removeEventListener('foodie_categories_updated', handleSync);
-      window.removeEventListener('foodie_orders_updated', handleSync);
+      window.removeEventListener('foodie_offers_updated', handleSync);
       window.removeEventListener('foodie_top_selling_updated', handleSync);
-      window.removeEventListener('storage', handleSync);
+      window.removeEventListener('storage', handleStorage);
     };
   }, []);
 

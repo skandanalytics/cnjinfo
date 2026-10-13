@@ -148,7 +148,7 @@ class FoodSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
     class Meta:
         model = Food
         fields = ["id", "branch", "category", "category_name", "name", "description", "ingredients", "diet_type",
-                  "price", "original_price", "discounted_price", "current_discount", "calories", "protein_grams",
+                  "price", "original_price", "discounted_price", "current_discount", "calories",
                   "is_active", "is_sold_out", "stock_status", "is_orderable", "image_url", "images",
                   "primary_image", "customizations", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]

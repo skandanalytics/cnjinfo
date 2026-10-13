@@ -294,6 +294,8 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key):
 @transaction.atomic
 def change_status(order_id, new_status, actor, reason=""):
     order = Order.objects.select_for_update().get(pk=order_id)
+    if new_status == order.status:
+        return order
     if new_status not in TRANSITIONS.get(order.status, ()):
         raise OrderError(f"Cannot move an order from {order.status} to {new_status}.", "invalid_transition", 409)
     if new_status == Order.Status.CANCELLED and not reason.strip():

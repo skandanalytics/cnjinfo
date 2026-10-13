@@ -30,7 +30,7 @@ def public_food(food, request, now=None):
         "description": food.description, "ingredients": food.ingredients, "diet_type": food.diet_type,
         "original_price": str(price), "discounted_price": str(money(price - amount)),
         "discount_percent": str(percent), "has_discount": disc is not None,
-        "calories": food.calories, "protein_grams": None if food.protein_grams is None else str(food.protein_grams),
+        "calories": food.calories,
         "is_orderable": is_orderable(food), "stock_status": stock_status(food),
         "quantity": None if inventory_of(food) is None else inventory_of(food).quantity,
         "primary_image": display_image(food, request),

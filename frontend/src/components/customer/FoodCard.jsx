@@ -218,26 +218,14 @@ export const FoodCard = ({ dish }) => {
               />
             </div>
           ) : (
-            <div className="d-flex align-items-center gap-1">
-              <button
-                type="button"
-                onClick={handleQuickAdd}
-                className="btn btn-sm btn-outline-danger food-card-add-btn rounded-pill px-3 py-1 fw-bold"
-                style={{ fontSize: '11px' }}
-              >
-                Add +
-              </button>
-              {typeof window !== 'undefined' && sessionStorage.getItem('foodie_auth_admin') && sessionStorage.getItem('foodie_table') && (
-                <button
-                  type="button"
-                  onClick={handleQuickAdd}
-                  className="btn btn-sm btn-danger rounded-pill px-3 py-1 fw-bold"
-                  style={{ fontSize: '11px' }}
-                >
-                  Add to Cart
-                </button>
-              )}
-            </div>
+            <button
+              type="button"
+              onClick={handleQuickAdd}
+              className="btn btn-sm btn-outline-danger food-card-add-btn rounded-pill px-3 py-1 fw-bold"
+              style={{ fontSize: '11px' }}
+            >
+              Add +
+            </button>
           )}
         </div>
       </div>

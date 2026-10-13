@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import Button from '../../components/common/Button';
@@ -13,6 +13,17 @@ export const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/db/status/', { headers: { Accept: 'application/json' } })
+      .then((res) => res.ok ? res.json() : Promise.reject())
+      .then((data) => {
+        if (active && data.setup_required) navigate('/db', { replace: true });
+      })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [navigate]);
 
   // Forgot Password Modal State
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);

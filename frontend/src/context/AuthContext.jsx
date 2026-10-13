@@ -9,7 +9,8 @@ const restoreInitialAuth = () => {
   }
 
   const path = window.location.pathname;
-  const isAdminRoute = path.startsWith('/admin') || path.includes('/admin') || path.startsWith('/employee');
+  const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
+  const isAdminRoute = path.startsWith('/admin') || path.startsWith('/employee') || path.startsWith('/db') || staffOrdering;
   const roleKey = isAdminRoute ? 'admin' : 'customer';
   const key = `foodie_auth_${roleKey}`;
   const tokenKey = `foodie_token_${roleKey}`;
@@ -43,7 +44,13 @@ const restoreInitialAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [authState, setAuthState] = useState(restoreInitialAuth);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    const path = window.location.pathname;
+    const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
+    const staffRoute = path.startsWith('/admin') || path.startsWith('/employee') || path.startsWith('/db') || staffOrdering;
+    return staffRoute && Boolean(sessionStorage.getItem('foodie_staff_access'));
+  });
   const { user, isAuthenticated } = authState;
 
   useEffect(() => {
@@ -58,6 +65,25 @@ export const AuthProvider = ({ children }) => {
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  useEffect(() => {
+    if (!loading) return undefined;
+    let active = true;
+    import('../services/staffClient').then(({ staffJson, clearStaffSession }) => {
+      staffJson('/auth/me/')
+        .then(() => {
+          if (active) setLoading(false);
+        })
+        .catch(() => {
+          if (!active) return;
+          clearStaffSession();
+          sessionStorage.removeItem('foodie_staff_ordering');
+          setAuthState({ user: null, isAuthenticated: false });
+          setLoading(false);
+        });
+    });
+    return () => { active = false; };
+  }, [loading]);
 
   const saveSession = (userObj, token, refresh) => {
     // Save unauthenticated guest cart temporarily for seamless login cart merging ONLY for customers

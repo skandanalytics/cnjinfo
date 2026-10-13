@@ -1,18 +1,10 @@
 import React from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
-import { useAuth } from '../../hooks/useAuth';
-import { FiHome, FiShoppingCart, FiClock, FiLogOut } from 'react-icons/fi';
+import { FiHome, FiShoppingCart, FiClock } from 'react-icons/fi';
 
 export const BottomNavigation = () => {
   const { cartItems } = useCart();
-  const { logout, user } = useAuth();
-  const navigate = useNavigate();
-
-  const handleLogout = () => {
-    logout();
-    navigate('/customer/welcome');
-  };
 
   const totalQuantity = cartItems.reduce((sum, item) => sum + item.quantity, 0);
 
@@ -37,16 +29,6 @@ export const BottomNavigation = () => {
         <FiClock />
         <span>History</span>
       </NavLink>
-
-      {user && (
-        <button 
-          onClick={handleLogout} 
-          className="btn border-0 p-0 customer-bottom-nav-item bg-transparent"
-        >
-          <FiLogOut />
-          <span>Logout</span>
-        </button>
-      )}
     </nav>
   );
 };

@@ -65,11 +65,14 @@ html, body {
   box-shadow: 0 4px 10px rgba(255, 87, 47, 0.2);
 }
 
-.btn-primary-custom:hover,
-.btn-primary-custom:focus {
+.btn-primary-custom:hover {
   background-color: var(--primary-dark);
   border-color: var(--primary-dark);
   color: var(--secondary-color);
+}
+.btn-primary-custom:focus-visible {
+  outline: 2px solid var(--primary-dark);
+  outline-offset: 2px;
 }
 
 .btn-primary-custom:disabled {
@@ -89,11 +92,14 @@ html, body {
   transition: all 0.2s ease;
 }
 
-.btn-secondary-custom:hover,
-.btn-secondary-custom:focus {
+.btn-secondary-custom:hover {
   background-color: var(--primary-light);
   color: var(--primary-dark);
   border-color: var(--primary-dark);
+}
+.btn-secondary-custom:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 /* Outline Danger & Add Button Styles */
@@ -105,15 +111,18 @@ html, body {
   transition: all 0.2s ease !important;
 }
 
-.food-card-add-btn:hover,
-.food-card-add-btn:focus,
-.food-card-add-btn:active,
-.btn-outline-danger:hover,
-.btn-outline-danger:focus,
-.btn-outline-danger:active {
-  background-color: var(--primary-color) !important;
-  border-color: var(--primary-color) !important;
-  color: #ffffff !important;
+@media (hover: hover) and (pointer: fine) {
+  .food-card-add-btn:hover,
+  .btn-outline-danger:hover {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: #ffffff !important;
+  }
+}
+.food-card-add-btn:focus-visible,
+.btn-outline-danger:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 /* Veg / Non-Veg / Vegan Badges */
@@ -228,25 +237,21 @@ html, body {
 }
 
 /* Dining Option Card Hover Fixes */
-.dining-option-card:hover .text-dark,
-.dining-option-card:hover .text-secondary,
-.dining-option-card:hover .text-muted,
-.dining-option-card:hover .text-danger,
-.dining-option-card:focus .text-dark,
-.dining-option-card:focus .text-secondary,
-.dining-option-card:focus .text-muted,
-.dining-option-card:focus .text-danger,
-.dining-option-card:active .text-dark,
-.dining-option-card:active .text-secondary,
-.dining-option-card:active .text-muted,
-.dining-option-card:active .text-danger {
-  color: #ffffff !important;
+@media (hover: hover) and (pointer: fine) {
+  .dining-option-card:hover .text-dark,
+  .dining-option-card:hover .text-secondary,
+  .dining-option-card:hover .text-muted,
+  .dining-option-card:hover .text-danger {
+    color: #ffffff !important;
+  }
+  .dining-option-card:hover .dining-option-icon {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+    color: #ffffff !important;
+  }
 }
-.dining-option-card:hover .dining-option-icon,
-.dining-option-card:focus .dining-option-icon,
-.dining-option-card:active .dining-option-icon {
-  background-color: rgba(255, 255, 255, 0.2) !important;
-  color: #ffffff !important;
+.dining-option-card:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
 }
 
 .foodie-invoice {

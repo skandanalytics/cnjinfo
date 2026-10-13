@@ -24,8 +24,7 @@ export const Welcome = () => {
   const { sendOTP, verifyOTP } = useAuth();
 
   const [tableNum, setTableNum] = useState(() => {
-    const init = tableParam || qrParam;
-    return init ? tableService.getCanonicalTableNumber(init) : '';
+    return tableParam ? tableService.getCanonicalTableNumber(tableParam) : '';
   });
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -35,6 +34,7 @@ export const Welcome = () => {
   const [infoMessage, setInfoMessage] = useState('');
   const [loading, setLoading] = useState(false);
   const [qrDisabled, setQrDisabled] = useState(false);
+  const [qrMessage, setQrMessage] = useState('');
   const [, setDineInAvailable] = useState(hasScannedTable);
   const [checkingTables, setCheckingTables] = useState(false);
   const [tableChoices, setTableChoices] = useState(null);
@@ -93,6 +93,12 @@ export const Welcome = () => {
     setError('');
     setAvailabilityMessage('');
     setAvailabilityError('');
+    if (qrParam) {
+      if (!hasScannedTable() || qrDisabled) return;
+      setOrderType(DINE_IN);
+      goHome();
+      return;
+    }
     if (hasScannedTable()) {
       setOrderType(DINE_IN);
       goHome();
@@ -159,7 +165,14 @@ export const Welcome = () => {
       api.get(`/public/qr/${qrParam}/`).then((res) => {
         const table = res.data?.table;
         const branch = res.data?.branch;
-        if (!table) return;
+        if (!table) {
+          rememberScannedTableQr(null);
+          setTableNum('');
+          setDineInAvailable(false);
+          setQrDisabled(true);
+          setQrMessage('This table QR is currently unavailable or disabled.');
+          return;
+        }
         rememberScannedTableQr(qrParam);
         if (branch?.id) {
           sessionStorage.setItem('foodie_public_branch', String(branch.id));
@@ -169,15 +182,19 @@ export const Welcome = () => {
           tableNumber: table.table_number, tableId: table.id,
           diners: table.capacity || 2, orderType: DINE_IN, location: table.location || '',
         };
+        setSelectedTableId(table.id);
         setTable(ctx);
         setTableNum(table.table_number);
         setOrderType(DINE_IN);
         setDineInAvailable(true);
         setQrDisabled(false);
+        setQrMessage('');
       }).catch((err) => {
         rememberScannedTableQr(null);
+        setTableNum('');
         setDineInAvailable(false);
         setQrDisabled(true);
+        setQrMessage(err.response?.data?.detail || 'This table QR is currently unavailable or disabled.');
         setError(err.response?.data?.detail || 'This table QR is currently unavailable or disabled.');
       });
     }
@@ -347,6 +364,9 @@ export const Welcome = () => {
         {availabilityError && (
           <div className="alert alert-danger text-start small" role="alert">{availabilityError}</div>
         )}
+        {qrParam && qrMessage && (
+          <div className="alert alert-danger text-start small" role="alert">{qrMessage}</div>
+        )}
 
         {showOrderTypeSelection ? (
           <div className="text-center py-2 animate-fade-in">
@@ -360,7 +380,7 @@ export const Welcome = () => {
               <p className="text-secondary small mb-0">How would you like to enjoy your food today?</p>
             </div>
 
-            {tableChoices && (
+            {tableChoices && !qrParam && !hasScannedTable() && (
               <div className="d-flex flex-column gap-2 mb-3 text-start">
                 <p className="small fw-semibold mb-1">Choose your table</p>
                 {tableChoices.map((table) => (
@@ -382,7 +402,7 @@ export const Welcome = () => {
                 type="button"
                 data-testid="welcome-dine-in"
                 onClick={() => handleSelectOrderType(DINE_IN)}
-                disabled={checkingTables}
+                disabled={checkingTables || qrDisabled || (Boolean(qrParam) && !hasScannedTable())}
                 className="btn btn-outline-danger p-3 rounded-4 d-flex align-items-center gap-3 text-start border-2 shadow-sm bg-white dining-option-card"
                 style={{ borderColor: 'var(--primary-color, #dc3545)' }}
               >
@@ -397,7 +417,11 @@ export const Welcome = () => {
                   <span className="text-secondary small d-block mt-0.5" style={{ fontSize: '11.5px', lineHeight: '1.3' }}>
                     {checkingTables
                       ? 'Checking tables…'
-                      : 'Served at an available table, or scan the QR code on your table'}
+                      : qrParam && !hasScannedTable()
+                        ? (qrDisabled ? 'This table QR cannot be used' : 'Confirming this table…')
+                        : tableNum && String(tableNum).toLowerCase() !== 'takeaway' && (qrParam || hasScannedTable())
+                          ? `Dine in at table ${tableService.getCanonicalTableNumber(tableNum)}`
+                          : 'Served at an available table, or scan the QR code on your table'}
                   </span>
                 </div>
               </button>

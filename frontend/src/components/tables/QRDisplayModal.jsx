@@ -1,9 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Loader from '../common/Loader';
-import { qrService } from '../../services/qrService';
 import { FiPrinter, FiToggleLeft, FiToggleRight } from 'react-icons/fi';
 
 export const QRDisplayModal = ({
@@ -13,6 +12,7 @@ export const QRDisplayModal = ({
   onRefresh
 }) => {
   const [qrRecord, setQrRecord] = useState(null);
+  const [qrCode, setQrCode] = useState('');
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -33,8 +33,7 @@ export const QRDisplayModal = ({
   const [isEditingHost, setIsEditingHost] = useState(false);
   const [tempHost, setTempHost] = useState(getInitialHost);
 
-  const tableIdentifier = table ? (table.number || table.id) : '1';
-  const targetUrl = table ? `${customHost}/customer/welcome?table=${encodeURIComponent(tableIdentifier)}` : '';
+  const targetUrl = qrCode ? `${customHost}/customer/welcome?qr=${encodeURIComponent(qrCode)}` : '';
   const qrImageUrl = qrDataUrl || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(targetUrl)}`;
 
   useEffect(() => {
@@ -64,39 +63,32 @@ export const QRDisplayModal = ({
   };
 
   useEffect(() => {
-    const fetchQR = async () => {
-      if (!table || !isOpen) return;
-      setLoading(true);
-      setErrorMsg('');
-      try {
-        let existing = await qrService.getQRCodeByTableId(table.id);
-        if (!existing) {
-          try {
-            existing = await qrService.createQRCode({
-              table: table.id,
-              code: `FOODIE-TABLE-${table.id}`,
-              targetUrl: targetUrl,
-              is_active: true
-            });
-          } catch (createErr) {
-            console.warn("Could not create backend QR record, using client fallback:", createErr);
-          }
-        }
-        setQrRecord(existing || {
-          table: table.id,
-          code: `FOODIE-TABLE-${table.id}`,
-          qr_image_url: qrImageUrl,
-          is_active: true
+    if (!table || !isOpen) return undefined;
+    let active = true;
+    setLoading(true);
+    setErrorMsg('');
+    setQrCode('');
+    setQrRecord(null);
+    import('../../services/staffClient').then(({ staffJson }) => staffJson(`/tables/${table.id}/`))
+      .then((saved) => {
+        if (!active) return;
+        setQrCode(saved.qr_code || '');
+        setQrRecord({
+          id: saved.id,
+          is_active: saved.qr_is_active !== false,
         });
-      } catch (err) {
-        console.error("Failed to load QR code:", err);
-        setErrorMsg("Failed to load QR code details.");
-      }
-      setLoading(false);
-    };
-
-    fetchQR();
-  }, [table, isOpen, targetUrl, qrImageUrl]);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setQrRecord(null);
+        setQrCode('');
+        setErrorMsg(err.message || 'The saved QR status could not be loaded.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => { active = false; };
+  }, [table, isOpen]);
 
   const handleToggleStatus = async () => {
     if (!table?.id || updating) return;
@@ -168,22 +160,22 @@ export const QRDisplayModal = ({
 
   if (!isOpen || !table) return null;
 
-  const isActive = qrRecord?.is_active !== undefined ? qrRecord.is_active !== false : table.qr_is_active !== false;
+  const isActive = qrRecord ? qrRecord.is_active !== false : null;
 
   const footerActions = (
     <div className="d-flex align-items-center justify-content-between w-100 gap-2 flex-wrap">
-      {qrRecord?.id && (
+      {qrRecord && (
         <Button
           variant="light"
           onClick={handleToggleStatus}
-          disabled={updating}
+          disabled={updating || isActive === null}
           className="d-flex align-items-center gap-1.5 small fw-bold"
         >
           {isActive ? <FiToggleRight className="text-success fs-5" /> : <FiToggleLeft className="text-secondary fs-5" />}
           {isActive ? 'Disable QR' : 'Enable QR'}
         </Button>
       )}
-      {isActive && (
+      {isActive && qrCode && (
         <div className="d-flex align-items-center gap-2 ms-auto">
           <Button variant="primary" onClick={handlePrint} className="d-flex align-items-center gap-1.5 py-1.5 px-3">
             <FiPrinter /> Print Card
@@ -208,7 +200,7 @@ export const QRDisplayModal = ({
           <div className="d-flex align-items-center justify-content-center gap-2 mb-3">
             <span className="fw-bold text-dark fs-5">Table {table.number || table.id}</span>
             <span className={`badge rounded-pill ${isActive ? 'bg-success-subtle text-success border border-success-subtle' : 'bg-danger-subtle text-danger border border-danger-subtle'} px-3 py-1 fw-bold`} style={{ fontSize: '11px' }}>
-              {isActive ? 'Active & Scannable' : 'Disabled'}
+              {qrRecord ? (isActive ? 'Active & Scannable' : 'Disabled') : 'Status unavailable'}
             </span>
           </div>
 

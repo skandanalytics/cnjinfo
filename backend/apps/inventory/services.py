@@ -4,6 +4,8 @@ from collections import defaultdict
 
 from django.db import transaction
 
+from apps.realtime.publish import publish_catalog_event
+
 from .models import InventoryItem, StockTransaction
 
 T = StockTransaction.Type
@@ -35,6 +37,7 @@ def restock(item_id, quantity, user=None, note=""):
     item.quantity += quantity
     item.save(update_fields=["quantity", "updated_at"])
     _ledger(item, T.RESTOCK, quantity, user, note=note)
+    publish_catalog_event(item.branch_id, "inventory", "updated")
     return item
 
 
@@ -48,6 +51,7 @@ def adjust(item_id, new_quantity, user=None, note=""):
         item.quantity = new_quantity
         item.save(update_fields=["quantity", "updated_at"])
         _ledger(item, T.ADJUSTMENT, delta, user, note=note)
+    publish_catalog_event(item.branch_id, "inventory", "updated")
     return item
 
 
@@ -73,6 +77,7 @@ def deduct_for_order(order):
         item.quantity -= qty
         item.save(update_fields=["quantity", "updated_at"])
         _ledger(item, T.ORDER_DEDUCTION, -qty, order=order)
+        publish_catalog_event(item.branch_id, "inventory", "updated")
 
 
 @transaction.atomic
@@ -89,3 +94,4 @@ def restore_for_order(order):
         item.quantity += qty
         item.save(update_fields=["quantity", "updated_at"])
         _ledger(item, T.ORDER_RESTORE, qty, order=order)
+        publish_catalog_event(item.branch_id, "inventory", "updated")

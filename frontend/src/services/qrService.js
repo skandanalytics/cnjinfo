@@ -9,7 +9,7 @@ const _isValidId = (id) => {
 export const qrService = {
   getQRCodes: async () => {
     try {
-      const res = await api.get('/restaurant/tables/');
+      const res = await api.get('/tables/');
       const rawList = res.data?.data || (Array.isArray(res.data) ? res.data : (res.data?.results || []));
       return rawList.map(t => {
         const tableId = t.id || t.table_id;
@@ -33,7 +33,7 @@ export const qrService = {
   getQRCodeById: async (id) => {
     try {
       if (!_isValidId(id)) return null;
-      const res = await api.get(`/restaurant/tables/${id}/`);
+      const res = await api.get(`/tables/${id}/`);
       const t = res.data?.data || res.data;
       const tableId = t.id || t.table_id || id;
       const baseHost = localStorage.getItem('foodie_network_host') || window.location.origin;
@@ -65,7 +65,7 @@ export const qrService = {
     };
     try {
       if (_isValidId(tableId)) {
-        const res = await api.patch(`/restaurant/tables/${tableId}/`, payload);
+        const res = await api.patch(`/tables/${tableId}/`, payload);
         const t = res.data?.data || res.data;
         return {
           id: tableId,
@@ -79,16 +79,9 @@ export const qrService = {
       }
     } catch (e) {
       console.warn("Failed to create/update QR code on table:", e);
+      throw e;
     }
-    return {
-      id: tableId,
-      table: tableId,
-      code: payload.qr_token,
-      qr_token: payload.qr_token,
-      qr_data: payload.qr_data,
-      qr_image_url: payload.qr_data,
-      is_active: payload.qr_is_active
-    };
+    throw new Error('A table is required to save QR status.');
   },
 
   updateQRCode: async (id, data) => {
@@ -104,7 +97,7 @@ export const qrService = {
 
     try {
       if (!_isValidId(tableId)) return { id: tableId, table: tableId, ...data };
-      const res = await api.patch(`/restaurant/tables/${tableId}/`, payload);
+      const res = await api.patch(`/tables/${tableId}/`, payload);
       const t = res.data?.data || res.data;
       return {
         id: tableId,
@@ -117,7 +110,7 @@ export const qrService = {
       };
     } catch (e) {
       console.warn("Failed to patch table QR fields:", e);
-      return { id: tableId, table: tableId, ...data };
+      throw e;
     }
   },
 
@@ -128,7 +121,7 @@ export const qrService = {
   deleteQRCode: async (id) => {
     try {
       if (_isValidId(id)) {
-        await api.patch(`/restaurant/tables/${id}/`, {
+        await api.patch(`/tables/${id}/`, {
           qr_token: null,
           qr_data: null,
           qr_is_active: false
@@ -136,6 +129,7 @@ export const qrService = {
       }
     } catch (e) {
       console.warn("Failed to delete table QR fields:", e);
+      throw e;
     }
     return true;
   }

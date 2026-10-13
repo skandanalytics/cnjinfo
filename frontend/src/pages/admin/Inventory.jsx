@@ -107,7 +107,7 @@ export const Inventory = () => {
       if (
         e.key === 'foodie_inventory_sync_trigger' || 
         e.key === 'foodie_dish_stocks' ||
-        e.key === 'foodie_orders_sync_trigger'
+        e.key === 'foodie_data_sync'
       ) {
         fetchInventorySilently();
       }
@@ -116,14 +116,12 @@ export const Inventory = () => {
     window.addEventListener('foodie_categories_updated', handleUpdateEvents);
     window.addEventListener('foodie_products_updated', handleUpdateEvents);
     window.addEventListener('foodie_inventory_updated', handleUpdateEvents);
-    window.addEventListener('foodie_orders_updated', handleUpdateEvents);
     window.addEventListener('storage', handleStorageEvent);
 
     return () => {
       window.removeEventListener('foodie_categories_updated', handleUpdateEvents);
       window.removeEventListener('foodie_products_updated', handleUpdateEvents);
       window.removeEventListener('foodie_inventory_updated', handleUpdateEvents);
-      window.removeEventListener('foodie_orders_updated', handleUpdateEvents);
       window.removeEventListener('storage', handleStorageEvent);
     };
   }, []);

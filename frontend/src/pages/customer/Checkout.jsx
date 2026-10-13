@@ -138,7 +138,7 @@ export const Checkout = () => {
                   <button type="button" className="btn btn-link btn-sm p-0 ms-2" onClick={() => chooseType(DINE_IN, null)}>Check again</button>
                 </div>
               )}
-              {tableChoices && (
+              {tableChoices && sessionStorage.getItem('foodie_staff_ordering') !== '1' && !hasScannedTable() && (
                 <div className="d-flex flex-wrap gap-2 mt-3">
                   {tableChoices.map((table) => (
                     <button

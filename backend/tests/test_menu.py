@@ -116,7 +116,7 @@ class FoodTests(MenuBase):
         self.c2 = self.cat(name="Mains").json()["id"]
 
     def test_create_and_read_back(self):
-        r = self.food(self.c1, price="99.50", calories=250, protein_grams="6.5")
+        r = self.food(self.c1, price="99.50", calories=250)
         self.assertEqual(r.status_code, 201, r.content)
         f = Food.objects.get(pk=r.json()["id"])
         self.assertEqual((f.branch_id, f.price, f.diet_type), (self.a.id, Decimal("99.50"), "VEG"))

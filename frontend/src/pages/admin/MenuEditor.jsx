@@ -62,8 +62,8 @@ export const MenuEditor = () => {
     if (showLoading) setLoading(true);
     try {
       const [menuData, dishData] = await Promise.all([
-        menuService.getMenus(),
-        productService.getProducts()
+        menuService.getMenus(true),
+        productService.getProducts(true)
       ]);
       setAllMenus(menuData || []);
       setDishes(dishData || []);
@@ -114,7 +114,8 @@ export const MenuEditor = () => {
         e.key === 'foodie_inventory_sync_trigger' || 
         e.key === 'foodie_dish_stocks' ||
         e.key === 'foodie_products_updated' ||
-        e.key === 'foodie_categories_updated'
+        e.key === 'foodie_categories_updated' ||
+        e.key === 'foodie_data_sync'
       ) {
         fetchDetailsSilently();
       }
@@ -123,14 +124,12 @@ export const MenuEditor = () => {
     window.addEventListener('foodie_products_updated', handleSync);
     window.addEventListener('foodie_inventory_updated', handleSync);
     window.addEventListener('foodie_categories_updated', handleSync);
-    window.addEventListener('foodie_orders_updated', handleSync);
     window.addEventListener('storage', handleStorage);
 
     return () => {
       window.removeEventListener('foodie_products_updated', handleSync);
       window.removeEventListener('foodie_inventory_updated', handleSync);
       window.removeEventListener('foodie_categories_updated', handleSync);
-      window.removeEventListener('foodie_orders_updated', handleSync);
       window.removeEventListener('storage', handleStorage);
     };
   }, [menuId]);

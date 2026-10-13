@@ -123,10 +123,17 @@ class TableViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
                 return Response({"detail": f"Cannot change a table from {cur} to {new}."}, status=409)
             # A table still used by an unfinished order must not be released (also by another order's completion).
             if new == S.AVAILABLE and self._active_orders(table):
-                return Response({"detail": "Table has unfinished orders and cannot be vacated yet."}, status=409)
+                return Response({
+                    "detail": "Table has unfinished orders and cannot be vacated yet.",
+                    "code": "unfinished_orders",
+                    "table_id": table.id,
+                    "table_number": table.table_number,
+                }, status=409)
             table.status = new
             table.save(update_fields=["status", "updated_at"])
         self.audit("set_status", table, {"from": cur, "to": new})
+        from apps.realtime.publish import publish_catalog_event
+        publish_catalog_event(table.branch_id, "table", "updated")
         return Response(self.get_serializer(table).data)
 
     @action(detail=True, methods=["post"], url_path="regenerate-qr", permission_classes=[IsAdminLevel])

@@ -24,7 +24,6 @@ export const EditDishModal = ({
   const [category, setCategory] = useState('');
   const [foodType, setFoodType] = useState('veg');
   const [stock, setStock] = useState('');
-  const [protein, setProtein] = useState('');
   const [image, setImage] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imageMode, setImageMode] = useState('file'); // 'file' | 'url'
@@ -120,7 +119,6 @@ export const EditDishModal = ({
       setCategory(dish.category ? getFrontendCategoryName(dish.category) : '');
       setFoodType((dish.foodType || dish.type || 'veg').toLowerCase());
       setStock(dish.stock !== undefined && dish.stock !== null ? String(dish.stock) : '');
-      setProtein(dish.protein !== undefined && dish.protein !== null ? String(dish.protein) : '');
       setImage(dish.imageUrl || dish.image || '');
       setImageFile(null);
       setImageMode(dish.imageUrl ? 'url' : 'file');
@@ -238,15 +236,6 @@ export const EditDishModal = ({
       if (nextUrl !== (dish.imageUrl || '')) imageChanges.imageUrl = nextUrl;
     }
 
-    let protNum = null;
-    if (protein && protein.trim() !== '') {
-      protNum = parseInt(protein);
-      if (isNaN(protNum) || protNum < 0) {
-        setErrorMsg('Protein must be a positive integer.');
-        return;
-      }
-    }
-
     setLoading(true);
     try {
       await onSave(dish.id, {
@@ -259,7 +248,6 @@ export const EditDishModal = ({
         type: foodType,
         foodType: foodType,
         stock: stockNum,
-        protein: protNum,
         ...imageChanges
       });
       setLoading(false);
@@ -341,14 +329,6 @@ export const EditDishModal = ({
               placeholder="e.g. 50" 
               value={stock} 
               onChange={(e) => setStock(e.target.value)} 
-            />
-
-            <Input
-              label="Protein (g) (Optional)"
-              type="number"
-              placeholder="Enter protein (g)"
-              value={protein}
-              onChange={(e) => setProtein(e.target.value)}
             />
 
             <Select 

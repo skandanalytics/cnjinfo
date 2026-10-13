@@ -44,9 +44,8 @@ export async function refreshStaffSession() {
 
 function goToLogin() {
   clearStaffSession();
-  if (window.location.pathname !== '/login') {
-    window.location.href = '/login';
-  }
+  if (window.location.pathname.startsWith('/db') || window.location.pathname === '/login') return;
+  window.location.href = '/login';
 }
 
 export async function staffFetch(path, options = {}) {

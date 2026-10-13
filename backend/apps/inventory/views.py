@@ -6,17 +6,19 @@ from rest_framework.response import Response
 from apps.accounts.mixins import AuditedMixin
 from apps.accounts.permissions import IsAdminLevel, IsStaffMember, StaffReadAdminWrite
 from apps.accounts.scoping import BranchScopedMixin
+from apps.realtime.mixins import CatalogBroadcastMixin
 
 from . import services
 from .models import InventoryItem
 from .serializers import (AdjustSerializer, InventoryItemSerializer, RestockSerializer, StockTransactionSerializer)
 
 
-class InventoryViewSet(AuditedMixin, BranchScopedMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin,
+class InventoryViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, mixins.CreateModelMixin, mixins.RetrieveModelMixin,
                        mixins.UpdateModelMixin, mixins.ListModelMixin, viewsets.GenericViewSet):
     """No DELETE: removing a stock record would destroy its ledger. Hide a dish by deactivating it instead."""
 
     audit_entity = "Inventory"
+    catalog_resource = "inventory"
     queryset = InventoryItem.objects.select_related("food", "food__category", "branch").order_by("food__name")
     serializer_class = InventoryItemSerializer
     permission_classes = [StaffReadAdminWrite]

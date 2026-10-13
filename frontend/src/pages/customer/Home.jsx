@@ -12,7 +12,7 @@ import {
   FiGrid, FiPieChart, FiHeart, FiLayers, FiZap, FiActivity, FiCoffee, FiDisc, FiStar, FiPercent,
   FiChevronLeft, FiChevronRight
 } from 'react-icons/fi';
-import { filterAndSortProducts } from '../../utils/filters';
+import { filterAndSortProducts, normalizeFoodType } from '../../utils/filters';
 import { isDishInCategory, normalizeCategoryName } from '../../utils/categoryUtils';
 import { orderService, isOrderOwnedByCustomer, getCustomerPhone } from '../../services/orderService';
 import { useCart } from '../../hooks/useCart';
@@ -48,7 +48,8 @@ export const Home = () => {
   });
 
   const { user, isAuthenticated } = useAuth();
-  const { tableContext, setTable } = useCart();
+  const { tableContext, setTable, abandonStaffTableOrder } = useCart();
+  const [leavingTableOrder, setLeavingTableOrder] = useState(false);
 
   useEffect(() => {
     const hasActiveSession = isAuthenticated || sessionStorage.getItem('foodie_staff_ordering') === '1' || sessionStorage.getItem('foodie_order_type') || sessionStorage.getItem('foodie_table') || tableParam || qrParam;
@@ -71,6 +72,13 @@ export const Home = () => {
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('DEFAULT');
   const [selectedFoodType, setSelectedFoodType] = useState(null);
+  const foodTypeOf = (dish) => normalizeFoodType(
+    dish.foodType ?? dish.type ?? dish.food_type ?? (dish.is_veg === false || dish.is_veg === 'false' ? 'non-veg' : 'veg')
+  );
+  const availableFoodTypes = new Set((products || []).map(foodTypeOf));
+  useEffect(() => {
+    if (selectedFoodType && !availableFoodTypes.has(selectedFoodType)) setSelectedFoodType(null);
+  }, [products, selectedFoodType]);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeOrders, setActiveOrders] = useState([]);
   const [customerOrders, setCustomerOrders] = useState([]);
@@ -89,6 +97,8 @@ export const Home = () => {
       }
     };
     fetchBanners();
+    window.addEventListener('foodie_offers_updated', fetchBanners);
+    return () => window.removeEventListener('foodie_offers_updated', fetchBanners);
   }, []);
 
   const isEmployee = user?.role === 'employee' || user?.role === 'admin';
@@ -300,15 +310,12 @@ export const Home = () => {
     };
 
     fetchActiveOrders();
-    const poll = setInterval(fetchActiveOrders, 8000);
-
     const handleSync = () => fetchActiveOrders();
     window.addEventListener('foodie_orders_updated', handleSync);
     window.addEventListener('storage', handleSync);
 
     return () => {
       isMounted = false;
-      clearInterval(poll);
       window.removeEventListener('foodie_orders_updated', handleSync);
       window.removeEventListener('storage', handleSync);
     };
@@ -426,11 +433,22 @@ export const Home = () => {
               <div className="d-flex align-items-center gap-2 flex-wrap ms-auto">
                 <button
                   type="button"
-                  onClick={() => navigate('/admin/tables')}
+                  disabled={leavingTableOrder}
+                  onClick={async () => {
+                    if (leavingTableOrder) return;
+                    setLeavingTableOrder(true);
+                    try {
+                      await abandonStaffTableOrder();
+                      navigate(user?.role === 'admin' ? '/admin/tables' : '/employee/tables');
+                    } catch (err) {
+                      window.alert(err.message || 'The unfinished order could not be cleared. Stay on this page and try again.');
+                      setLeavingTableOrder(false);
+                    }
+                  }}
                   className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold"
                   style={{ fontSize: '12px' }}
                 >
-                  ← Back to Tables
+                  {leavingTableOrder ? 'Clearing…' : '← Back to Tables'}
                 </button>
                 <button
                   type="button"
@@ -591,7 +609,6 @@ export const Home = () => {
                 aria-label="Filter and sort options"
               >
                 <option value="DEFAULT">Sort: All</option>
-                <option value="HIGHEST_DISCOUNT">Highest Discount</option>
                 <option value="PRICE_LOW_HIGH">Price: Low to High</option>
                 <option value="PRICE_HIGH_LOW">Price: High to Low</option>
                 <option value="DISCOUNT_ANY">Discount</option>
@@ -644,10 +661,11 @@ export const Home = () => {
             </div>
           )}
 
-          {(products || []).length > 0 && (
+          {(products || []).length > 0 && (availableFoodTypes.has('veg') || availableFoodTypes.has('non-veg') || availableFoodTypes.has('vegan')) && (
             <div className="d-flex align-items-center gap-2 flex-wrap px-1 pt-2 border-top border-light-subtle w-100">
               <span className="small fw-semibold text-secondary me-1" style={{ fontSize: '12px' }}>Food Type:</span>
 
+              {availableFoodTypes.has('veg') && (
               <button
                 type="button"
                 onClick={() => handleFoodTypeClick('veg')}
@@ -660,7 +678,9 @@ export const Home = () => {
                 <span className="veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
                 <span>Veg</span>
               </button>
+              )}
 
+              {availableFoodTypes.has('non-veg') && (
               <button
                 type="button"
                 onClick={() => handleFoodTypeClick('non-veg')}
@@ -673,7 +693,9 @@ export const Home = () => {
                 <span className="non-veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
                 <span>Non-Veg</span>
               </button>
+              )}
 
+              {availableFoodTypes.has('vegan') && (
               <button
                 type="button"
                 onClick={() => handleFoodTypeClick('vegan')}
@@ -691,6 +713,7 @@ export const Home = () => {
                 <span className="vegan-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
                 <span>Vegan</span>
               </button>
+              )}
             </div>
           )}
         </div>

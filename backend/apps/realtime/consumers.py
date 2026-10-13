@@ -17,7 +17,10 @@ class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
         user = await self._user_from_token(raw)
         group = await self._group_for(user) if user else None
         if group is None:
-            await self.close()
+            # Accept first so the client receives a close code instead of an HTTP 403
+            # handshake. 4401 means the token was missing, expired, or not staff.
+            await self.accept()
+            await self.close(code=4401)
             return
         self.group = group
         await self.channel_layer.group_add(group, self.channel_name)
@@ -28,6 +31,9 @@ class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
             await self.channel_layer.group_discard(self.group, self.channel_name)
 
     async def order_event(self, event):
+        await self.send_json({k: v for k, v in event.items() if k != "type"})
+
+    async def catalog_event(self, event):
         await self.send_json({k: v for k, v in event.items() if k != "type"})
 
     @database_sync_to_async

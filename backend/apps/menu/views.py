@@ -8,6 +8,8 @@ from apps.accounts.mixins import AuditedMixin
 from apps.accounts.permissions import StaffReadAdminWrite
 from apps.accounts.scoping import BranchScopedMixin
 from apps.accounts.services import client_ip, record_audit
+from apps.realtime.mixins import CatalogBroadcastMixin
+from apps.realtime.publish import publish_catalog_event
 
 from .models import Category, CustomizationOption, DishDiscount, Food, FoodImage
 from .serializers import (CategorySerializer, CustomizationSerializer, DishDiscountSerializer, FoodImageSerializer,
@@ -15,7 +17,7 @@ from .serializers import (CategorySerializer, CustomizationSerializer, DishDisco
 from .services import delete_foods, foods_in_active_orders
 
 
-class CategoryViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
+class CategoryViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
     audit_entity = "Category"
     queryset = Category.objects.select_related("branch").annotate(
         dish_count=Count("foods", filter=Q(foods__is_active=True)))
@@ -43,11 +45,13 @@ class CategoryViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
             delete_foods(hidden)
             category.children.update(parent=None)
             self.audit("delete", category)
+            branch_id = category.branch_id
             category.delete()
+        publish_catalog_event(branch_id, "menu", "deleted")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class FoodViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
+class FoodViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
     audit_entity = "Food"
     queryset = (Food.objects.select_related("branch", "category", "inventory")
                 .prefetch_related("images", "customizations", "discounts")
@@ -68,7 +72,9 @@ class FoodViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
                             status=status.HTTP_409_CONFLICT)
         with transaction.atomic():
             self.audit("delete", food)
+            branch_id = food.branch_id
             delete_foods(target)
+        publish_catalog_event(branch_id, "menu", "deleted")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -87,7 +93,9 @@ class FoodImageViewSet(BranchScopedMixin, viewsets.ModelViewSet):
                      client_ip(self.request))
 
     def perform_create(self, serializer):
-        self._audit("create", serializer.save())
+        image = serializer.save()
+        self._audit("create", image)
+        publish_catalog_event(image.food.branch_id, "menu", "updated")
 
     def perform_destroy(self, instance):
         self._audit("delete", instance)
@@ -99,9 +107,10 @@ class FoodImageViewSet(BranchScopedMixin, viewsets.ModelViewSet):
             if nxt:
                 nxt.is_primary = True
                 nxt.save(update_fields=["is_primary"])
+        publish_catalog_event(food.branch_id, "menu", "updated")
 
 
-class CustomizationViewSet(BranchScopedMixin, viewsets.ModelViewSet):
+class CustomizationViewSet(CatalogBroadcastMixin, BranchScopedMixin, viewsets.ModelViewSet):
     branch_field = "food__branch"
     queryset = CustomizationOption.objects.select_related("food")
     serializer_class = CustomizationSerializer
@@ -114,15 +123,18 @@ class CustomizationViewSet(BranchScopedMixin, viewsets.ModelViewSet):
         option = self.get_object()
         record_audit(request.user, "customization.delete", "CustomizationOption", option.pk, option.food.branch, {},
                      client_ip(request))
+        branch_id = option.food.branch_id
         if option.cart_items.exists():
             option.is_active = False
             option.save(update_fields=["is_active"])
+            publish_catalog_event(branch_id, "menu", "updated")
             return Response({"detail": "Option is in use, so it was deactivated.", "deactivated": True})
         option.delete()
+        publish_catalog_event(branch_id, "menu", "deleted")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class DishDiscountViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
+class DishDiscountViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
     audit_entity = "DishDiscount"
     branch_field = "food__branch"
     queryset = DishDiscount.objects.select_related("food", "food__branch").order_by("-id")

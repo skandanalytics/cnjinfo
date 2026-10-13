@@ -33,6 +33,8 @@ export const Offers = () => {
   const [minOrder, setMinOrder] = useState('');
   const [validity, setValidity] = useState('');
   const [autoApply, setAutoApply] = useState(false);
+  const now = new Date();
+  const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   // Editing & Deleting dish offer
   const [editingDish, setEditingDish] = useState(null);
@@ -44,7 +46,7 @@ export const Offers = () => {
     try {
       const [couponData, dishData] = await Promise.all([
         couponService.getCoupons(),
-        productService.getProducts()
+        productService.getProducts(true)
       ]);
       const loadedCoupons = couponData || [];
       const loadedDishes = dishData || [];
@@ -94,6 +96,20 @@ export const Offers = () => {
 
   useEffect(() => {
     fetchData();
+    const handleSync = () => { fetchDataSilently(); };
+    const handleStorage = (event) => {
+      if (event.key === 'foodie_data_sync' || event.key === 'foodie_inventory_sync_trigger') handleSync();
+    };
+    window.addEventListener('foodie_offers_updated', handleSync);
+    window.addEventListener('foodie_products_updated', handleSync);
+    window.addEventListener('foodie_inventory_updated', handleSync);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('foodie_offers_updated', handleSync);
+      window.removeEventListener('foodie_products_updated', handleSync);
+      window.removeEventListener('foodie_inventory_updated', handleSync);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
   const handleCreateCoupon = async (e) => {
@@ -120,7 +136,7 @@ export const Offers = () => {
       setAutoApply(false);
       setIsAddOpen(false);
     } catch (err) {
-      console.error("Error creating coupon:", err);
+      window.alert(err.message || 'The coupon could not be created.');
     }
   };
 
@@ -293,6 +309,7 @@ export const Offers = () => {
             <Input
               label="Valid Until"
               type="date"
+              min={todayIso}
               value={validity}
               onChange={(e) => setValidity(e.target.value)}
             />
@@ -633,6 +650,7 @@ export const Offers = () => {
           <Input
             label="Valid Until"
             type="date"
+            min={todayIso}
             value={validity}
             onChange={(e) => setValidity(e.target.value)}
           />

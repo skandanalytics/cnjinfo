@@ -14,6 +14,7 @@ urlpatterns = [
     path("api/", include("apps.carts.urls")),
     path("api/", include("apps.payments.urls")),
     path("api/", include("apps.billing.urls")),
+    path("api/", include("apps.maintenance.urls")),
     # Further resource routes are added per phase (Phase 4+).
 ]
 

@@ -117,18 +117,6 @@ export const filterAndSortProducts = (products, options = {}) => {
 
   // 2. Apply sorting/filtering dropdown logic
   switch (sortBy) {
-    case 'HIGHEST_DISCOUNT':
-      result = [...result].sort((a, b) => {
-        const getDiscValue = (item) => {
-          const orig = parseFloat(item.originalPrice || item.price || 0);
-          const sell = getProductSellingPrice(item);
-          const discAmt = Math.max(0, orig - sell);
-          const discPct = orig > 0 ? (discAmt / orig) * 100 : parseFloat(item.discountPercent || item.discount_percent || item.offer_percentage || 0);
-          return discPct || discAmt;
-        };
-        return getDiscValue(b) - getDiscValue(a);
-      });
-      break;
     case 'PRICE_LOW_HIGH':
       result = [...result].sort((a, b) => getProductSellingPrice(a) - getProductSellingPrice(b));
       break;

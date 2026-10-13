@@ -140,25 +140,14 @@ export const FoodDetails = () => {
                   );
                 })()}
 
-                {/* Macro Nutritional Info - Only shown if available */}
-                {(foodItem.calories || foodItem.protein) ? (
+                {foodItem.calories ? (
                   <div className="row g-2 mb-4">
-                    {foodItem.calories ? (
-                      <div className={foodItem.protein ? "col-6" : "col-12"}>
-                        <div className="bg-light rounded-3 p-2.5 text-center border border-light-subtle">
-                          <span className="text-secondary small d-block" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '600' }}>Calories</span>
-                          <strong className="text-dark fs-6">{foodItem.calories} kcal</strong>
-                        </div>
+                    <div className="col-12">
+                      <div className="bg-light rounded-3 p-2.5 text-center border border-light-subtle">
+                        <span className="text-secondary small d-block" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '600' }}>Calories</span>
+                        <strong className="text-dark fs-6">{foodItem.calories} kcal</strong>
                       </div>
-                    ) : null}
-                    {foodItem.protein ? (
-                      <div className={foodItem.calories ? "col-6" : "col-12"}>
-                        <div className="bg-light rounded-3 p-2.5 text-center border border-light-subtle">
-                          <span className="text-secondary small d-block" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '600' }}>Protein</span>
-                          <strong className="text-dark fs-6">{foodItem.protein} g</strong>
-                        </div>
-                      </div>
-                    ) : null}
+                    </div>
                   </div>
                 ) : null}
 

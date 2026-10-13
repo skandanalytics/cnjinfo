@@ -17,6 +17,13 @@ export default defineConfig({
         target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8000',
         ws: true,
         changeOrigin: true,
+        secure: false,
+        timeout: 60000,
+        configure: (proxy) => {
+          proxy.on('error', () => {
+            /* Do not log the proxied WebSocket URL; it can include an access token. */
+          });
+        },
       },
       '/media': {
         target: process.env.VITE_API_TARGET || 'http://127.0.0.1:8000',

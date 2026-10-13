@@ -41,7 +41,6 @@ class Food(models.Model):
     diet_type = models.CharField(max_length=10, choices=DietType.choices, default=DietType.VEG)
     price = models.DecimalField(help_text="Base price at this branch.", **MONEY)
     calories = models.PositiveIntegerField(null=True, blank=True)
-    protein_grams = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
     is_active = models.BooleanField(default=True)       # soft delete / hidden from menu
     is_sold_out = models.BooleanField(default=False)    # manual sold-out flag; stock status comes from inventory
     # External image chosen by the admin. When set it is the dish's display image; uploading a new primary

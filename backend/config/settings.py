@@ -146,6 +146,7 @@ REST_FRAMEWORK = {
         "anon": "60/minute", "user": "240/minute",
         "otp_send": "10/hour", "otp_verify": "30/hour", "staff_login": "20/minute", "qr_resolve": "60/minute", "quote": "120/minute",
         "public_menu": "120/minute", "guest_token": "30/hour",
+        "db_setup": "10/hour", "db_reset": "6/hour",
     },
 }
 

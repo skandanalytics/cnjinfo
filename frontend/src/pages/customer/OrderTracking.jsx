@@ -128,12 +128,8 @@ export const OrderTracking = () => {
       };
 
       window.addEventListener('foodie_orders_updated', handleSync);
-      const timer = setInterval(() => {
-        if (!document.hidden) fetchTrackingData(false);
-      }, 4000);
 
       return () => {
-        clearInterval(timer);
         window.removeEventListener('foodie_orders_updated', handleSync);
       };
     }

@@ -299,6 +299,7 @@ export async function createCategory(data) {
       is_active: data.status !== 'Inactive',
     }),
   });
+  publishCatalogChange({ resource: 'menu', action: 'created' });
   return mapCategory(created);
 }
 
@@ -308,11 +309,13 @@ export async function updateCategory(id, data) {
   if (data.description !== undefined) body.description = data.description;
   if (data.status) body.is_active = data.status !== 'Inactive';
   const updated = await staffJson(`/categories/${id}/`, { method: 'PATCH', body: JSON.stringify(body) });
+  publishCatalogChange({ resource: 'menu', action: 'updated' });
   return mapCategory(updated);
 }
 
 export async function deleteCategory(id) {
   await staffJson(`/categories/${id}/`, { method: 'DELETE' });
+  publishCatalogChange({ resource: 'menu', action: 'deleted' });
   return true;
 }
 
@@ -342,7 +345,6 @@ function mapFood(f, stockByFood) {
     imageUrl: f.image_url || '',
     currentDiscount: discount || null,
     calories: f.calories,
-    protein: f.protein_grams,
     is_orderable: f.is_orderable,
     branch: f.branch,
     customizations: (Array.isArray(f.customizations) ? f.customizations : [])
@@ -468,9 +470,6 @@ export async function createFood(data) {
     image_url: data.imageFile ? '' : (data.imageUrl || ''),
     is_active: true,
   };
-  if (data.protein !== undefined && data.protein !== null && data.protein !== '') {
-    body.protein_grams = data.protein;
-  }
   const created = await staffJson('/foods/', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -481,10 +480,12 @@ export async function createFood(data) {
     await syncDiscount(created.id, data);
     await syncStock(created.id, data.stock, null);
   } catch (err) {
+    publishCatalogChange({ resource: 'menu', action: 'created' });
     const wrapped = new Error(`"${created.name}" was saved, but ${explain(err)}. Edit the dish to finish setting it up.`);
     wrapped.dishSaved = true;
     throw wrapped;
   }
+  publishCatalogChange({ resource: 'menu', action: 'created' });
   const foods = await listFoods();
   return foods.find((f) => f.id === created.id) || created;
 }
@@ -497,7 +498,6 @@ export async function updateFood(id, data) {
   if (data.price !== undefined && data.price !== '') body.price = data.price;
   if (data.foodType || data.type) body.diet_type = dietToApi(data.foodType || data.type);
   if (data.calories !== undefined) body.calories = data.calories;
-  if (data.protein !== undefined) body.protein_grams = data.protein;
   if (data.category) {
     const categoryId = await categoryIdByName(data.category, current.branch, { create: false });
     if (categoryId !== current.category) body.category = categoryId;
@@ -512,8 +512,19 @@ export async function updateFood(id, data) {
     const row = (await stockMap()).get(Number(id));
     if (!row || Number(row.quantity) !== Number(data.stock)) await syncStock(id, data.stock, row?.id);
   }
+  publishCatalogChange({ resource: 'menu', action: 'updated' });
   const foods = await listFoods();
   return foods.find((f) => String(f.id) === String(id));
+}
+
+function publishCatalogChange(detail = {}) {
+  const payload = { source: 'mutation', ...detail };
+  window.dispatchEvent(new CustomEvent('foodie_inventory_updated', { detail: payload }));
+  window.dispatchEvent(new CustomEvent('foodie_products_updated', { detail: payload }));
+  window.dispatchEvent(new CustomEvent('foodie_offers_updated', { detail: payload }));
+  try {
+    localStorage.setItem('foodie_data_sync', JSON.stringify({ t: Date.now(), ...payload }));
+  } catch { /* other tabs read the storage event; this tab already received the custom events */ }
 }
 
 export async function restockFood(foodId, quantity) {
@@ -521,19 +532,24 @@ export async function restockFood(foodId, quantity) {
   if (!Number.isInteger(qty) || qty <= 0) throw new Error('Enter a positive whole number.');
   const row = listOf(await staffJson(`/inventory/?food=${foodId}`))[0];
   if (row) {
-    return staffJson(`/inventory/${row.id}/restock/`, {
+    const saved = await staffJson(`/inventory/${row.id}/restock/`, {
       method: 'POST',
       body: JSON.stringify({ quantity: qty, note: 'Restock from the menu screen' }),
     });
+    publishCatalogChange();
+    return saved;
   }
   if (!staffIsAdmin()) {
     throw new Error('Only an administrator can create a stock record. Restock adds to an existing one.');
   }
-  return staffJson('/inventory/', { method: 'POST', body: JSON.stringify({ food: foodId, quantity: qty }) });
+  const created = await staffJson('/inventory/', { method: 'POST', body: JSON.stringify({ food: foodId, quantity: qty }) });
+  publishCatalogChange();
+  return created;
 }
 
 export async function deleteFood(id) {
   await staffJson(`/foods/${id}/`, { method: 'DELETE' });
+  publishCatalogChange();
   return true;
 }
 
@@ -575,9 +591,11 @@ export async function setStock(foodId, nextQuantity) {
       method: 'POST',
       body: JSON.stringify({ quantity: delta, note: 'Restock from the employee screen' }),
     });
+    publishCatalogChange();
     return { id: foodId, stock: next };
   }
   await syncStock(foodId, nextQuantity, row?.id);
+  publishCatalogChange();
   return { id: foodId, stock: next };
 }
 
@@ -602,8 +620,16 @@ export async function listCoupons() {
 export async function createCoupon(couponData) {
   const branch = await currentBranchId();
   const from = new Date();
-  let to = couponData.validity ? new Date(couponData.validity) : new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
-  if (Number.isNaN(to.getTime()) || to <= from) {
+  let to;
+  if (couponData.validity) {
+    const match = String(couponData.validity).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) throw new Error('Choose a valid until date.');
+    to = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    if (to < startOfToday) throw new Error('Valid until cannot be earlier than today.');
+    if (to <= from) throw new Error('Valid until must be after the start date.');
+  } else {
     to = new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
   }
   const created = await staffJson('/coupons/', {
@@ -621,6 +647,7 @@ export async function createCoupon(couponData) {
       auto_apply: Boolean(couponData.autoApply),
     }),
   });
+  publishCatalogChange();
   return mapCoupon(created);
 }
 
@@ -629,6 +656,7 @@ export async function setCouponAutoApply(id, autoApply) {
     method: 'PATCH',
     body: JSON.stringify({ auto_apply: Boolean(autoApply) }),
   });
+  publishCatalogChange();
   return mapCoupon(updated);
 }
 
@@ -637,11 +665,13 @@ export async function toggleCoupon(id, currentStatus) {
     method: 'PATCH',
     body: JSON.stringify({ is_active: currentStatus !== 'Active' }),
   });
+  publishCatalogChange({ resource: 'coupon', action: 'updated' });
   return listCoupons().then((rows) => rows.map((row) => (row.id === updated.id ? mapCoupon(updated) : row)));
 }
 
 export async function deleteCoupon(id) {
   await staffJson(`/coupons/${id}/`, { method: 'DELETE' });
+  publishCatalogChange({ resource: 'coupon', action: 'deleted' });
   return listCoupons();
 }
 
@@ -765,8 +795,13 @@ export function mapOrder(o) {
 }
 
 export async function listOrdersForUi() {
-  const path = typeof window !== 'undefined' ? window.location.pathname : '';
-  const mine = path.startsWith('/employee');
+  let mine = false;
+  try {
+    const user = JSON.parse(sessionStorage.getItem('foodie_auth_admin') || '{}').user;
+    mine = user?.role === 'employee';
+  } catch {
+    mine = false;
+  }
   const rows = listOf(await staffJson(`/orders/${mine ? '?mine=1' : ''}`));
   return rows.map(mapOrder);
 }
@@ -780,8 +815,18 @@ export async function transitionOrder(id, status, reason) {
     if (!text) throw new Error('A reason is required to cancel an order.');
     body.reason = text;
   }
-  const data = await staffJson(`/orders/${id}/transition/`, { method: 'POST', body: JSON.stringify(body) });
-  return mapOrder(data);
+  try {
+    const data = await staffJson(`/orders/${id}/transition/`, { method: 'POST', body: JSON.stringify(body) });
+    return mapOrder(data);
+  } catch (err) {
+    if (err.status === 409) {
+      try {
+        const latest = await staffJson(`/orders/${id}/`);
+        err.order = mapOrder(latest);
+      } catch { /* the original 409 message is still shown */ }
+    }
+    throw err;
+  }
 }
 
 export async function recordCounterPayment(orderId) {

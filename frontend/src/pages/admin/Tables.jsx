@@ -6,6 +6,7 @@ import AddTableModal from '../../components/tables/AddTableModal';
 import EditTableModal from '../../components/tables/EditTableModal';
 import QRDisplayModal from '../../components/tables/QRDisplayModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import Modal from '../../components/common/Modal';
 import Button from '../../components/common/Button';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
@@ -15,7 +16,7 @@ import { useBranches } from '../../hooks/useBranches';
 import { productService } from '../../services/productService';
 import { menuService } from '../../services/menuService';
 import { useAuth } from '../../hooks/useAuth';
-import { FiPlus, FiShoppingCart } from 'react-icons/fi';
+import { FiPlus, FiShoppingCart, FiAlertTriangle } from 'react-icons/fi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
 import { OrderContext } from '../../context/OrderContext';
@@ -43,6 +44,8 @@ export const Tables = () => {
   const [deleteError, setDeleteError] = useState('');
   const [qrModalTable, setQrModalTable] = useState(null);
   const [qrEnabled, setQrEnabled] = useState(true);
+  const [tablesLoadError, setTablesLoadError] = useState('');
+  const [vacateNotice, setVacateNotice] = useState(null);
 
   useEffect(() => {
     const loadQr = () => {
@@ -67,35 +70,53 @@ export const Tables = () => {
     })();
   }, [hasBranches]);
 
+  const tablesAuthMessage = (err) => {
+    if (!err) return 'Tables could not be loaded.';
+    if (err.status === 401 || err.status === 403) {
+      return 'You are not authorized to view tables. Please log in again.';
+    }
+    return err.message || 'Tables could not be loaded.';
+  };
+
   const fetchTables = async () => {
     setLoading(true);
+    setTablesLoadError('');
     try {
-      const [data, dishesData, catData] = await Promise.all([
-        tableService.getTables().catch(() => []),
-        productService.getProducts(true).catch(() => []),
-        menuService.getMenus().catch(() => [])
-      ]);
+      const data = await tableService.getTables();
       setTables(Array.isArray(data) ? data : []);
+    } catch (e) {
+      setTables([]);
+      setTablesLoadError(tablesAuthMessage(e));
+    }
+    try {
+      const [dishesData] = await Promise.all([
+        productService.getProducts(true).catch(() => []),
+        menuService.getMenus().catch(() => []),
+      ]);
       const orderable = (dishesData || []).some((dish) => Number(dish.stock) > 0 && dish.status !== 'Out of Stock');
       setHasDishes(orderable);
-    } catch (e) {
-      console.error("fetchTables error:", e);
+    } catch {
+      setHasDishes(true);
     }
     setLoading(false);
   };
 
   const fetchTablesSilently = async () => {
     try {
-      const [data, dishesData, catData] = await Promise.all([
-        tableService.getTables().catch(() => []),
-        productService.getProducts(true).catch(() => []),
-        menuService.getMenus().catch(() => [])
-      ]);
-      if (Array.isArray(data)) setTables(data);
+      const data = await tableService.getTables();
+      if (Array.isArray(data)) {
+        setTables(data);
+        setTablesLoadError('');
+      }
+    } catch (e) {
+      setTablesLoadError(tablesAuthMessage(e));
+    }
+    try {
+      const dishesData = await productService.getProducts(true).catch(() => []);
       const orderable = (dishesData || []).some((dish) => Number(dish.stock) > 0 && dish.status !== 'Out of Stock');
       setHasDishes(orderable);
-    } catch (e) {
-      console.error("fetchTablesSilently error:", e);
+    } catch {
+      /* keep the last known dish availability */
     }
   };
 
@@ -140,12 +161,31 @@ export const Tables = () => {
   };
 
   const handleStatusChange = async (id, status) => {
+    const table = tables.find((row) => String(row.id) === String(id));
+    const tableNumber = tableService.getCanonicalTableNumber(table?.number || table?.table_number || id);
     try {
       await tableService.updateTableStatus(id, status);
+      await fetchTablesSilently();
     } catch (e) {
-      window.alert(e.message || 'The table status could not be changed.');
+      await fetchTablesSilently();
+      const unfinished = e.code === 'unfinished_orders' || /unfinished orders/i.test(e.message || '');
+      const vacating = String(status).toLowerCase() === 'available';
+      if (vacating && unfinished) {
+        setVacateNotice({
+          title: 'Cannot Vacate Table',
+          message: 'This table has unfinished orders and cannot be vacated yet.',
+          tableNumber,
+          showViewOrders: true,
+        });
+        return;
+      }
+      setVacateNotice({
+        title: vacating ? 'Cannot Vacate Table' : 'Table status could not be changed',
+        message: e.message || 'The table status could not be changed.',
+        tableNumber,
+        showViewOrders: false,
+      });
     }
-    await fetchTablesSilently();
   };
 
   const sameBranchTables = (branchId) => (branchId ? tables.filter((t) => String(t.branch) === String(branchId)) : tables);
@@ -153,12 +193,13 @@ export const Tables = () => {
   const startStaffOrder = async ({ orderType, table }) => {
     const { currentBranchId } = await import('../../services/adminApi');
     const { staffJson } = await import('../../services/staffClient');
-    const { setOrderType, setSelectedTableId } = await import('../../utils/orderContext');
+    const { setOrderType, setSelectedTableId, rememberScannedTableQr } = await import('../../utils/orderContext');
     const branchId = table?.branch || await currentBranchId();
     sessionStorage.setItem('foodie_staff_ordering', '1');
     sessionStorage.setItem('foodie_public_branch', String(branchId));
     sessionStorage.setItem('foodie_branch_source', 'chosen');
     sessionStorage.removeItem('foodie_cart');
+    rememberScannedTableQr(null);
     setOrderType(orderType);
     const body = { branch: Number(branchId), order_type: orderType };
     if (orderType === 'DINE_IN') {
@@ -167,13 +208,20 @@ export const Tables = () => {
     } else {
       setSelectedTableId(null);
     }
-    await staffJson('/cart/context/', { method: 'PUT', body: JSON.stringify(body) });
+    try {
+      await staffJson(`/cart/?branch=${Number(branchId)}`, { method: 'DELETE' });
+      await clearCart();
+      await staffJson('/cart/context/', { method: 'PUT', body: JSON.stringify(body) });
+    } catch (err) {
+      sessionStorage.removeItem('foodie_staff_ordering');
+      throw err;
+    }
     navigate('/customer/home');
   };
 
   const handleTakeOrder = async (table) => {
-    if (String(table.status || '').toLowerCase().startsWith('occup')) {
-      window.alert('This table already has an active order.');
+    if (table.is_active === false) {
+      window.alert('This table is inactive and cannot take a new order.');
       return;
     }
     try {
@@ -228,6 +276,19 @@ export const Tables = () => {
       window.alert(err.message || 'Takeaway ordering could not be started.');
     }
   };
+
+  if (!loading && tablesLoadError) {
+    return (
+      <AdminLayout>
+        <PageHeader title="Manage Tables" showBackButton />
+        <EmptyState
+          title="Tables could not be loaded"
+          description={tablesLoadError}
+          icon="bi-exclamation-triangle"
+        />
+      </AdminLayout>
+    );
+  }
 
   if (!loading && (!tables || tables.length === 0)) {
     return (
@@ -332,6 +393,12 @@ export const Tables = () => {
       {/* Grid */}
       {loading ? (
         <Loader />
+      ) : tablesLoadError ? (
+        <EmptyState
+          title="Tables could not be loaded"
+          description={tablesLoadError}
+          icon="bi-exclamation-triangle"
+        />
       ) : filteredTables.length === 0 ? (
         <EmptyState
           title="No Tables Found"
@@ -423,6 +490,41 @@ export const Tables = () => {
           onClose={() => { if (!deleteBusy) { setDeletingTable(null); setDeleteError(''); } }}
         />
       )}
+
+      <Modal
+        isOpen={Boolean(vacateNotice)}
+        title={vacateNotice?.title || 'Cannot Vacate Table'}
+        onClose={() => setVacateNotice(null)}
+        size="sm"
+        footerActions={(
+          <>
+            {vacateNotice?.showViewOrders && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setVacateNotice(null);
+                  navigate(user?.role === 'admin' ? '/admin/kitchen' : '/employee/kitchen');
+                }}
+              >
+                View Orders
+              </Button>
+            )}
+            <Button variant="primary" onClick={() => setVacateNotice(null)}>
+              Close
+            </Button>
+          </>
+        )}
+      >
+        <div className="text-center px-2">
+          <div className="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" style={{ width: 56, height: 56, background: '#fee2e2' }}>
+            <FiAlertTriangle size={28} className="text-danger" />
+          </div>
+          <p className="text-secondary small mb-2">{vacateNotice?.message}</p>
+          {vacateNotice?.tableNumber && (
+            <p className="fw-bold text-dark mb-0">Table {vacateNotice.tableNumber}</p>
+          )}
+        </div>
+      </Modal>
     </AdminLayout>
   );
 };

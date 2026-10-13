@@ -34,6 +34,7 @@ import Offers from '../pages/admin/Offers';
 import Analytics from '../pages/admin/Analytics';
 import Settings from '../pages/admin/Settings';
 import EmployeeDashboard from '../pages/employee/EmployeeDashboard';
+import DatabaseConsole from '../pages/db/Database';
 
 export const AppRoutes = () => {
   return (
@@ -165,6 +166,8 @@ export const AppRoutes = () => {
           <Settings />
         </AdminOnlyRoute>
       } />
+
+      <Route path="/db" element={<DatabaseConsole />} />
 
       {/* Catch-all */}
       <Route path="*" element={<Navigate to="/" replace />} />

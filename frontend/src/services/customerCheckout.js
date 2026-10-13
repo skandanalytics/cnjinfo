@@ -34,9 +34,11 @@ export async function applyOrderContext(orderType) {
   if (!branch) throw new Error('Choose a restaurant before checkout.');
   const body = { branch, order_type: type };
   if (type === DINE_IN) {
-    const qr = getScannedTableQr();
     const tableId = getSelectedTableId();
-    if (qr) body.qr = qr;
+    const qr = getScannedTableQr();
+    const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
+    if (staffOrdering && tableId) body.table = tableId;
+    else if (qr) body.qr = qr;
     else if (tableId) body.table = tableId;
     else throw new Error(DINE_IN_NEEDS_QR);
   }
@@ -84,6 +86,13 @@ export async function placeOrder(orderType, paymentMethod) {
     });
     sessionStorage.removeItem(CHECKOUT_KEY);
     if (!res.data?.id) throw new Error('The server did not return an order id.');
+    try {
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: res.data.id } }));
+      window.dispatchEvent(new CustomEvent('foodie_inventory_updated', { detail: { orderId: res.data.id } }));
+      window.dispatchEvent(new CustomEvent('foodie_products_updated', { detail: { orderId: res.data.id } }));
+      window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: res.data.id } }));
+      localStorage.setItem('foodie_data_sync', String(Date.now()));
+    } catch { /* same-tab listeners still received the custom events */ }
     return res.data;
   } catch (err) {
     throw new Error(checkoutErrorMessage(err));

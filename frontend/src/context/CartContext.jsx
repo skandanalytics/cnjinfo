@@ -1,6 +1,5 @@
 import React, { createContext, useState, useEffect, useContext, useRef } from 'react';
 import { orderService } from '../services/orderService';
-import { tableService } from '../services/tableService';
 import { getProductSellingPrice, calculateBillDetails, calculateCouponDiscount, GST_RATE, DEFAULT_PACKING_CHARGE } from '../utils/pricing';
 import { couponService, isFirstTimeCustomer } from '../services/couponService';
 import { cartService } from '../services/cartService';
@@ -237,7 +236,10 @@ export const CartProvider = ({ children }) => {
             : await cartService.getExistingCart(user?.id || user?.phone, tableContext?.tableId || null).catch(() => null);
 
           if (!activeCart) {
-            if (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
+            if (sessionStorage.getItem('foodie_staff_ordering') === '1') {
+              setCartItems([]);
+              saveCartToStorage([], user);
+            } else if (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
               setCartItems(unmergedGuestItems);
               saveCartToStorage(unmergedGuestItems, user);
             } else if (cachedCartItems.length > 0) {
@@ -311,6 +313,9 @@ export const CartProvider = ({ children }) => {
           if (mappedItems.length > 0) {
             setCartItems(mappedItems);
             saveCartToStorage(mappedItems, user);
+          } else if (sessionStorage.getItem('foodie_staff_ordering') === '1') {
+            setCartItems([]);
+            saveCartToStorage([], user);
           } else if (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
             setCartItems(unmergedGuestItems);
             saveCartToStorage(unmergedGuestItems, user);
@@ -358,14 +363,8 @@ export const CartProvider = ({ children }) => {
     if (tableInfo) {
       sessionStorage.setItem('foodie_table', JSON.stringify(tableInfo));
       localStorage.setItem('foodie_table', JSON.stringify(tableInfo));
-      const targetTable = tableInfo.tableNumber || tableInfo.tableId;
-      if (targetTable && String(targetTable).toUpperCase() !== 'TAKEAWAY') {
-        try {
-          if (tableService && typeof tableService.occupyTableByNumber === 'function') {
-            tableService.occupyTableByNumber(targetTable).catch(() => { });
-          }
-        } catch (e) { }
-      }
+      /* Occupancy is written by the backend when an order is placed. Matching by table number here
+         can attach the wrong table when more than one branch uses the same number. */
     } else {
       sessionStorage.removeItem('foodie_table');
       localStorage.removeItem('foodie_table');
@@ -779,6 +778,39 @@ export const CartProvider = ({ children }) => {
     }
   };
 
+  const wipeStaffLocalCart = () => {
+    setCartItems([]);
+    setCoupon(null);
+    const id = user?.phone
+      ? String(user.phone).replace(/\D/g, '').slice(-10)
+      : (user?.id || user?.email || '');
+    const prefix = id ? `foodie_cart_${id}` : null;
+    const shouldWipe = (key) => key === 'foodie_cart' || (prefix && key && key.startsWith(prefix));
+    const sessionKeys = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) sessionKeys.push(sessionStorage.key(i));
+    sessionKeys.filter(shouldWipe).forEach((key) => sessionStorage.removeItem(key));
+    const localKeys = [];
+    for (let i = 0; i < localStorage.length; i += 1) localKeys.push(localStorage.key(i));
+    localKeys.filter(shouldWipe).forEach((key) => localStorage.removeItem(key));
+  };
+
+  const abandonStaffTableOrder = async () => {
+    const branch = Number(sessionStorage.getItem('foodie_public_branch'));
+    if (!Number.isFinite(branch) || branch <= 0) {
+      throw new Error('The table-order session could not be identified.');
+    }
+    const { staffJson } = await import('../services/staffClient');
+    await staffJson(`/cart/?branch=${branch}`, { method: 'DELETE' });
+    wipeStaffLocalCart();
+    setTable(null);
+    const { setOrderType, setSelectedTableId, rememberScannedTableQr } = await import('../utils/orderContext');
+    setOrderType(null);
+    setSelectedTableId(null);
+    rememberScannedTableQr(null);
+    sessionStorage.removeItem('foodie_staff_ordering');
+    sessionStorage.removeItem('foodie_branch_source');
+  };
+
   const clearCart = async () => {
     // Set flag so loadBackendCart doesn't immediately re-create a cart after checkout
     sessionStorage.setItem('foodie_checkout_in_progress', '1');
@@ -1052,6 +1084,7 @@ export const CartProvider = ({ children }) => {
       decreaseQuantity,
       updateQuantity,
       clearCart,
+      abandonStaffTableOrder,
       loadOrderIntoCart,
       applyCoupon,
       removeCoupon,

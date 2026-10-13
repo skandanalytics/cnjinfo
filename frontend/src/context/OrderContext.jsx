@@ -1,206 +1,158 @@
-import React, { createContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useState, useEffect, useRef, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import { orderService } from '../services/orderService';
 import { notificationService } from '../services/notificationService';
+import { startOrderEvents } from '../services/orderEventsSocket';
+import { useAuth } from '../hooks/useAuth';
 
 export const OrderContext = createContext();
 
+function uniqueById(rows) {
+  const byId = new Map();
+  (rows || []).forEach((row) => {
+    const id = String(row?.id ?? row?.order_id ?? '');
+    if (id) byId.set(id, row);
+  });
+  return Array.from(byId.values());
+}
+
 export const OrderProvider = ({ children }) => {
+  const { user, isAuthenticated } = useAuth();
+  const location = useLocation();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const isFetchingRef = useRef(false);
-  const pollBackoffUntilRef = useRef(0);
+  const pendingFetchRef = useRef(false);
+  const pendingStatusIds = useRef(new Set());
 
   const staffHasSession = () => {
     if (typeof window === 'undefined') return false;
     return Boolean(sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin'));
   };
 
-  const fetchOrders = async (userIdOrShowLoading, maybeShowLoading) => {
-    let targetUser = undefined;
-    let showLoading = true;
-    if (typeof userIdOrShowLoading === 'string') {
-      targetUser = userIdOrShowLoading;
-      if (typeof maybeShowLoading === 'boolean') showLoading = maybeShowLoading;
-    } else if (typeof userIdOrShowLoading === 'boolean') {
-      showLoading = userIdOrShowLoading;
+  const loadStaffOrders = useCallback(async (showLoading = false) => {
+    if (!staffHasSession()) return;
+    if (isFetchingRef.current) {
+      pendingFetchRef.current = true;
+      return;
     }
-
-    if (isFetchingRef.current) return;
     isFetchingRef.current = true;
-
     if (showLoading) setLoading(true);
     try {
-      const path = typeof window !== 'undefined' ? window.location.pathname : '';
-      const isStaffRoute = path.includes('/admin') || path.includes('/employee');
-      const arg = targetUser || (isStaffRoute ? 'ALL' : undefined);
-      const data = await orderService.getOrders(arg, true);
-      setOrders(Array.isArray(data) ? data : []);
+      const { listOrdersForUi } = await import('../services/adminApi');
+      const data = await listOrdersForUi();
+      if (Array.isArray(data)) setOrders(uniqueById(data));
     } catch (e) {
-      console.error("fetchOrders error:", e);
+      console.error('fetchOrders error:', e);
     } finally {
       setLoading(false);
       isFetchingRef.current = false;
+      if (pendingFetchRef.current) {
+        pendingFetchRef.current = false;
+        loadStaffOrders(false);
+      }
+    }
+  }, []);
+
+  const fetchOrders = async (userIdOrShowLoading, maybeShowLoading) => {
+    let showLoading = true;
+    if (typeof userIdOrShowLoading === 'boolean') {
+      showLoading = userIdOrShowLoading;
+    } else if (typeof maybeShowLoading === 'boolean') {
+      showLoading = maybeShowLoading;
+    }
+    if (staffHasSession()) {
+      await loadStaffOrders(showLoading);
+      return;
+    }
+    if (showLoading) setLoading(true);
+    try {
+      const data = await orderService.getOrders(userIdOrShowLoading, true);
+      if (Array.isArray(data)) setOrders(uniqueById(data));
+    } catch (e) {
+      console.error('fetchOrders error:', e);
+    } finally {
+      setLoading(false);
     }
   };
 
-  const fetchOrdersSilently = async (targetUser) => {
-    if (isFetchingRef.current) return;
-    if (Date.now() < pollBackoffUntilRef.current) return;
-    isFetchingRef.current = true;
-    try {
-      const path = typeof window !== 'undefined' ? window.location.pathname : '';
-      const isStaffRoute = path.includes('/admin') || path.includes('/employee');
-      const arg = targetUser || (isStaffRoute ? 'ALL' : undefined);
-      const data = await orderService.getOrders(arg, true);
-      setOrders(Array.isArray(data) ? data : []);
-      pollBackoffUntilRef.current = 0;
-    } catch (e) {
-      console.error("fetchOrdersSilently error:", e);
-      const status = e && e.status;
-      if (!status || status >= 500) {
-        pollBackoffUntilRef.current = Date.now() + 60000;
-      }
-    } finally {
-      setLoading(false);
-      isFetchingRef.current = false;
-    }
+  const fetchOrdersSilently = async () => {
+    await loadStaffOrders(false);
   };
 
   useEffect(() => {
-    const path = typeof window !== 'undefined' ? window.location.pathname : '';
-    const isStaffRoute = path.includes('/admin') || path.includes('/employee');
-
-    if (isStaffRoute && staffHasSession()) {
-      fetchOrders(true);
+    if (!staffHasSession()) {
+      setLoading(false);
+      return undefined;
     }
-
+    loadStaffOrders(true);
     const handleOrdersUpdated = () => {
-      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-      const isStaff = currentPath.includes('/admin') || currentPath.includes('/employee');
-      if (isStaff && staffHasSession()) {
-        fetchOrdersSilently();
-      }
+      if (staffHasSession()) loadStaffOrders(false);
     };
-
     const handleStorage = (e) => {
-      if (e.key === 'foodie_orders_sync_trigger' || e.key === 'foodie_order_status_overrides' || e.key === 'foodie_last_placed_order') {
+      if (e.key === 'foodie_orders_sync_trigger' || e.key === 'foodie_data_sync' || e.key === 'foodie_last_placed_order') {
         handleOrdersUpdated();
       }
     };
-
     window.addEventListener('foodie_orders_updated', handleOrdersUpdated);
-    window.addEventListener('foodie_tables_updated', handleOrdersUpdated);
     window.addEventListener('storage', handleStorage);
-    
-    const handleLogout = () => {
-      setOrders([]);
-    };
+    const handleLogout = () => setOrders([]);
     window.addEventListener('foodie_logout', handleLogout);
-
     return () => {
       window.removeEventListener('foodie_orders_updated', handleOrdersUpdated);
-      window.removeEventListener('foodie_tables_updated', handleOrdersUpdated);
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('foodie_logout', handleLogout);
     };
-  }, []);
-
-  // Fallback refresh. Live updates come from the orders websocket; this poll
-  // stays slow and pauses for a minute after a 5xx so a down database is not stampeded.
-  useEffect(() => {
-    const pollInterval = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return;
-      const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
-      const isStaff = currentPath.includes('/admin') || currentPath.includes('/employee');
-      if (isStaff && staffHasSession()) {
-        fetchOrdersSilently();
-      }
-    }, 5000);
-
-    return () => clearInterval(pollInterval);
-  }, []);
+  }, [isAuthenticated, user?.id, loadStaffOrders]);
 
   useEffect(() => {
-    const path = window.location.pathname;
-    if (!path.startsWith('/admin') && !path.startsWith('/employee')) return undefined;
-    const token = sessionStorage.getItem('foodie_staff_access');
-    if (!token) return undefined;
-    let socket;
-    let closed = false;
-    let timer;
-    let delay = 2000;
-    const connect = () => {
-      const access = sessionStorage.getItem('foodie_staff_access');
-      if (!access || closed) return;
-      const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-      socket = new WebSocket(`${proto}://${window.location.host}/ws/orders/?token=${encodeURIComponent(access)}`);
-      socket.onopen = () => { delay = 2000; };
-      socket.onmessage = () => fetchOrdersSilently();
-      socket.onclose = () => {
-        if (!closed) {
-          timer = setTimeout(connect, delay);
-          delay = Math.min(delay * 2, 30000);
-        }
-      };
-    };
-    connect();
-    return () => {
-      closed = true;
-      if (timer) clearTimeout(timer);
-      if (socket) socket.close();
-    };
-  }, []);
+    const path = location.pathname || '';
+    if (!staffHasSession()) return undefined;
+    if (path.includes('/kitchen') || path.includes('/orders') || path.includes('/tables') || path.includes('/dashboard')) {
+      loadStaffOrders(false);
+    }
+  }, [location.pathname, loadStaffOrders]);
+
+  useEffect(() => {
+    if (!staffHasSession() && !sessionStorage.getItem('foodie_token_customer') && !localStorage.getItem('foodie_token_customer')) {
+      return undefined;
+    }
+    return startOrderEvents((type) => {
+      if (type === 'open' && staffHasSession()) loadStaffOrders(false);
+    });
+  }, [isAuthenticated, user?.id, loadStaffOrders]);
 
   const updateStatus = async (id, status, reason) => {
-    const now = Date.now();
-    let previousStatus = null;
-
-    // Optimistically update React state immediately with transition timestamp
-    setOrders((prevOrders) =>
-      prevOrders.map((o) => {
-        if (String(o.id) === String(id)) {
-          previousStatus = o.status;
-          const statusTimes = { ...(o.statusTimes || {}), [status]: now, updatedAt: now };
-          return {
-            ...o,
-            status,
-            statusTimes,
-            statusUpdatedAt: now,
-            ...(status === 'Preparing' ? { preparingAt: now } : {}),
-            ...(status === 'Ready' ? { readyAt: now } : {}),
-            ...(status === 'Serving' || status === 'Completed' ? { completedAt: now } : {})
-          };
-        }
-        return o;
-      })
-    );
-
+    const key = String(id);
+    if (pendingStatusIds.current.has(key)) {
+      throw new Error('This order is already being updated.');
+    }
+    pendingStatusIds.current.add(key);
     try {
       const updated = await orderService.updateOrderStatus(id, status, reason);
-      if (status === 'Ready' || status === 'ready') {
-        const targetOrd = (orders || []).find(o => String(o.id) === String(id));
-        const isTakeaway = targetOrd?.orderType === 'Takeaway' || targetOrd?.table === 'Takeaway' || String(targetOrd?.table).toLowerCase() === 'takeaway';
+      if (updated) {
+        setOrders((prevOrders) => uniqueById(prevOrders.map((o) => (
+          String(o.id) === key ? { ...o, ...updated } : o
+        ))));
+      }
+      if (String(status).toLowerCase() === 'ready') {
+        const targetOrd = updated || (orders || []).find((o) => String(o.id) === key);
+        const isTakeaway = targetOrd?.orderType === 'Takeaway' || targetOrd?.table === 'Takeaway'
+          || String(targetOrd?.table).toLowerCase() === 'takeaway';
         const msg = isTakeaway
           ? `Takeaway Order #${id} is READY for counter pickup!`
           : `Order #${id} is READY to be served!`;
         notificationService.createNotification(msg).catch(() => {});
       }
-      fetchOrdersSilently();
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: id, status } }));
+      window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: id } }));
+      try { localStorage.setItem('foodie_orders_sync_trigger', String(Date.now())); } catch { /* other tabs */ }
       return updated;
     } catch (e) {
-      console.error("Failed to update status:", e);
-      if (previousStatus) {
-        setOrders((prevOrders) =>
-          prevOrders.map((o) => {
-            if (String(o.id) === String(id)) {
-              return { ...o, status: previousStatus };
-            }
-            return o;
-          })
-        );
-      }
-      fetchOrdersSilently();
+      await loadStaffOrders(false);
       throw e;
+    } finally {
+      pendingStatusIds.current.delete(key);
     }
   };
 

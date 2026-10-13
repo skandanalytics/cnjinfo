@@ -31,39 +31,23 @@ export const EmployeeDashboard = () => {
   };
 
   useEffect(() => {
+    fetchOrders(false);
     fetchTablesSilently();
-    if (typeof fetchOrders === 'function') {
-      fetchOrders(false);
-    }
 
-    const handleSync = () => {
-      fetchTablesSilently();
-      if (typeof fetchOrders === 'function') fetchOrders(false);
-    };
-
+    const handleTables = () => { fetchTablesSilently(); };
     const handleStorage = (e) => {
-      if (
-        e.key === 'foodie_inventory_sync_trigger' || 
-        e.key === 'foodie_orders_sync_trigger' || 
-        e.key === 'foodie_tables_updated' ||
-        e.key === 'foodie_order_status_overrides'
-      ) {
+      if (e.key === 'foodie_orders_sync_trigger' || e.key === 'foodie_data_sync') {
         fetchTablesSilently();
-        if (typeof fetchOrders === 'function') fetchOrders(false);
       }
     };
 
-    window.addEventListener('foodie_tables_updated', handleSync);
-    window.addEventListener('foodie_orders_updated', handleSync);
-    window.addEventListener('foodie_inventory_updated', handleSync);
-    window.addEventListener('foodie_products_updated', handleSync);
+    window.addEventListener('foodie_tables_updated', handleTables);
+    window.addEventListener('foodie_orders_updated', handleTables);
     window.addEventListener('storage', handleStorage);
 
     return () => {
-      window.removeEventListener('foodie_tables_updated', handleSync);
-      window.removeEventListener('foodie_orders_updated', handleSync);
-      window.removeEventListener('foodie_inventory_updated', handleSync);
-      window.removeEventListener('foodie_products_updated', handleSync);
+      window.removeEventListener('foodie_tables_updated', handleTables);
+      window.removeEventListener('foodie_orders_updated', handleTables);
       window.removeEventListener('storage', handleStorage);
     };
   }, []);

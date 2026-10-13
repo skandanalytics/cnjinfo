@@ -8,19 +8,15 @@ import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
 import EBillModal from '../../components/orders/EBillModal';
-import api from '../../services/api';
 
 export const Kitchen = () => {
   const { orders, loading, updateStatus, fetchOrders } = useContext(OrderContext);
   const { user } = useContext(AuthContext);
   const [updatingId, setUpdatingId] = useState(null);
   const [updatingAction, setUpdatingAction] = useState(null);
+  const [actionError, setActionError] = useState('');
   const [eBillOrder, setEBillOrder] = useState(null);
   const [branches, setBranches] = useState([]);
-  
-  // States for live ticket details
-  const [loadingDetailsId, setLoadingDetailsId] = useState(null);
-  const [liveTicketItems, setLiveTicketItems] = useState({});
 
   // Determine initial branch from user's assigned branch or fallback to main branch
   const userAssignedBranch = user?.branchId || user?.restaurant || user?.restaurant_id || null;
@@ -35,6 +31,10 @@ export const Kitchen = () => {
     if (b.is_active === false) return true;
     return false;
   };
+
+  useEffect(() => {
+    fetchOrders(false);
+  }, []);
 
   useEffect(() => {
     const loadBranches = async () => {
@@ -73,35 +73,15 @@ export const Kitchen = () => {
     };
   }, []);
 
-  useEffect(() => {
-    // Initial fetch on mount
-    fetchOrders(false);
-
-    const handleSync = () => {
-      fetchOrders(false);
-    };
-
-    window.addEventListener('foodie_orders_updated', handleSync);
-    window.addEventListener('foodie_tables_updated', handleSync);
-    window.addEventListener('storage', handleSync);
-
-    return () => {
-      window.removeEventListener('foodie_orders_updated', handleSync);
-      window.removeEventListener('foodie_tables_updated', handleSync);
-      window.removeEventListener('storage', handleSync);
-    };
-  }, []);
-
   const handleAction = async (id, status) => {
     if (updatingId === id) return;
     setUpdatingId(id);
     setUpdatingAction(status);
+    setActionError('');
     try {
       await updateStatus(id, status);
-      window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
-      window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
     } catch (e) {
-      console.error("Failed to update kitchen status:", e);
+      setActionError(e.message || 'This status change is no longer valid. The queue was refreshed.');
     }
     setUpdatingId(null);
     setUpdatingAction(null);
@@ -116,72 +96,12 @@ export const Kitchen = () => {
       setUpdatingAction('reject');
       try {
         await updateStatus(id, 'Cancelled', reason.trim());
-        if (typeof fetchOrders === 'function') await fetchOrders(false);
       } catch (e) {
-        console.error("Failed to reject order:", e);
+        setActionError(e.message || 'The order could not be cancelled.');
       } finally {
         setUpdatingId(null);
         setUpdatingAction(null);
       }
-    }
-  };
-
-  const fetchedDetailsRef = React.useRef(new Set());
-
-  const fetchTicketDetails = async (ordId) => {
-    if (fetchedDetailsRef.current.has(ordId)) return;
-    fetchedDetailsRef.current.add(ordId);
-    const existing = (orders || []).find((o) => String(o.id) === String(ordId));
-    if (existing?.items?.length) {
-      setLiveTicketItems((prev) => ({ ...prev, [ordId]: existing.items }));
-      return;
-    }
-    setLoadingDetailsId(ordId);
-    try {
-      const [itemsRes, foodsRes] = await Promise.all([
-        api.get(`/orders/${ordId}/`).catch(()=>({data:[]})),
-        Promise.resolve({ data: [] })
-      ]);
-      const items = itemsRes.data?.data || itemsRes.data?.results || itemsRes.data || [];
-      const foods = foodsRes.data?.data || foodsRes.data?.results || foodsRes.data || [];
-      const mapped = items.map(item => {
-        const foodId = item.food || item.food_item;
-        const foodObj = foods.find(f => f.id === foodId);
-        
-        let instructions = item.special_instructions || item.instructions || "";
-        let extraIngredients = item.extraIngredients || [];
-        
-        // Parse "Add-ons:" from instructions if present
-        if (instructions.includes('Add-ons:')) {
-          const parts = instructions.split(' | ');
-          const cleanParts = [];
-          for (const p of parts) {
-            if (p.startsWith('Add-ons:')) {
-              const addonsStr = p.replace('Add-ons:', '').trim();
-              if (addonsStr) {
-                const addonsList = addonsStr.split(',').map(a => a.trim());
-                addonsList.forEach(a => extraIngredients.push({ name: a }));
-              }
-            } else {
-              cleanParts.push(p);
-            }
-          }
-          instructions = cleanParts.join(' | ');
-        }
-
-        return {
-          id: item.id,
-          name: item.name || item.food_name || (foodObj ? foodObj.name || foodObj.title : null) || 'Dish Item',
-          quantity: item.quantity || item.qty || 1,
-          instructions: instructions,
-          extraIngredients: extraIngredients
-        };
-      });
-      setLiveTicketItems(prev => ({...prev, [ordId]: mapped}));
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingDetailsId(null);
     }
   };
 
@@ -241,21 +161,6 @@ export const Kitchen = () => {
       }
     }
 
-    const ordId = String(ord.id || ord._backendId || ord.order_id || '').trim();
-    if (ordId) {
-      try {
-        const saved = JSON.parse(localStorage.getItem(`foodie_saved_order_${ordId}`) || 'null');
-        if (saved && Array.isArray(saved.items) && saved.items.length > 0) return saved.items;
-      } catch (e) {}
-      try {
-        const allPlaced = JSON.parse(localStorage.getItem('foodie_all_placed_orders') || '[]');
-        const found = (allPlaced || []).find(p => {
-          const pId = String(p.id || p.order_id || p._backendId || '').trim();
-          return pId === ordId || (pId.replace(/\D/g, '') && pId.replace(/\D/g, '') === ordId.replace(/\D/g, ''));
-        });
-        if (found && Array.isArray(found.items) && found.items.length > 0) return found.items;
-      } catch (e) {}
-    }
     return [];
   };
 
@@ -335,85 +240,7 @@ export const Kitchen = () => {
     return (totalMatches && itemsMatch);
   };
 
-  const allKitchenOrders = (() => {
-    const ordersMap = new Map();
-    const deletedOrderIds = new Set(JSON.parse(localStorage.getItem('foodie_deleted_order_ids') || '[]').map(String));
-    let statusOverrides = {};
-    try {
-      statusOverrides = JSON.parse(localStorage.getItem('foodie_order_status_overrides') || '{}');
-    } catch (e) {}
-
-    try {
-      localStorage.removeItem('foodie_saved_order_undefined');
-      localStorage.removeItem('foodie_saved_order_null');
-      localStorage.removeItem('foodie_saved_order_FD10001');
-    } catch (e) { }
-
-    const addOrMergeOrder = (ord, isContextOrder = false) => {
-      let rawId = ord?.id || ord?.order_id;
-      if (!rawId || String(rawId) === 'undefined' || String(rawId) === 'null') return;
-      const id = String(rawId).trim();
-      if (deletedOrderIds.has(id)) return;
-
-      // Extract table number if available
-      let tableNum = ord.table || ord.tableNumber || ord.table_number || ord.table_no;
-      if (!tableNum || tableNum === 'undefined' || tableNum === 'null') {
-        try {
-          const storedTableInfo = JSON.parse(localStorage.getItem(`foodie_order_table_${id}`) || 'null');
-          if (storedTableInfo && storedTableInfo.tableNumber) {
-            tableNum = storedTableInfo.tableNumber;
-          }
-        } catch (e) { }
-      }
-      if (!tableNum || tableNum === 'undefined' || tableNum === 'null') {
-        tableNum = (ord.order_type === 'TAKEAWAY' || ord.is_takeaway) ? 'Takeaway' : 'Takeaway';
-      }
-
-      const overrideSt = statusOverrides[id] || (ord._backendId ? statusOverrides[String(ord._backendId)] : null) || (ord.backendNumericId ? statusOverrides[String(ord.backendNumericId)] : null);
-      const effectiveStatus = overrideSt || ord.status || 'Pending';
-
-      if (ordersMap.has(id)) {
-        const existing = ordersMap.get(id);
-        ordersMap.set(id, {
-          ...existing,
-          ...ord,
-          id: id,
-          items: (Array.isArray(ord.items) && ord.items.length > 0) ? ord.items : (existing.items || []),
-          total: ord.total || existing.total || 0,
-          table: tableNum || existing.table || 'Takeaway',
-          status: overrideSt || (isContextOrder && ord.status ? ord.status : (existing.status || ord.status || 'Pending'))
-        });
-      } else {
-        ordersMap.set(id, {
-          ...ord,
-          id: id,
-          table: tableNum,
-          items: Array.isArray(ord.items) ? ord.items : [],
-          status: effectiveStatus
-        });
-      }
-    };
-
-    // 1. First add locally placed orders
-    try {
-      const allPlaced = JSON.parse(localStorage.getItem('foodie_all_placed_orders') || '[]');
-      (allPlaced || []).forEach(o => addOrMergeOrder(o, false));
-    } catch (e) { }
-
-    // 2. Then add context orders (which are authoritative and contain live optimistic status updates)
-    (orders || []).forEach(o => addOrMergeOrder(o, true));
-
-    const clearedBefore = parseInt(localStorage.getItem('foodie_orders_cleared_before') || '0', 10);
-    const all = Array.from(ordersMap.values()).filter(o => !deletedOrderIds.has(String(o.id)));
-
-    return all.filter(ord => {
-      if (clearedBefore > 0) {
-        const time = Number(ord.placedAt || ord.rawCreatedAt) || (ord.created_at ? new Date(ord.created_at).getTime() : 0) || (ord.createdAt ? new Date(ord.createdAt).getTime() : 0);
-        if (time > 0 && time <= clearedBefore) return false;
-      }
-      return true;
-    });
-  })();
+  const allKitchenOrders = (orders || []).filter((ord) => ord && (ord.id || ord.order_id));
   // Branch and backend-driven filtering (NEVER filter by customer user_id)
   const activeBranchFilteredOrders = allKitchenOrders.filter((ord) => {
     if (!ord || (!ord.id && !ord.order_id)) return false;
@@ -443,16 +270,10 @@ export const Kitchen = () => {
     return true;
   });
 
-  const pendingOrders = sortNewTickets(activeBranchFilteredOrders.filter((o) => isPending(o.status)));
+  const pendingOrders = sortNewTickets(activeBranchFilteredOrders.filter((o) => isPending(o.status) && !isPreparing(o.status) && !isReady(o.status) && !isCompleted(o.status)));
   const preparingOrders = sortPreparingQueue(activeBranchFilteredOrders.filter((o) => isPreparing(o.status)));
   const readyOrders = sortReadyQueue(activeBranchFilteredOrders.filter((o) => isReady(o.status)));
   const completedOrders = sortCompletedQueue(activeBranchFilteredOrders.filter((o) => isCompleted(o.status)));
-
-  useEffect(() => {
-    activeBranchFilteredOrders.forEach(ord => {
-      fetchTicketDetails(ord.id);
-    });
-  }, [activeBranchFilteredOrders]);
 
   return (
     <AdminLayout>
@@ -500,6 +321,9 @@ export const Kitchen = () => {
         }
       />
 
+      {actionError && (
+        <div className="alert alert-warning small py-2 mb-3" role="alert">{actionError}</div>
+      )}
       {loading ? (
         <Loader />
       ) : (
@@ -532,8 +356,7 @@ export const Kitchen = () => {
 
                       <div className="small border-bottom pb-2 mb-2 text-secondary">
                         {(() => {
-                          const baseItemsList = getTicketItems(ord);
-                          const itemsList = liveTicketItems[ord.id] || baseItemsList;
+                          const itemsList = getTicketItems(ord);
                           const isFallback = itemsList.length === 0 || (itemsList.length === 1 && itemsList[0].name === 'Dish Item');
 
                           if (itemsList.length > 0 && !isFallback) {
@@ -577,7 +400,7 @@ export const Kitchen = () => {
                         <div className="d-flex align-items-center gap-2">
                           <Button
                             onClick={() => handleReject(ord.id)}
-                            disabled={updatingId === ord.id && updatingAction === 'reject'}
+                            disabled={updatingId === ord.id}
                             size="sm"
                             variant="outline-danger"
                             className="py-1 px-2.5 fw-bold shadow-xs"
@@ -587,7 +410,7 @@ export const Kitchen = () => {
                           </Button>
                           <Button
                             onClick={() => handleAction(ord.id, 'Preparing')}
-                            disabled={updatingId === ord.id && updatingAction === 'Preparing'}
+                            disabled={updatingId === ord.id}
                             size="sm"
                             variant="primary"
                             className="py-1 px-3 fw-bold shadow-xs"
@@ -632,8 +455,7 @@ export const Kitchen = () => {
 
                       <div className="small border-bottom pb-2 mb-2 text-secondary">
                         {(() => {
-                          const baseItemsList = getTicketItems(ord);
-                          const itemsList = liveTicketItems[ord.id] || baseItemsList;
+                          const itemsList = getTicketItems(ord);
                           const isFallback = itemsList.length === 0 || (itemsList.length === 1 && itemsList[0].name === 'Dish Item');
 
                           if (itemsList.length > 0 && !isFallback) {
@@ -720,8 +542,7 @@ export const Kitchen = () => {
 
                       <div className="small border-bottom pb-2 mb-2 text-secondary">
                         {(() => {
-                          const baseItemsList = getTicketItems(ord);
-                          const itemsList = liveTicketItems[ord.id] || baseItemsList;
+                          const itemsList = getTicketItems(ord);
                           const isFallback = itemsList.length === 0 || (itemsList.length === 1 && itemsList[0].name === 'Dish Item');
 
                           if (itemsList.length > 0 && !isFallback) {

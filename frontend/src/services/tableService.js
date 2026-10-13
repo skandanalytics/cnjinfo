@@ -675,7 +675,13 @@ export const tableService = {
   updateTableStatus: async (id, status) => {
     const { isStaffScreen, updateTableStatus, explain } = await import('./adminApi');
     if (isStaffScreen()) {
-      try { return await updateTableStatus(id, status); } catch (err) { throw new Error(explain(err)); }
+      try { return await updateTableStatus(id, status); } catch (err) {
+        const wrapped = new Error(explain(err));
+        wrapped.status = err.status;
+        wrapped.code = err.code;
+        wrapped.data = err.data;
+        throw wrapped;
+      }
     }
     const isAvail = String(status).toUpperCase() === 'AVAILABLE';
     const isReserved = String(status).toUpperCase() === 'RESERVED';

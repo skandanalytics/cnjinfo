@@ -310,13 +310,6 @@ export const FoodDetails = () => {
                 );
               })()}
 
-              {dish.protein !== undefined && dish.protein !== null && dish.protein !== '' && (
-                <div className="bg-light rounded-3 p-2.5 text-center border border-light-subtle mb-4">
-                  <span className="text-secondary small d-block" style={{ fontSize: '10px', textTransform: 'uppercase', fontWeight: '600' }}>Protein</span>
-                  <strong className="text-dark fs-6">{Number(dish.protein).toFixed(2)} g</strong>
-                </div>
-              )}
-
               <h6 className="fw-bold text-dark mb-2">Description</h6>
               <p className="text-secondary small mb-4" style={{ lineHeight: '1.6' }}>
                 {dish.description}

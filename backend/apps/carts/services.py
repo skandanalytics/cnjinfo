@@ -125,28 +125,40 @@ def _branch_has_orderable_food(branch):
     return any(is_orderable(food) for food in foods)
 
 
+def _table_for_dine_in(branch, qr_code=None, table_id=None):
+    """Resolve a dine-in table by primary key or scanned QR. Occupied tables may take another order."""
+    qs = DiningTable.objects.select_for_update().filter(branch=branch, is_active=True)
+    if qr_code is not None:
+        table = qs.filter(qr_code=qr_code, qr_is_active=True).first()
+        if table is None:
+            raise CartError("Invalid or inactive QR code for this branch.", "qr_invalid")
+        return table
+    if table_id is not None:
+        table = qs.filter(pk=table_id).first()
+        if table is None:
+            raise CartError("That table is not available for dine-in.", "table_unavailable")
+        return table
+    return None
+
+
+@transaction.atomic
 def set_context(cart, order_type, qr_code=None, table_id=None):
-    """Dine-In needs a table of this branch: the scanned QR, or a table that is currently available.
-    Takeaway never has a table."""
+    """Dine-In needs a table of this branch: the scanned QR, or a table selected by database id.
+    Takeaway never has a table. QR enabled/disabled only applies when binding through a scanned QR."""
+    cart = Cart.objects.select_for_update().select_related("branch", "table").get(pk=cart.pk)
     if order_type == Cart.OrderType.TAKEAWAY:
         if not _branch_has_orderable_food(cart.branch):
             raise CartError("Takeaway ordering is unavailable because no dishes are currently available.", "no_dishes")
         cart.order_type, cart.table = order_type, None
     else:
-        table = None
-        if qr_code is not None:
-            table = DiningTable.objects.filter(qr_code=qr_code, branch=cart.branch, is_active=True,
-                                               qr_is_active=True).first()
-            if table is None:
-                raise CartError("Invalid or inactive QR code for this branch.", "qr_invalid")
-        elif table_id is not None:
-            # Occupied and reserved tables can take another order. Inactive tables cannot.
-            table = DiningTable.objects.filter(
-                pk=table_id, branch=cart.branch, is_active=True).first()
-            if table is None:
-                raise CartError("That table is not available for dine-in.", "table_unavailable")
-        elif cart.table_id is None:
+        table = _table_for_dine_in(cart.branch, qr_code=qr_code, table_id=table_id)
+        if table is None and cart.table_id is None:
             raise CartError("Choose an available table, or scan the table QR code.", "qr_required")
+        if table is None and cart.table_id:
+            current = DiningTable.objects.select_for_update().filter(
+                pk=cart.table_id, branch=cart.branch, is_active=True).first()
+            if current is None:
+                raise CartError("That table is not available for dine-in.", "table_unavailable")
         cart.order_type = order_type
         if table:
             cart.table = table
@@ -228,8 +240,10 @@ def evaluate(cart, request=None, code_override=None):
     context_issue = None
     if cart.order_type == Cart.OrderType.DINE_IN and cart.table_id is None:
         context_issue = "Scan the table QR code to order Dine-In, or choose Takeaway."
-    elif cart.table_id and not (cart.table.is_active and cart.table.qr_is_active):
-        context_issue = "This table is no longer available."
+    elif cart.table_id:
+        table = DiningTable.objects.filter(pk=cart.table_id).first()
+        if table is None or table.branch_id != cart.branch_id or not table.is_active:
+            context_issue = "This table is no longer available."
     if context_issue:
         issues.append({"item_id": None, "detail": context_issue})
 

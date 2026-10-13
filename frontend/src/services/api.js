@@ -34,7 +34,7 @@ api.interceptors.request.use(
 
     const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
     const isAdminRoute =
-      currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || staffOrdering;
+      currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || currentPath.startsWith('/db') || staffOrdering;
 
     const adminToken = sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin');
     const customerToken = sessionStorage.getItem('foodie_token_customer') || localStorage.getItem('foodie_token_customer');
@@ -233,7 +233,7 @@ export const clearApiCache = () => {
 api.get = function (url, config = {}) {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
   const staffOrdering = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('foodie_staff_ordering') === '1';
-  const isAdminRoute = currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || staffOrdering;
+  const isAdminRoute = currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || currentPath.startsWith('/db') || staffOrdering;
   const adminToken = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin') || '') : '';
   const customerToken = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('foodie_token_customer') || '' : '';
   const token = isAdminRoute ? adminToken : customerToken;
