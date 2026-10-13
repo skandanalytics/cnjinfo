@@ -227,8 +227,8 @@ export const couponService = {
       minimum_order_amount: minVal,
       maxDiscount: couponData.maxDiscount || couponData.maximum_discount || null,
       maximum_discount: couponData.maxDiscount || couponData.maximum_discount || null,
-      expiryDate: couponData.validity || couponData.expiryDate || couponData.end_date || '2028-12-31',
-      validity: couponData.validity || couponData.expiryDate || couponData.end_date || '30 Dec 2028',
+      expiryDate: couponData.validity || couponData.expiryDate || couponData.end_date || '',
+      validity: couponData.validity || couponData.expiryDate || couponData.end_date || '',
       status: 'Active',
       description: desc
     };

@@ -25,7 +25,9 @@ export const QuantityControl = ({
   const numQty = (quantity !== undefined && quantity !== null && !isNaN(Number(quantity)))
     ? Number(quantity)
     : (min !== undefined ? Number(min) : 0);
-  const maxStock = max !== undefined && max !== null ? Number(max) : null;
+  const maxStock = max !== undefined && max !== null && max !== '' && Number.isFinite(Number(max))
+    ? Number(max)
+    : null;
   const isMaxReached = maxStock !== null && numQty >= maxStock;
   const isMinReached = numQty <= min;
 

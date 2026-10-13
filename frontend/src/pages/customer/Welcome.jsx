@@ -41,6 +41,33 @@ export const Welcome = () => {
   const [availabilityMessage, setAvailabilityMessage] = useState('');
   const [availabilityError, setAvailabilityError] = useState('');
 
+  const [cooldown, setCooldown] = useState(0);
+  const cooldownTimerRef = React.useRef(null);
+  const isSubmittingRef = React.useRef(false);
+
+  const startCooldown = (seconds) => {
+    const sec = Math.max(1, Math.ceil(Number(seconds) || 0));
+    setCooldown(sec);
+    if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    cooldownTimerRef.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownTimerRef.current);
+          cooldownTimerRef.current = null;
+          setError('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    };
+  }, []);
+
   const continueAsGuest = async () => {
     setError('');
     setLoading(true);
@@ -60,8 +87,10 @@ export const Welcome = () => {
   };
 
   const requestNewOtp = async () => {
+    if (loading || cooldown > 0 || isSubmittingRef.current) return;
     setError('');
     setOtp('');
+    isSubmittingRef.current = true;
     setLoading(true);
     try {
       const sent = await sendOTP(phone);
@@ -74,8 +103,12 @@ export const Welcome = () => {
         setInfoMessage('A new OTP was sent to your mobile.');
       }
     } catch (err) {
+      if (err.retryAfter > 0) {
+        startCooldown(err.retryAfter);
+      }
       setError(err.message || 'Could not send a new OTP.');
     } finally {
+      isSubmittingRef.current = false;
       setLoading(false);
     }
   };
@@ -283,6 +316,7 @@ export const Welcome = () => {
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
+    if (loading || cooldown > 0 || isSubmittingRef.current) return;
     setError('');
     setInfoMessage('');
 
@@ -297,6 +331,7 @@ export const Welcome = () => {
       return;
     }
 
+    isSubmittingRef.current = true;
     setLoading(true);
     try {
       const sent = await sendOTP(phone);
@@ -310,14 +345,19 @@ export const Welcome = () => {
         setInfoMessage('OTP sent to your mobile.');
       }
     } catch (err) {
+      if (err.retryAfter > 0) {
+        startCooldown(err.retryAfter);
+      }
       setError(err.message || 'Failed to send OTP. Please try again.');
     } finally {
+      isSubmittingRef.current = false;
       setLoading(false);
     }
   };
 
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
+    if (loading || isSubmittingRef.current) return;
     setError('');
     setInfoMessage('');
 
@@ -333,13 +373,18 @@ export const Welcome = () => {
       return;
     }
 
+    isSubmittingRef.current = true;
     setLoading(true);
     try {
       await verifyOTP(phone, cleanOtp);
       setShowOrderTypeSelection(true);
     } catch (err) {
+      if (err.retryAfter > 0) {
+        startCooldown(err.retryAfter);
+      }
       setError(err.message || 'Invalid OTP. Please try again.');
     } finally {
+      isSubmittingRef.current = false;
       setLoading(false);
     }
   };
@@ -522,14 +567,21 @@ export const Welcome = () => {
             {error && <div className="text-danger small mb-3 fw-semibold text-start">{error}</div>}
             
             <div className="d-grid gap-2 mt-3">
-              <Button type="submit" variant="primary" className="py-2.5" loading={loading}>
-                Send OTP
+              <Button
+                type="submit"
+                variant="primary"
+                className="py-2.5"
+                loading={loading}
+                disabled={loading || cooldown > 0 || phone.length < (selectedCountryObj.phoneLen || 10)}
+              >
+                {cooldown > 0 ? `Send OTP (${cooldown}s)` : 'Send OTP'}
               </Button>
               <Button 
                 type="button" 
                 variant="outline" 
                 className="py-2.5 fw-bold" 
                 onClick={continueAsGuest}
+                disabled={loading}
               >
                 Skip for Now
               </Button>
@@ -567,12 +619,18 @@ export const Welcome = () => {
                 variant="primary" 
                 className="py-2.5" 
                 loading={loading}
-                disabled={/request a new otp/i.test(error) || otp.replace(/\D/g, '').length !== 6 || loading}
+                disabled={cooldown > 0 || /request a new otp/i.test(error) || otp.replace(/\D/g, '').length !== 6 || loading}
               >
                 Verify & Continue
               </Button>
-              <Button type="button" variant="outline" className="py-2.5 fw-bold" onClick={requestNewOtp} disabled={loading}>
-                Request a new OTP
+              <Button
+                type="button"
+                variant="outline"
+                className="py-2.5 fw-bold"
+                onClick={requestNewOtp}
+                disabled={loading || cooldown > 0}
+              >
+                {cooldown > 0 ? `Request a new OTP (${cooldown}s)` : 'Request a new OTP'}
               </Button>
               <Button type="button" variant="light" className="py-2.5 fw-bold" onClick={() => { setOtpSent(false); setOtp(''); setError(''); }}>
                 Use a different number

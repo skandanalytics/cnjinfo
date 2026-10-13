@@ -14,6 +14,7 @@ export const EmployeeDashboard = () => {
   const navigate = useNavigate();
   const { orders, updateStatus, fetchOrders } = useContext(OrderContext);
   const [updatingId, setUpdatingId] = useState(null);
+  const [updatingAction, setUpdatingAction] = useState(null);
   const [actionError, setActionError] = useState('');
   const [eBillOrder, setEBillOrder] = useState(null);
 
@@ -53,19 +54,25 @@ export const EmployeeDashboard = () => {
   }, []);
 
   const handleOrderAction = async (id, nextStatus, reason) => {
+    if (updatingId != null && String(updatingId) === String(id)) return;
     setUpdatingId(id);
+    setUpdatingAction(nextStatus);
     setActionError('');
     try {
       await updateStatus(id, nextStatus, reason);
     } catch (e) {
       setActionError(e.message || 'The status could not be updated.');
+    } finally {
+      setUpdatingId(null);
+      setUpdatingAction(null);
     }
-    setUpdatingId(null);
   };
 
   const handleCounterPay = async (ord) => {
     if (String(ord.payment_status || '').toUpperCase() === 'PAID') return;
+    if (updatingId != null && String(updatingId) === String(ord.id)) return;
     setUpdatingId(ord.id);
+    setUpdatingAction('paid');
     setActionError('');
     try {
       const { recordCounterPayment } = await import('../../services/adminApi');
@@ -73,9 +80,14 @@ export const EmployeeDashboard = () => {
       if (typeof fetchOrders === 'function') await fetchOrders(false);
     } catch (e) {
       setActionError(e.message || 'Counter payment was not recorded.');
+    } finally {
+      setUpdatingId(null);
+      setUpdatingAction(null);
     }
-    setUpdatingId(null);
   };
+
+  const isRejecting = (orderId) => String(updatingId) === String(orderId) && updatingAction === 'Cancelled';
+  const isUpdatingStatus = (orderId, status) => String(updatingId) === String(orderId) && updatingAction === status;
 
 
   const isCompleted = (status) => {
@@ -323,9 +335,9 @@ export const EmployeeDashboard = () => {
                           {(!ord.status || String(ord.status).toLowerCase() === 'pending' || String(ord.status).toLowerCase() === 'placed' || String(ord.status).toLowerCase() === 'new') && (
                             <Button
                               size="sm"
-                              variant="outline-danger"
-                              disabled={updatingId === ord.id}
-                              loading={updatingId === ord.id}
+                              variant="outline"
+                              disabled={isRejecting(ord.id)}
+                              loading={isRejecting(ord.id)}
                               onClick={() => {
                                 const reason = window.prompt('Enter a reason for cancelling this order.');
                                 if (!reason || !reason.trim()) return;
@@ -343,7 +355,8 @@ export const EmployeeDashboard = () => {
                             <Button
                               size="sm"
                               variant={action.variant}
-                              loading={updatingId === ord.id}
+                              disabled={isUpdatingStatus(ord.id, action.nextStatus)}
+                              loading={isUpdatingStatus(ord.id, action.nextStatus)}
                               onClick={() => handleOrderAction(ord.id, action.nextStatus)}
                               className="py-1 px-3 fw-bold rounded-pill shadow-xs"
                               style={{ fontSize: '11.5px' }}
@@ -356,8 +369,9 @@ export const EmployeeDashboard = () => {
                           ) : (
                             <Button
                               size="sm"
-                              variant="outline-danger"
-                              disabled={updatingId === ord.id}
+                              variant="outline"
+                              disabled={isUpdatingStatus(ord.id, 'paid')}
+                              loading={isUpdatingStatus(ord.id, 'paid')}
                               onClick={() => handleCounterPay(ord)}
                               className="py-1 px-2.5 fw-bold rounded-pill"
                               style={{ fontSize: '11.5px' }}

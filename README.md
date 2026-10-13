@@ -122,6 +122,8 @@ The first admin is a **super administrator** (no branch restriction). After logi
 2. Add categories, dishes, stock, and tables for that branch.
 3. Create employees from the Users screen. Only an existing admin can create further administrators.
 
+If an administrator already exists, `/db` shows **Login** and **Create New Admin**. Sign in as an existing administrator, then use **Administrator account management** to add more Owner (`SUPER_ADMIN`) or Manager (`ADMIN`) accounts. The server setup key is not required for that. Each administrator keeps a unique Admin ID and password and logs in at `/login`. Unauthenticated recovery with the server setup key is only for when nobody can sign in.
+
 If application data is reset from `/db`, Create First Admin appears again. Existing dish, order, and payment rows are not created automatically.
 
 ---

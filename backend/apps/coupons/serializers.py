@@ -41,24 +41,25 @@ class CouponSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
             raise serializers.ValidationError({"discount_value": "Percent discount cannot exceed 100."})
         if get("max_discount") is not None and get("max_discount") <= 0:
             raise serializers.ValidationError({"max_discount": "Must be greater than zero."})
-        if get("valid_to") <= get("valid_from"):
-            raise serializers.ValidationError({"valid_to": "End must be after start."})
         from django.utils import timezone
         valid_to = get("valid_to")
-        if valid_to is not None:
-            until = timezone.localtime(valid_to).date() if timezone.is_aware(valid_to) else valid_to.date()
-            today = timezone.localdate()
-            previous = None
-            if inst is not None and getattr(inst, "valid_to", None) is not None:
-                previous = timezone.localtime(inst.valid_to).date() if timezone.is_aware(inst.valid_to) else inst.valid_to.date()
-            changed = inst is None or ("valid_to" in attrs and previous != until)
-            if changed and until < today:
-                raise serializers.ValidationError({"valid_to": "Valid until cannot be earlier than today."})
-            valid_from = get("valid_from")
-            if valid_from is not None:
-                start = timezone.localtime(valid_from).date() if timezone.is_aware(valid_from) else valid_from.date()
-                if until < start:
-                    raise serializers.ValidationError({"valid_to": "Valid until cannot be earlier than the start date."})
+        if valid_to is None:
+            raise serializers.ValidationError({"valid_to": "Valid until is required."})
+        valid_from = get("valid_from")
+        if valid_from is not None and valid_to <= valid_from:
+            raise serializers.ValidationError({"valid_to": "Valid until must be after the start date."})
+        until = timezone.localtime(valid_to).date() if timezone.is_aware(valid_to) else valid_to.date()
+        today = timezone.localdate()
+        previous = None
+        if inst is not None and getattr(inst, "valid_to", None) is not None:
+            previous = timezone.localtime(inst.valid_to).date() if timezone.is_aware(inst.valid_to) else inst.valid_to.date()
+        changed = inst is None or ("valid_to" in attrs and previous != until)
+        if changed and until < today:
+            raise serializers.ValidationError({"valid_to": "Valid until cannot be earlier than today."})
+        if valid_from is not None:
+            start = timezone.localtime(valid_from).date() if timezone.is_aware(valid_from) else valid_from.date()
+            if until < start:
+                raise serializers.ValidationError({"valid_to": "Valid until cannot be earlier than the start date."})
         if get("usage_limit") is not None and get("usage_limit") < 1:
             raise serializers.ValidationError({"usage_limit": "Must be at least 1."})
         self.ensure_unique(Coupon, {"branch": branch, "code__iexact": get("code")},

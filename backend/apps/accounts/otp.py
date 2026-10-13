@@ -41,8 +41,14 @@ def send_otp(phone, ip=None):
         raise OTPError(f"Please wait {wait} seconds before requesting another OTP.", "otp_cooldown",
                        status.HTTP_429_TOO_MANY_REQUESTS, retry_after=wait)
     if recent.count() >= settings.OTP_MAX_SENDS_PER_HOUR:
-        raise OTPError("Too many OTP requests. Try again later.", "otp_rate_limited",
-                       status.HTTP_429_TOO_MANY_REQUESTS, retry_after=3600)
+        oldest = recent.order_by("created_at").first()
+        wait = max(1, int((oldest.created_at + timedelta(hours=1) - now).total_seconds()) + 1)
+        raise OTPError(
+            f"Too many OTP requests for this number. Try again in {wait} seconds.",
+            "otp_rate_limited",
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            retry_after=wait,
+        )
 
     provider = get_provider()  # raises ImproperlyConfigured if misconfigured (never silently bypasses)
     code = "".join(str(secrets.randbelow(10)) for _ in range(settings.OTP_LENGTH))

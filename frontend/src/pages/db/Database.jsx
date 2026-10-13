@@ -64,6 +64,8 @@ export default function DatabaseConsole() {
   const [admins, setAdmins] = useState([]);
   const [resetToken, setResetToken] = useState('');
   const [resetting, setResetting] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  const [showCreateAdmin, setShowCreateAdmin] = useState(false);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -177,6 +179,52 @@ export default function DatabaseConsole() {
     }
   };
 
+  const onRecoverAdmin = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    if (form.get('password') !== form.get('confirm_password')) {
+      setError('Password and confirmation do not match.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const body = Object.fromEntries(form.entries());
+      const created = await publicJson('/recover-admin/', { method: 'POST', body });
+      setShowRecovery(false);
+      setNotice(`Administrator ${created.employee_code} was created. Sign in with that Admin ID. Existing administrator accounts were not changed.`);
+      await loadStatus();
+    } catch (err) {
+      setError(err.message || 'The administrator could not be created.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const onCreateAdmin = async (event) => {
+    event.preventDefault();
+    const form = new FormData(event.target);
+    if (form.get('password') !== form.get('confirm_password')) {
+      setError('Password and confirmation do not match.');
+      return;
+    }
+    setBusy(true);
+    setError('');
+    setNotice('');
+    try {
+      const body = Object.fromEntries(form.entries());
+      const created = await publicJson('/create-admin/', { method: 'POST', body });
+      setShowCreateAdmin(false);
+      setNotice(`Administrator ${created.employee_code} (${created.name}) created successfully as ${created.role === 'SUPER_ADMIN' ? 'Owner' : 'Manager'}. You can now sign in.`);
+      await loadStatus();
+    } catch (err) {
+      setError(err.message || 'The administrator could not be created.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const deleteSelected = async () => {
     if (!viewer || selected.length === 0) return;
     const confirmed = window.confirm(`Delete ${selected.length} selected record${selected.length === 1 ? '' : 's'} from ${records?.db_table}? This cannot be undone.`);
@@ -274,6 +322,10 @@ export default function DatabaseConsole() {
   const saveAdmin = async (event) => {
     event.preventDefault();
     const form = new FormData(event.target);
+    if (form.get('password') !== form.get('confirm_password')) {
+      setError('Password and confirmation do not match.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -362,13 +414,134 @@ export default function DatabaseConsole() {
       )}
 
       {status && !status.setup_required && !session && (
-        <Card title="Administrator sign in">
-          <form onSubmit={onLogin} className="row g-3">
-            <div className="col-md-6"><label className="form-label">Admin ID</label><input className="form-control" name="employee_code" required /></div>
-            <div className="col-md-6"><label className="form-label">Password</label><input className="form-control" name="password" type="password" required /></div>
-            <div className="col-12"><button className="btn btn-danger" disabled={busy}>Sign in</button></div>
-          </form>
-        </Card>
+        showCreateAdmin ? (
+          <Card title="Create New Administrator">
+            <p className="text-secondary small">
+              An authorized administrator (Owner or Manager) can create another administrator account here without a server setup key. Existing administrator accounts remain intact.
+            </p>
+            <form onSubmit={onCreateAdmin} className="row g-3">
+              <div className="col-12">
+                <div className="p-3 bg-light rounded-3">
+                  <div className="fw-semibold small text-muted text-uppercase mb-2">Authorizing Administrator</div>
+                  <div className="row g-2">
+                    <div className="col-md-6">
+                      <label className="form-label small">Your Admin ID</label>
+                      <input className="form-control" name="authorizing_code" placeholder="Existing Admin ID" required autoComplete="username" />
+                    </div>
+                    <div className="col-md-6">
+                      <label className="form-label small">Your Password</label>
+                      <input className="form-control" name="authorizing_password" type="password" placeholder="Existing Admin Password" required autoComplete="current-password" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="col-12">
+                <div className="fw-semibold small text-muted text-uppercase mb-1">New Administrator Details</div>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">New Admin ID</label>
+                <input className="form-control" name="employee_code" placeholder="e.g. MGR02 or OWNER02" required autoComplete="off" />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Full Name</label>
+                <input className="form-control" name="name" required />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Designation / Role</label>
+                <select className="form-select" name="role" defaultValue="ADMIN">
+                  <option value="ADMIN">Manager</option>
+                  <option value="SUPER_ADMIN">Owner</option>
+                </select>
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Phone</label>
+                <input className="form-control" name="phone" required />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Email</label>
+                <input className="form-control" name="email" type="email" placeholder="Email (optional)" />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Password</label>
+                <input className="form-control" name="password" type="password" required autoComplete="new-password" />
+              </div>
+              <div className="col-md-6">
+                <label className="form-label">Confirm Password</label>
+                <input className="form-control" name="confirm_password" type="password" required autoComplete="new-password" />
+              </div>
+              <div className="col-12 d-grid d-sm-flex gap-2">
+                <button className="btn btn-danger" disabled={busy} type="submit">
+                  {busy ? 'Creating administrator…' : 'Create New Admin'}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  disabled={busy}
+                  onClick={() => { setShowCreateAdmin(false); setError(''); }}
+                >
+                  Back to Login
+                </button>
+              </div>
+            </form>
+          </Card>
+        ) : showRecovery ? (
+          <Card title="Recover Administrator">
+            <p className="text-secondary small">
+              Enter the server setup key from the backend environment, then create a new administrator. Existing administrator accounts stay in place.
+            </p>
+            <form onSubmit={onRecoverAdmin} className="row g-3">
+              <div className="col-12"><label className="form-label">Server setup key</label><input className="form-control" name="setup_key" type="password" required autoComplete="off" /></div>
+              <div className="col-md-6"><label className="form-label">Administrator ID</label><input className="form-control" name="employee_code" required autoComplete="off" /></div>
+              <div className="col-md-6"><label className="form-label">Full name</label><input className="form-control" name="name" required /></div>
+              <div className="col-md-6"><label className="form-label">Phone</label><input className="form-control" name="phone" required /></div>
+              <div className="col-md-6"><label className="form-label">Email</label><input className="form-control" name="email" type="email" /></div>
+              <div className="col-md-6"><label className="form-label">Password</label><input className="form-control" name="password" type="password" required autoComplete="new-password" /></div>
+              <div className="col-md-6"><label className="form-label">Confirm password</label><input className="form-control" name="confirm_password" type="password" required autoComplete="new-password" /></div>
+              <div className="col-12 d-grid d-sm-flex gap-2">
+                <button className="btn btn-danger" disabled={busy} type="submit">{busy ? 'Creating administrator…' : 'Create New Admin'}</button>
+                <button type="button" className="btn btn-outline-secondary" disabled={busy} onClick={() => { setShowRecovery(false); setError(''); }}>
+                  Back to Login
+                </button>
+              </div>
+            </form>
+          </Card>
+        ) : (
+          <Card title="Administrator sign in">
+            <form onSubmit={onLogin} className="row g-3">
+              <div className="col-md-6"><label className="form-label">Admin ID</label><input className="form-control" name="employee_code" required autoComplete="username" /></div>
+              <div className="col-md-6"><label className="form-label">Password</label><input className="form-control" name="password" type="password" required autoComplete="current-password" /></div>
+              <div className="col-12 d-grid d-sm-flex gap-2">
+                <button className="btn btn-danger" disabled={busy} type="submit">{busy ? 'Signing in…' : 'Login'}</button>
+              </div>
+            </form>
+            <div className="d-grid d-sm-flex gap-2 mt-3">
+              <button
+                type="button"
+                className="btn btn-outline-danger"
+                disabled={busy}
+                onClick={() => {
+                  setNotice('');
+                  setError('');
+                  setShowCreateAdmin(true);
+                }}
+              >
+                Create New Admin
+              </button>
+            </div>
+            <p className="small text-secondary mt-3 mb-0">
+              Multiple administrators are supported. Login with an Owner or Manager account to create additional IDs, or click Create New Admin above.
+              {status.recovery_available && (
+                <>
+                  {' '}If nobody can sign in,{' '}
+                  <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={() => { setError(''); setNotice(''); setShowRecovery(true); }}>
+                    recover with the server setup key
+                  </button>
+                  .
+                </>
+              )}
+            </p>
+          </Card>
+        )
       )}
 
       {overview && (
@@ -466,6 +639,7 @@ export default function DatabaseConsole() {
 
           {overview.access.can_manage_administrators && (
             <Card title="Administrator account management">
+              <p className="small text-secondary">Add another Owner or Manager. Each account has its own Admin ID and password. Existing accounts are not replaced, and the server setup key is not required.</p>
               <form onSubmit={saveAdmin} className="row g-2 mb-4">
                 <div className="col-md-4"><input className="form-control" name="employee_code" placeholder="Admin ID" required /></div>
                 <div className="col-md-4"><input className="form-control" name="name" placeholder="Full name" required /></div>
@@ -473,8 +647,8 @@ export default function DatabaseConsole() {
                 <div className="col-md-4"><input className="form-control" name="email" type="email" placeholder="Email (optional)" /></div>
                 <div className="col-md-4">
                   <select className="form-select" name="role" defaultValue="ADMIN">
-                    <option value="ADMIN">Admin</option>
-                    <option value="SUPER_ADMIN">Super Admin</option>
+                    <option value="ADMIN">Manager</option>
+                    {overview.access.can_create_owner && <option value="SUPER_ADMIN">Owner</option>}
                   </select>
                 </div>
                 <div className="col-md-4"><input className="form-control" name="password" type="password" placeholder="Password" required /></div>
@@ -483,7 +657,7 @@ export default function DatabaseConsole() {
               </form>
               {admins.map((row) => (
                 <div key={row.id} className="border rounded-3 p-3 mb-3">
-                  <div className="fw-bold mb-2">{row.employee_code}</div>
+                  <div className="fw-bold mb-2">{row.employee_code} · {row.role === 'SUPER_ADMIN' ? 'Owner' : 'Manager'}</div>
                 <form key={`${row.id}-${row.role}-${row.status}-${row.name}-${row.phone}-${row.email}`} className="row g-2 mb-2" onSubmit={(event) => {
                     event.preventDefault();
                     const form = new FormData(event.target);
@@ -494,8 +668,8 @@ export default function DatabaseConsole() {
                     <div className="col-md-3"><input className="form-control form-control-sm" name="email" type="email" defaultValue={row.email} /></div>
                     <div className="col-md-3">
                       <select className="form-select form-select-sm" name="role" defaultValue={row.role}>
-                        <option value="ADMIN">Admin</option>
-                        <option value="SUPER_ADMIN">Super Admin</option>
+                        <option value="ADMIN">Manager</option>
+                        {overview.access.can_create_owner && <option value="SUPER_ADMIN">Owner</option>}
                       </select>
                     </div>
                     <div className="col-12 d-flex gap-2">

@@ -31,6 +31,9 @@ export const ServerBillSummary = ({ cart, children }) => {
           {Number(pricing.takeaway_charge) > 0 && (
             <Row label="Packing Charge (Takeaway)" value={`+${formatCurrency(Number(pricing.takeaway_charge))}`} className="text-dark" />
           )}
+          {pricing.taxable_amount != null && (
+            <Row label="Taxable Amount" value={formatCurrency(Number(pricing.taxable_amount))} className="text-dark" />
+          )}
           <Row label={`GST (${Number(pricing.gst_rate) || 0}%)`} value={formatCurrency(Number(pricing.gst_amount || 0))} className="text-dark" />
           <Row
             label={`Service Charge (${Number(pricing.service_charge_rate) || 0}%)`}

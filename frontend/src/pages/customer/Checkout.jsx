@@ -201,6 +201,16 @@ export const Checkout = () => {
           <div className="col-12 col-lg-4">
             <ServerBillSummary cart={cartView}>
               <div className="d-grid gap-2">
+                {(cartView?.issues || []).length > 0 && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="py-2 fw-bold"
+                    onClick={() => navigate('/customer/cart')}
+                  >
+                    Update cart
+                  </Button>
+                )}
                 <Button
                   type="button"
                   data-testid="proceed-to-payment"

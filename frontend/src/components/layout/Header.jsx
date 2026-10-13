@@ -12,8 +12,8 @@ export const Header = () => {
   const [showDropdown, setShowDropdown] = useState(false);
 
   const handleLogout = () => {
-    logout();
-    navigate('/customer/welcome');
+    logout({ scope: 'customer' });
+    navigate('/customer/welcome', { replace: true });
   };
 
   const totalQuantity = (cartItems || []).reduce((sum, item) => sum + (item.quantity || 1), 0);

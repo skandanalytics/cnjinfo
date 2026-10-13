@@ -2,8 +2,9 @@ import React, { createContext, useState, useEffect, useContext, useRef } from 'r
 import { orderService } from '../services/orderService';
 import { getProductSellingPrice, calculateBillDetails, calculateCouponDiscount, GST_RATE, DEFAULT_PACKING_CHARGE } from '../utils/pricing';
 import { couponService, isFirstTimeCustomer } from '../services/couponService';
-import { cartService } from '../services/cartService';
+import { cartService, ensureGuestToken, hasGuestToken, isStaffOrdering, usesServerCart } from '../services/cartService';
 import { productService } from '../services/productService';
+import { dishStockLimit, isDishOutOfStock } from '../utils/filters';
 import { AuthContext } from './AuthContext';
 import OutOfStockModal from '../components/common/OutOfStockModal';
 import api from '../services/api';
@@ -62,6 +63,29 @@ function findLine(items, key) {
   if (direct) return direct;
   const byFood = items.filter((row) => Number(row.id) === Number(key));
   return byFood.length === 1 ? byFood[0] : null;
+}
+
+function isAuthFailure(err) {
+  const status = err?.response?.status || err?.status;
+  return status === 401 || status === 403;
+}
+
+function isStockFailure(err) {
+  if (isAuthFailure(err)) return false;
+  const msg = String(err?.response?.data?.detail || err?.message || '').toLowerCase();
+  if (/cannot read propert/i.test(msg)) return false;
+  const code = String(err?.response?.data?.code || '');
+  if (['item_invalid', 'out_of_stock', 'insufficient_stock', 'sold_out', 'quantity_limit'].includes(code)) return true;
+  return /out of stock|insufficient stock|sold out|no longer available/.test(msg);
+}
+
+function cartOwnerId(user) {
+  return user?.id || user?.phone || null;
+}
+
+function lineIdentity(row) {
+  const foodId = Number(row?.food || row?.food_id || row?.food_item || row?.id);
+  return `${foodId}:${optionKey(row?.options || row?.extraIngredients)}`;
 }
 
 function mergeServerItems(serverItems, previous) {
@@ -222,7 +246,7 @@ export const CartProvider = ({ children }) => {
         }
       } catch (e) { }
 
-      if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
+      if (usesServerCart(user) || (!user && !isStaffOrdering())) {
         // Skip backend cart sync immediately after order placement to prevent
         // creating a new cart right after the old one was cleared/abandoned.
         const skipFlag = sessionStorage.getItem('foodie_checkout_in_progress');
@@ -231,9 +255,13 @@ export const CartProvider = ({ children }) => {
           return;
         }
         try {
+          if (!user && !isStaffOrdering()) {
+            try { await ensureGuestToken(); } catch (e) { /* local cart still works */ }
+          }
+          const ownerId = cartOwnerId(user);
           const activeCart = (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0)
-            ? await cartService.getOrCreateCart(user?.id || user?.phone, tableContext?.tableId || null).catch(() => null)
-            : await cartService.getExistingCart(user?.id || user?.phone, tableContext?.tableId || null).catch(() => null);
+            ? await cartService.getOrCreateCart(ownerId, tableContext?.tableId || null).catch(() => null)
+            : await cartService.getExistingCart(ownerId, tableContext?.tableId || null).catch(() => null);
 
           if (!activeCart) {
             if (sessionStorage.getItem('foodie_staff_ordering') === '1') {
@@ -249,27 +277,31 @@ export const CartProvider = ({ children }) => {
               setCartItems([]);
               saveCartToStorage([], user);
             }
-            sessionStorage.removeItem('foodie_guest_cart_unmerged');
-            localStorage.removeItem('foodie_guest_cart_unmerged');
-            sessionStorage.removeItem('foodie_guest_cart_temp');
-            localStorage.removeItem('foodie_guest_cart_temp');
-            sessionStorage.removeItem('foodie_guest_cart');
-            localStorage.removeItem('foodie_guest_cart');
+            if (user && user.role === 'customer') {
+              sessionStorage.removeItem('foodie_guest_cart_unmerged');
+              localStorage.removeItem('foodie_guest_cart_unmerged');
+              sessionStorage.removeItem('foodie_guest_cart_temp');
+              localStorage.removeItem('foodie_guest_cart_temp');
+              sessionStorage.removeItem('foodie_guest_cart');
+              localStorage.removeItem('foodie_guest_cart');
+            }
             return;
           }
 
           // Merge guest cart items into backend cart ONLY if unmerged guest cart exists
           if (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
-            const existingBackendItems = await cartService.getCartItems(activeCart.id).catch(() => []);
-            const existingFoodIds = new Set((existingBackendItems || []).map(bi => Number(bi.food || bi.food_item)));
+            const existingBackendItems = await cartService.getCartItems(activeCart?.id).catch(() => []);
+            const existingKeys = new Set((existingBackendItems || []).map(lineIdentity));
 
             for (const item of unmergedGuestItems) {
               try {
-                if (!existingFoodIds.has(Number(item.id))) {
-                  await cartService.addItemToCart(activeCart.id, item.id, item.quantity, getProductSellingPrice(item), {
+                const key = lineIdentity(item);
+                if (!existingKeys.has(key)) {
+                  await cartService.addItemToCart(activeCart?.id, item.id, item.quantity, getProductSellingPrice(item), {
                     instructions: item.instructions || '',
                     optionIds: (item.extraIngredients || []).map((extra) => extra.id).filter(Boolean),
                   });
+                  existingKeys.add(key);
                 }
               } catch (err) {
                 console.error("Error adding local item to backend cart:", err);
@@ -371,11 +403,21 @@ export const CartProvider = ({ children }) => {
     }
   };
 
-  const showOutOfStockModal = ({ item, message, stock }) => {
+  const showOutOfStockModal = ({ item, message, stock, title }) => {
     setOutOfStockModalData({
-      item,
+      item: item || null,
       message,
+      title: title || 'Out of Stock',
       stock: stock !== undefined ? stock : (item?.stock !== undefined ? item.stock : 0)
+    });
+  };
+
+  const showCartNotice = ({ item, message, title }) => {
+    setOutOfStockModalData({
+      item: item || null,
+      message,
+      title: title || 'Cart error',
+      stock: item?.stock
     });
   };
 
@@ -383,15 +425,24 @@ export const CartProvider = ({ children }) => {
     setOutOfStockModalData(null);
   };
 
+  const rollbackLocalAdd = (localLineId, qtyToAdd) => {
+    setCartItems((prev) => {
+      const updated = prev
+        .map((row) => (String(row.lineId) === String(localLineId) ? { ...row, quantity: row.quantity - qtyToAdd } : row))
+        .filter((row) => row.quantity > 0);
+      saveCartToStorage(updated);
+      return updated;
+    });
+  };
+
   const addToCart = async (item, quantity = 1) => {
     if (!item) return false;
-    const maxStock = typeof item.stock === 'number' ? item.stock : 20;
-    const isOut = maxStock <= 0 || item.status === 'Out of Stock' || item.status === 'OUT_OF_STOCK' || item.is_available === false;
-    if (isOut) {
+    const maxStock = dishStockLimit(item);
+    if (isDishOutOfStock(item)) {
       showOutOfStockModal({
         item,
         stock: 0,
-        message: `Sorry, "${item.name}" is completely out of stock and cannot be added right now.`
+        message: `Sorry, "${item.name || 'this dish'}" is completely out of stock and cannot be added right now.`
       });
       return false;
     }
@@ -403,11 +454,6 @@ export const CartProvider = ({ children }) => {
     const sameFoodQty = cartItems
       .filter((row) => Number(row.id) === Number(item.id))
       .reduce((sum, row) => sum + Number(row.quantity || 0), 0);
-    const existing = cartItems.find((row) => (
-      Number(row.id) === Number(item.id)
-      && optionKey(row.extraIngredients) === wantedKey
-      && (row.instructions || '') === notes
-    ));
 
     let qtyToAdd = quantity;
     if (sameFoodQty + qtyToAdd > maxStock) {
@@ -427,7 +473,7 @@ export const CartProvider = ({ children }) => {
       });
     }
 
-    const localLineId = existing?.lineId || `local-${item.id}-${wantedKey}-${Date.now()}`;
+    const localLineId = `local-${item.id}-${wantedKey}-${Date.now()}`;
 
     setCartItems((prev) => {
       const exist = prev.find((row) => (
@@ -458,13 +504,27 @@ export const CartProvider = ({ children }) => {
       return updated;
     });
 
-    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
+    const guestSession = !user && !isStaffOrdering();
+    try {
+      if (guestSession && !hasGuestToken()) {
+        await ensureGuestToken();
+      }
+    } catch (err) {
+      console.error('Could not issue a guest cart token:', err);
+    }
+
+    if (usesServerCart(user) || guestSession) {
       try {
-        const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
-        const added = await cartService.addItemToCart(activeCart.id, item.id, qtyToAdd, getProductSellingPrice(item), {
-          instructions: notes,
-          optionIds: extras.map((extra) => extra.id).filter(Boolean),
-        });
+        const added = await cartService.addItemToCart(
+          null,
+          item.id,
+          qtyToAdd,
+          getProductSellingPrice(item),
+          {
+            instructions: notes,
+            optionIds: extras.map((extra) => extra.id).filter(Boolean),
+          }
+        );
         if (Array.isArray(added?.items)) {
           setCartItems((prev) => {
             const updated = mergeServerItems(added.items, prev);
@@ -474,14 +534,33 @@ export const CartProvider = ({ children }) => {
         }
       } catch (err) {
         console.error("Error adding to database cart:", err);
-        setCartItems((prev) => {
-          const updated = prev
-            .map((row) => (String(row.lineId) === String(localLineId) ? { ...row, quantity: row.quantity - qtyToAdd } : row))
-            .filter((row) => row.quantity > 0);
-          saveCartToStorage(updated);
-          return updated;
+        if (isStockFailure(err)) {
+          rollbackLocalAdd(localLineId, qtyToAdd);
+          showOutOfStockModal({
+            item,
+            message: err.message || `Sorry, "${item.name || 'this dish'}" is currently unavailable.`,
+            stock: 0,
+          });
+          return false;
+        }
+        if (guestSession) {
+          if (isAuthFailure(err)) {
+            showCartNotice({
+              item,
+              title: 'Sign in at checkout',
+              message: `"${item.name || 'This dish'}" was saved in your cart. Sign in when you proceed to checkout.`,
+            });
+          }
+          return true;
+        }
+        rollbackLocalAdd(localLineId, qtyToAdd);
+        showCartNotice({
+          item,
+          title: isAuthFailure(err) ? 'Sign in required' : 'Could not add to cart',
+          message: isAuthFailure(err)
+            ? 'Please sign in to add this dish to your cart.'
+            : (err.message || 'This dish could not be added to your cart. Please try again.'),
         });
-        showOutOfStockModal({ item, message: err.message, stock: 0 });
         return false;
       }
     }
@@ -505,12 +584,12 @@ export const CartProvider = ({ children }) => {
       return updated;
     });
 
-    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
+    if (usesServerCart(user)) {
       try {
         const item = findLine(previous, id);
         let cartItemId = item?.cartItemId;
         if (!cartItemId && item) {
-          const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
+          const activeCart = await cartService.getOrCreateCart(cartOwnerId(user), tableContext?.tableId || null);
           const backendItems = await cartService.getCartItems(activeCart.id);
           const found = backendItems.find((bi) => (
             String(bi.id) === String(item.cartItemId)
@@ -551,11 +630,11 @@ export const CartProvider = ({ children }) => {
     try {
       let backendSuccess = true;
 
-      if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
+      if (usesServerCart(user)) {
         let cartItemId = item.cartItemId;
         if (!cartItemId || String(cartItemId).startsWith('local')) {
           try {
-            const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
+            const activeCart = await cartService.getOrCreateCart(cartOwnerId(user), tableContext?.tableId || null);
             if (activeCart && activeCart.id && !activeCart._localOnly) {
               const backendItems = await cartService.getCartItems(activeCart.id);
               const found = backendItems.find((bi) => (
@@ -576,7 +655,7 @@ export const CartProvider = ({ children }) => {
           if (!deleteResult) {
             // Check if item is already deleted or absent from backend cart
             try {
-              const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
+              const activeCart = await cartService.getOrCreateCart(cartOwnerId(user), tableContext?.tableId || null);
               const backendItems = await cartService.getCartItems(activeCart.id);
               const stillExists = backendItems.some((bi) => String(bi.id || bi.item_id) === String(cartItemId));
               backendSuccess = !stillExists;
@@ -621,7 +700,7 @@ export const CartProvider = ({ children }) => {
     const item = findLine(cartItems, id);
     if (!item) return;
 
-    const maxStock = typeof item.stock === 'number' ? item.stock : 20;
+    const maxStock = dishStockLimit(item);
     if (item.quantity >= maxStock) {
       showOutOfStockModal({
         item,
@@ -644,11 +723,11 @@ export const CartProvider = ({ children }) => {
     });
 
     // 2. Backend sync in background
-    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
+    if (usesServerCart(user)) {
       try {
         let cartItemId = item.cartItemId;
         if (!cartItemId) {
-          const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
+          const activeCart = await cartService.getOrCreateCart(cartOwnerId(user), tableContext?.tableId || null);
           const backendItems = await cartService.getCartItems(activeCart.id);
           const found = backendItems.find((bi) => Number(bi.food || bi.food_id) === Number(item.id) && optionKey(bi.options) === optionKey(item.extraIngredients));
           if (found) {
@@ -694,11 +773,11 @@ export const CartProvider = ({ children }) => {
     });
 
     // 2. Backend sync in background
-    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
+    if (usesServerCart(user)) {
       try {
         let cartItemId = item.cartItemId;
         if (!cartItemId) {
-          const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
+          const activeCart = await cartService.getOrCreateCart(cartOwnerId(user), tableContext?.tableId || null);
           const backendItems = await cartService.getCartItems(activeCart.id);
           const found = backendItems.find((bi) => Number(bi.food || bi.food_id) === Number(item.id) && optionKey(bi.options) === optionKey(item.extraIngredients));
           if (found) {
@@ -732,7 +811,7 @@ export const CartProvider = ({ children }) => {
       return;
     }
 
-    const maxStock = typeof item.stock === 'number' ? item.stock : 20;
+    const maxStock = dishStockLimit(item);
     const finalQty = Math.min(parsedQty, maxStock);
     const sellingPrice = getProductSellingPrice(item);
 
@@ -751,11 +830,11 @@ export const CartProvider = ({ children }) => {
       return updated;
     });
 
-    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
+    if (usesServerCart(user)) {
       try {
         let cartItemId = item.cartItemId;
         if (!cartItemId) {
-          const activeCart = await cartService.getOrCreateCart(user.id, tableContext?.tableId || null);
+          const activeCart = await cartService.getOrCreateCart(cartOwnerId(user), tableContext?.tableId || null);
           const backendItems = await cartService.getCartItems(activeCart.id);
           const found = backendItems.find((bi) => Number(bi.food || bi.food_id) === Number(item.id) && optionKey(bi.options) === optionKey(item.extraIngredients));
           if (found) {
@@ -814,9 +893,9 @@ export const CartProvider = ({ children }) => {
   const clearCart = async () => {
     // Set flag so loadBackendCart doesn't immediately re-create a cart after checkout
     sessionStorage.setItem('foodie_checkout_in_progress', '1');
-    if ((user && user.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1') {
+    if (usesServerCart(user)) {
       try {
-        const targetId = user.id ? Number(user.id) : null;
+        const targetId = user?.id ? Number(user.id) : null;
         const userCart = await cartService.getExistingCart(targetId, tableContext?.tableId || null);
         if (userCart && userCart.id) {
           await cartService.clearCart(userCart.id);
@@ -1119,6 +1198,7 @@ export const CartProvider = ({ children }) => {
         item={outOfStockModalData?.item}
         message={outOfStockModalData?.message}
         stock={outOfStockModalData?.stock}
+        title={outOfStockModalData?.title}
       />
     </CartContext.Provider>
   );

@@ -32,7 +32,9 @@ export const FoodCard = ({ food }) => {
 
   const discountLabel = calculatedPct > 0 ? `${calculatedPct}% OFF` : `OFFER AVAILABLE`;
 
-  const isOutOfStock = food.stock <= 0 || food.status === 'Out of Stock' || food.status === 'OUT_OF_STOCK' || food.is_available === false;
+  const isOutOfStock = food.is_orderable === false || food.is_available === false
+    || food.status === 'Out of Stock' || food.status === 'OUT_OF_STOCK'
+    || (food.stock !== undefined && food.stock !== null && food.stock !== '' && Number(food.stock) <= 0);
 
   const handleCardClick = () => {
     navigate(`/food/${food.id}`);

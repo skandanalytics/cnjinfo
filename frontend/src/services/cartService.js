@@ -85,6 +85,36 @@ function customerBranchId() {
   return sessionStorage.getItem('foodie_public_branch');
 }
 
+export function isStaffOrdering() {
+  try {
+    return sessionStorage.getItem('foodie_staff_ordering') === '1';
+  } catch {
+    return false;
+  }
+}
+
+export function hasGuestToken() {
+  try {
+    return Boolean(sessionStorage.getItem('foodie_guest_token'));
+  } catch {
+    return false;
+  }
+}
+
+export function usesServerCart(user) {
+  return Boolean((user && user.role === 'customer') || isStaffOrdering() || hasGuestToken());
+}
+
+export async function ensureGuestToken() {
+  const existing = sessionStorage.getItem('foodie_guest_token');
+  if (existing) return existing;
+  const issued = await api.post('/cart/guest-token/');
+  const token = issued.data?.guest_token;
+  if (!token) throw new Error('Could not start a guest cart session.');
+  sessionStorage.setItem('foodie_guest_token', token);
+  return token;
+}
+
 async function fetchCartView() {
   const branch = customerBranchId();
   if (!branch) return null;
@@ -318,6 +348,35 @@ export const cartService = {
     if (!branch) return false;
     await api.delete(`/cart/?branch=${branch}`);
     return true;
+  },
+
+  restoreGuestCartAfterLogin: async (localItems = []) => {
+    const items = Array.isArray(localItems) ? localItems : [];
+    if (!items.length) {
+      return fetchCartView().catch(() => null);
+    }
+    const existing = await cartService.getCartItems(null).catch(() => []);
+    const keys = new Set((existing || []).map((row) => {
+      const foodId = Number(row.food || row.food_id || row.food_item);
+      const opts = Array.isArray(row.options) ? row.options.map((o) => String(o.id)).sort().join(',') : '';
+      return `${foodId}:${opts}`;
+    }));
+    for (const item of items) {
+      if (!item || item.id == null) continue;
+      const optionIds = (item.extraIngredients || []).map((extra) => extra.id).filter(Boolean);
+      const key = `${Number(item.id)}:${optionIds.map(String).sort().join(',')}`;
+      if (keys.has(key)) continue;
+      try {
+        await cartService.addItemToCart(null, item.id, item.quantity, null, {
+          instructions: item.instructions || '',
+          optionIds,
+        });
+        keys.add(key);
+      } catch (err) {
+        console.error('[CART SERVICE] restoreGuestCartAfterLogin:', err?.message || err);
+      }
+    }
+    return fetchCartView().catch(() => null);
   }
 };
 

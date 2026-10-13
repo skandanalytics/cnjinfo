@@ -9,6 +9,23 @@ export const normalizeFoodType = (type) => {
   return 'veg';
 };
 
+export const isDishOutOfStock = (dish) => {
+  if (!dish) return false;
+  if (dish.is_orderable === false || dish.is_available === false) return true;
+  const status = String(dish.status || dish.stock_status || '');
+  if (status === 'Out of Stock' || status === 'OUT_OF_STOCK') return true;
+  if (dish.stock === undefined || dish.stock === null || dish.stock === '') return false;
+  const n = Number(dish.stock);
+  return Number.isFinite(n) && n <= 0;
+};
+
+export const dishStockLimit = (dish) => {
+  if (dish && typeof dish.stock === 'number' && Number.isFinite(dish.stock) && dish.stock >= 0) {
+    return dish.stock;
+  }
+  return 99;
+};
+
 
 // Helper to identify if product has a discount
 export const isDiscountProduct = (item) => {
@@ -169,16 +186,7 @@ export const filterAndSortProducts = (products, options = {}) => {
       break;
   }
 
-  // Helper to identify if product is out of stock
-  const isOutOfStock = (p) => {
-    if (!p) return false;
-    return (
-      (p.stock !== undefined && Number(p.stock) <= 0) ||
-      p.status === 'Out of Stock' ||
-      p.status === 'OUT_OF_STOCK' ||
-      p.is_available === false
-    );
-  };
+  const isOutOfStock = (p) => isDishOutOfStock(p);
 
   // Customers should not be able to see out of stock items anywhere
   return result.filter((p) => !isOutOfStock(p));

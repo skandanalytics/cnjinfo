@@ -6,12 +6,15 @@ import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { FiCheckCircle } from 'react-icons/fi';
 import { COUNTRY_CODES, detectUserCountryCode, fetchGeolocationCountryCode } from '../../utils/countryCodes';
+import { cartService } from '../../services/cartService';
+import { applyOrderContext } from '../../services/customerCheckout';
+import { getOrderType } from '../../utils/orderContext';
 
 export const CustomerLogin = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { sendOTP, verifyOTP } = useAuth();
-  const { clearCart } = useCart();
+  const { cartItems, clearCart } = useCart();
 
   // Phone & OTP state
   const [countryCode, setCountryCode] = useState('+91');
@@ -23,7 +26,55 @@ export const CustomerLogin = () => {
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
 
-  const destination = location.state?.from || '/customer/checkout';
+  const [cooldown, setCooldown] = useState(0);
+  const cooldownTimerRef = React.useRef(null);
+  const isSubmittingRef = React.useRef(false);
+
+  const startCooldown = (seconds) => {
+    const sec = Math.max(1, Math.ceil(Number(seconds) || 0));
+    setCooldown(sec);
+    if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    cooldownTimerRef.current = setInterval(() => {
+      setCooldown((prev) => {
+        if (prev <= 1) {
+          clearInterval(cooldownTimerRef.current);
+          cooldownTimerRef.current = null;
+          setError('');
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (cooldownTimerRef.current) clearInterval(cooldownTimerRef.current);
+    };
+  }, []);
+
+  const fromState = location.state?.from;
+  const destination = typeof fromState === 'string'
+    ? fromState
+    : (fromState?.pathname || '/customer/checkout');
+  const returningToCheckout = String(destination).includes('checkout');
+
+  const persistGuestCart = () => {
+    try {
+      if (Array.isArray(cartItems) && cartItems.length > 0) {
+        const payload = JSON.stringify(cartItems);
+        sessionStorage.setItem('foodie_cart', payload);
+        sessionStorage.setItem('foodie_guest_cart', payload);
+        sessionStorage.setItem('foodie_guest_cart_temp', payload);
+        sessionStorage.setItem('foodie_guest_cart_unmerged', payload);
+      }
+    } catch (e) { /* keep login usable even if storage is full */ }
+  };
+
+  useEffect(() => {
+    persistGuestCart();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Geolocation & Timezone Detection on component mount
   useEffect(() => {
@@ -41,6 +92,7 @@ export const CustomerLogin = () => {
 
   const handleSendOTP = async (e) => {
     e.preventDefault();
+    if (otpLoading || cooldown > 0 || isSubmittingRef.current) return;
     setError('');
     setInfoMessage('');
 
@@ -55,6 +107,7 @@ export const CustomerLogin = () => {
       return;
     }
 
+    isSubmittingRef.current = true;
     setOtpLoading(true);
     try {
       const sent = await sendOTP(phone);
@@ -67,14 +120,44 @@ export const CustomerLogin = () => {
         setInfoMessage('OTP sent to your mobile.');
       }
     } catch (err) {
+      if (err.retryAfter > 0) {
+        startCooldown(err.retryAfter);
+      }
       setError(err.message || 'Failed to send OTP. Please try again.');
     } finally {
+      isSubmittingRef.current = false;
+      setOtpLoading(false);
+    }
+  };
+
+  const handleResendOTP = async () => {
+    if (otpLoading || cooldown > 0 || isSubmittingRef.current) return;
+    setError('');
+    setOtp('');
+    isSubmittingRef.current = true;
+    setOtpLoading(true);
+    try {
+      const sent = await sendOTP(phone);
+      if (sent?.dev_otp) {
+        setOtp(String(sent.dev_otp));
+        setInfoMessage(`OTP sent. Your code is ${sent.dev_otp}`);
+      } else {
+        setInfoMessage('A new OTP was sent to your mobile.');
+      }
+    } catch (err) {
+      if (err.retryAfter > 0) {
+        startCooldown(err.retryAfter);
+      }
+      setError(err.message || 'Failed to resend OTP. Please try again.');
+    } finally {
+      isSubmittingRef.current = false;
       setOtpLoading(false);
     }
   };
 
   const handleVerifyOTP = async (e) => {
     e.preventDefault();
+    if (otpLoading || isSubmittingRef.current) return;
     setError('');
     setInfoMessage('');
 
@@ -90,19 +173,34 @@ export const CustomerLogin = () => {
       return;
     }
 
+    isSubmittingRef.current = true;
     setOtpLoading(true);
     try {
+      persistGuestCart();
       const res = await verifyOTP(phone, cleanOtp);
       const guestCartRaw = sessionStorage.getItem('foodie_guest_cart_unmerged') || sessionStorage.getItem('foodie_guest_cart_temp') || sessionStorage.getItem('foodie_guest_cart') || sessionStorage.getItem('foodie_cart') || localStorage.getItem('foodie_guest_cart_temp');
-      let hasGuestCartItems = false;
+      let guestItems = [];
       try {
         if (guestCartRaw) {
           const parsed = JSON.parse(guestCartRaw);
-          if (Array.isArray(parsed) && parsed.length > 0) hasGuestCartItems = true;
+          if (Array.isArray(parsed) && parsed.length > 0) guestItems = parsed;
         }
       } catch (e) {}
+      if (guestItems.length === 0 && Array.isArray(cartItems) && cartItems.length > 0) {
+        guestItems = cartItems;
+      }
+      const hasGuestCartItems = guestItems.length > 0;
+      if (hasGuestCartItems) {
+        await cartService.restoreGuestCartAfterLogin(guestItems);
+        const orderType = getOrderType();
+        if (orderType) {
+          try { await applyOrderContext(orderType); } catch (e) { /* checkout will re-apply */ }
+        }
+      }
 
-      if (res && res.isNewUser && !hasGuestCartItems) {
+      if (returningToCheckout || hasGuestCartItems) {
+        navigate(destination.includes('checkout') ? destination : '/customer/checkout', { replace: true });
+      } else if (res && res.isNewUser && !hasGuestCartItems) {
         sessionStorage.removeItem('foodie_cart');
         localStorage.removeItem('foodie_cart');
         try {
@@ -114,8 +212,12 @@ export const CustomerLogin = () => {
         navigate(destination, { replace: true });
       }
     } catch (err) {
+      if (err.retryAfter > 0) {
+        startCooldown(err.retryAfter);
+      }
       setError(err.message || 'Invalid OTP. Please try again.');
     } finally {
+      isSubmittingRef.current = false;
       setOtpLoading(false);
     }
   };
@@ -204,8 +306,14 @@ export const CustomerLogin = () => {
               {error && <div className="text-danger small mb-3 fw-semibold text-start">{error}</div>}
 
               <div className="d-grid gap-2 mt-4">
-                <Button type="submit" variant="primary" className="py-2.5 fw-bold" loading={otpLoading}>
-                  Send OTP
+                <Button
+                  type="submit"
+                  variant="primary"
+                  className="py-2.5 fw-bold"
+                  loading={otpLoading}
+                  disabled={otpLoading || cooldown > 0 || phone.length < (selectedCountryObj.phoneLen || 10)}
+                >
+                  {cooldown > 0 ? `Send OTP (${cooldown}s)` : 'Send OTP'}
                 </Button>
               </div>
             </form>
@@ -241,9 +349,27 @@ export const CustomerLogin = () => {
                   variant="primary" 
                   className="py-2.5 fw-bold" 
                   loading={otpLoading}
-                  disabled={otp.replace(/\D/g, '').length !== 6 || otpLoading}
+                  disabled={cooldown > 0 || otp.replace(/\D/g, '').length !== 6 || otpLoading}
                 >
                   Verify OTP & Proceed to Checkout
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="py-2.5 fw-bold"
+                  onClick={handleResendOTP}
+                  disabled={otpLoading || cooldown > 0}
+                >
+                  {cooldown > 0 ? `Resend OTP (${cooldown}s)` : 'Resend OTP'}
+                </Button>
+                <Button
+                  type="button"
+                  variant="light"
+                  className="py-2.5 fw-bold"
+                  onClick={() => { setOtpSent(false); setOtp(''); setError(''); }}
+                  disabled={otpLoading}
+                >
+                  Use a different number
                 </Button>
               </div>
             </form>

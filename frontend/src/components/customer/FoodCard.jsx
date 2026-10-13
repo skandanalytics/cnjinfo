@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import QuantityControl from './QuantityControl';
 import { getProductSellingPrice } from '../../utils/pricing';
 import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
+import { dishStockLimit, isDishOutOfStock } from '../../utils/filters';
 
 export const FoodCard = ({ dish }) => {
   const navigate = useNavigate();
@@ -36,7 +37,7 @@ export const FoodCard = ({ dish }) => {
 
   const discountLabel = calculatedPct > 0 ? `${calculatedPct}% OFF` : `OFFER AVAILABLE`;
 
-  const isOutOfStock = dish.stock <= 0 || dish.status === 'Out of Stock' || dish.status === 'OUT_OF_STOCK' || dish.is_available === false;
+  const isOutOfStock = isDishOutOfStock(dish);
 
   const isPopular = Boolean(
     dish.isPopular ||
@@ -60,7 +61,7 @@ export const FoodCard = ({ dish }) => {
   const handleQuickAdd = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const maxStock = typeof dish.stock === 'number' ? dish.stock : 20;
+    const maxStock = dishStockLimit(dish);
     if (isOutOfStock || maxStock <= 0) {
       if (showOutOfStockModal) {
         showOutOfStockModal({
@@ -211,7 +212,7 @@ export const FoodCard = ({ dish }) => {
               <QuantityControl
                 quantity={quantityInCart}
                 min={0}
-                max={dish.stock}
+                max={typeof dish.stock === 'number' ? dish.stock : undefined}
                 onIncrease={() => increaseQuantity(dish.id)}
                 onDecrease={() => decreaseQuantity(dish.id)}
                 onChange={(val) => updateQuantity(dish.id, val)}

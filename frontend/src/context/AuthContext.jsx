@@ -181,37 +181,57 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = () => {
-    import('../services/adminApi').then(({ staffLogout }) => staffLogout()).catch(() => {});
-    setAuthState({ user: null, isAuthenticated: false });
+  const logout = (options = {}) => {
+    const scope = options.scope;
+    const clearCustomer = scope !== 'staff';
+    const clearStaff = scope !== 'customer';
+
+    if (clearStaff) {
+      import('../services/adminApi').then(({ staffLogout }) => staffLogout()).catch(() => {});
+    }
+
+    if (clearCustomer) {
+      try {
+        const phone = user?.phone || localStorage.getItem('foodie_customer_phone') || sessionStorage.getItem('foodie_customer_phone');
+        const digits = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
+        if (digits) {
+          sessionStorage.removeItem(`foodie_cart_${digits}`);
+          localStorage.removeItem(`foodie_customer_order_ids_${digits}`);
+        }
+        if (user?.id) sessionStorage.removeItem(`foodie_cart_${user.id}`);
+      } catch (e) {}
+      sessionStorage.removeItem('foodie_token_customer');
+      sessionStorage.removeItem('foodie_auth_customer');
+      sessionStorage.removeItem('foodie_customer_refresh');
+      sessionStorage.removeItem('foodie_customer_phone');
+      sessionStorage.removeItem('foodie_last_placed_order');
+      sessionStorage.removeItem('foodie_last_order_items');
+      sessionStorage.removeItem('foodie_all_placed_orders');
+      localStorage.removeItem('foodie_token_customer');
+      localStorage.removeItem('foodie_auth_customer');
+      localStorage.removeItem('foodie_customer_phone');
+      localStorage.removeItem('foodie_last_placed_order');
+      localStorage.removeItem('foodie_last_order_items');
+      localStorage.removeItem('foodie_customer_order_ids');
+      localStorage.removeItem('foodie_all_placed_orders');
+    }
+
+    if (clearStaff) {
+      sessionStorage.removeItem('foodie_token_admin');
+      sessionStorage.removeItem('foodie_auth_admin');
+      sessionStorage.removeItem('foodie_staff_access');
+      sessionStorage.removeItem('foodie_staff_refresh');
+      sessionStorage.removeItem('foodie_staff_ordering');
+      localStorage.removeItem('foodie_token_admin');
+      localStorage.removeItem('foodie_auth_admin');
+    }
+
     sessionStorage.removeItem('foodie_token');
     sessionStorage.removeItem('foodie_auth');
-    sessionStorage.removeItem('foodie_token_admin');
-    sessionStorage.removeItem('foodie_auth_admin');
-    sessionStorage.removeItem('foodie_token_customer');
-    sessionStorage.removeItem('foodie_auth_customer');
     sessionStorage.removeItem('foodie_cart');
-    sessionStorage.removeItem('foodie_last_placed_order');
     localStorage.removeItem('foodie_token');
     localStorage.removeItem('foodie_auth');
-    localStorage.removeItem('foodie_token_admin');
-    localStorage.removeItem('foodie_auth_admin');
-    localStorage.removeItem('foodie_token_customer');
-    localStorage.removeItem('foodie_auth_customer');
-    localStorage.removeItem('foodie_last_placed_order');
-    sessionStorage.removeItem('foodie_last_order_items');
-    localStorage.removeItem('foodie_last_order_items');
-    try {
-      const phone = localStorage.getItem('foodie_customer_phone') || sessionStorage.getItem('foodie_customer_phone');
-      if (phone) localStorage.removeItem(`foodie_customer_order_ids_${phone}`);
-    } catch (e) {}
-
-    localStorage.removeItem('foodie_guest_order_ids');
-    localStorage.removeItem('foodie_customer_order_ids');
-    sessionStorage.removeItem('foodie_customer_phone');
-    localStorage.removeItem('foodie_customer_phone');
-    localStorage.removeItem('foodie_all_placed_orders');
-    sessionStorage.removeItem('foodie_all_placed_orders');
+    setAuthState({ user: null, isAuthenticated: false });
     try {
       window.dispatchEvent(new CustomEvent('foodie_logout'));
       window.dispatchEvent(new CustomEvent('foodie_orders_updated'));

@@ -8,13 +8,15 @@ export const OutOfStockModal = ({
   onClose,
   item,
   message,
-  stock
+  stock,
+  title = 'Out of Stock',
 }) => {
   if (!isOpen) return null;
 
   const itemName = item?.name || 'This item';
   const itemImg = item?.image ? getImageUrl(item.image) : null;
-  const currentStock = stock !== undefined ? stock : (item?.stock !== undefined ? item.stock : 0);
+  const numericStock = stock !== undefined ? Number(stock) : (item?.stock != null ? Number(item.stock) : 0);
+  const currentStock = Number.isFinite(numericStock) ? numericStock : 0;
 
   return (
     <div 
@@ -35,7 +37,7 @@ export const OutOfStockModal = ({
               <div className="bg-danger-subtle text-danger p-2 rounded-circle d-flex align-items-center justify-content-center" style={{ width: '36px', height: '36px' }}>
                 <FiAlertCircle size={20} />
               </div>
-              <h5 className="modal-title fw-bold text-dark mb-0">Out of Stock</h5>
+              <h5 className="modal-title fw-bold text-dark mb-0">{title}</h5>
             </div>
             <button 
               type="button" 
@@ -72,10 +74,12 @@ export const OutOfStockModal = ({
               )}
             </p>
 
+            {title === 'Out of Stock' && (
             <div className="p-2.5 rounded-3 bg-light border border-light-subtle text-muted small mb-1" style={{ fontSize: '11.5px' }}>
               <FiPackage className="me-1 text-danger" /> 
               {currentStock > 0 ? `Available stock: ${currentStock} units` : 'Will be freshly prepared soon'}
             </div>
+            )}
           </div>
 
           {/* Footer Actions */}

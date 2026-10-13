@@ -42,10 +42,12 @@ def administrator_exists():
 
 def setup_status():
     required = not administrator_exists()
+    secret = setup_key_configured()
     return {
         "setup_required": required,
         "setup_enabled": required,
-        "setup_key_required": bool(required and setup_key_configured()),
+        "setup_key_required": bool(required and secret),
+        "recovery_available": bool((not required) and secret),
     }
 
 
@@ -78,6 +80,38 @@ def _validate_new_password(password, confirm, user=None):
         raise MaintenanceError(" ".join(exc.messages))
 
 
+def _provision_administrator(payload, role=Employee.Role.SUPER_ADMIN):
+    code = _clean_code(payload.get("employee_code"))
+    name = str(payload.get("name") or "").strip()
+    if not 2 <= len(name) <= 255:
+        raise MaintenanceError("Enter the administrator's full name.")
+    phone = _clean_phone(payload.get("phone"))
+    email = str(payload.get("email") or "").strip() or None
+    password = payload.get("password") or ""
+    _validate_new_password(password, payload.get("confirm_password") or "")
+    if role not in ADMIN_ROLES:
+        raise MaintenanceError("Choose an administrator role.")
+    with transaction.atomic():
+        if User.objects.filter(phone=phone).exists():
+            raise MaintenanceError("That phone number is already in use.")
+        if email and User.objects.filter(email__iexact=email).exists():
+            raise MaintenanceError("That email address is already in use.")
+        if Employee.objects.filter(employee_code=code).exists():
+            raise MaintenanceError("That admin ID is already in use.")
+        user = User(name=name, phone=phone, email=email, user_type=User.UserType.EMPLOYEE,
+                    is_active=True, is_staff=role == Employee.Role.SUPER_ADMIN,
+                    is_superuser=role == Employee.Role.SUPER_ADMIN)
+        user.set_password(password)
+        user.save()
+        Employee.objects.create(
+            user=user, employee_code=code, role=role,
+            department="Administration",
+            job_title="Super Admin" if role == Employee.Role.SUPER_ADMIN else "Admin",
+            status=Employee.Status.ACTIVE,
+        )
+    return {"employee_code": code, "name": name}
+
+
 def create_first_administrator(payload):
     if administrator_exists():
         raise MaintenanceError("An administrator already exists. Sign in to continue.", 409)
@@ -89,34 +123,37 @@ def create_first_administrator(payload):
     if not cache.add("foodie-db-setup-lock", "1", timeout=30):
         raise MaintenanceError("Initial setup is already in progress.", 409)
     try:
-        code = _clean_code(payload.get("employee_code"))
-        name = str(payload.get("name") or "").strip()
-        if not 2 <= len(name) <= 255:
-            raise MaintenanceError("Enter the administrator's full name.")
-        phone = _clean_phone(payload.get("phone"))
-        email = str(payload.get("email") or "").strip() or None
-        password = payload.get("password") or ""
-        _validate_new_password(password, payload.get("confirm_password") or "")
         with transaction.atomic():
             if Employee.objects.select_for_update().filter(role__in=ADMIN_ROLES).exists():
                 raise MaintenanceError("An administrator already exists. Sign in to continue.", 409)
-            if User.objects.filter(phone=phone).exists():
-                raise MaintenanceError("That phone number is already in use.")
-            if email and User.objects.filter(email__iexact=email).exists():
-                raise MaintenanceError("That email address is already in use.")
-            if Employee.objects.filter(employee_code=code).exists():
-                raise MaintenanceError("That admin ID is already in use.")
-            user = User(name=name, phone=phone, email=email, user_type=User.UserType.EMPLOYEE,
-                        is_active=True, is_staff=True, is_superuser=True)
-            user.set_password(password)
-            user.save()
-            Employee.objects.create(
-                user=user, employee_code=code, role=Employee.Role.SUPER_ADMIN,
-                department="Administration", job_title="Super Admin", status=Employee.Status.ACTIVE,
-            )
-        return {"employee_code": code, "name": name}
+            return _provision_administrator(payload, role=Employee.Role.SUPER_ADMIN)
     finally:
         cache.delete("foodie-db-setup-lock")
+
+
+def recover_administrator(payload):
+    """Create an additional administrator after proving server-level authorization.
+
+    Existing administrator accounts are never deleted or overwritten. Knowing /db is
+    not enough: DB_SETUP_SECRET must be configured and supplied.
+    """
+    if not administrator_exists():
+        raise MaintenanceError("No administrator exists yet. Use Create First Admin.", 400)
+    expected = os.environ.get("DB_SETUP_SECRET", "").strip()
+    if not expected:
+        raise MaintenanceError(
+            "Administrator recovery is not enabled. Sign in as an existing administrator, or set the server setup key.",
+            403,
+        )
+    provided = str(payload.get("setup_key") or "")
+    if not provided or not hmac.compare_digest(expected, provided):
+        raise MaintenanceError("Recovery could not be authorized.", 403)
+    if not cache.add("foodie-db-recover-lock", "1", timeout=30):
+        raise MaintenanceError("Administrator recovery is already in progress.", 409)
+    try:
+        return _provision_administrator(payload, role=Employee.Role.SUPER_ADMIN)
+    finally:
+        cache.delete("foodie-db-recover-lock")
 
 
 def overview(employee):
@@ -147,7 +184,8 @@ def overview(employee):
             "employee_code": employee.employee_code,
             "name": employee.user.name,
             "role": employee.role,
-            "can_manage_administrators": employee.role == Employee.Role.SUPER_ADMIN,
+            "can_manage_administrators": employee.role in ADMIN_ROLES,
+            "can_create_owner": employee.role == Employee.Role.SUPER_ADMIN,
         },
     }
 
@@ -397,8 +435,8 @@ def administrator_rows():
 
 
 def create_administrator(actor, payload):
-    if actor.role != Employee.Role.SUPER_ADMIN:
-        raise MaintenanceError("Only a super administrator can create administrators.", 403)
+    if actor.role not in ADMIN_ROLES:
+        raise MaintenanceError("Only an administrator can create administrator accounts.", 403)
     code = _clean_code(payload.get("employee_code"))
     name = str(payload.get("name") or "").strip()
     if not 2 <= len(name) <= 255:
@@ -408,6 +446,8 @@ def create_administrator(actor, payload):
     role = payload.get("role") or Employee.Role.ADMIN
     if role not in ADMIN_ROLES:
         raise MaintenanceError("Choose an administrator role.")
+    if actor.role != Employee.Role.SUPER_ADMIN and role == Employee.Role.SUPER_ADMIN:
+        raise MaintenanceError("Only an Owner can create another Owner account.", 403)
     password = payload.get("password") or ""
     _validate_new_password(password, payload.get("confirm_password") or "")
     with transaction.atomic():
@@ -423,10 +463,10 @@ def create_administrator(actor, payload):
         user.save()
         emp = Employee.objects.create(
             user=user, employee_code=code, role=role, department="Administration",
-            job_title="Super Admin" if role == Employee.Role.SUPER_ADMIN else "Admin",
+            job_title="Owner" if role == Employee.Role.SUPER_ADMIN else "Manager",
             status=Employee.Status.ACTIVE,
         )
-    return {"id": emp.id, "employee_code": emp.employee_code}
+    return {"id": emp.id, "employee_code": emp.employee_code, "role": emp.role, "name": emp.user.name}
 
 
 def update_administrator(actor, pk, payload):

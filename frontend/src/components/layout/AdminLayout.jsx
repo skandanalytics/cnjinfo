@@ -46,8 +46,8 @@ export const AdminLayout = ({ children }) => {
 
   const handleLogout = () => {
     setShowProfileDropdown(false);
-    logout();
-    navigate('/login');
+    logout({ scope: 'staff' });
+    navigate('/login', { replace: true });
   };
 
   return (

@@ -18,6 +18,7 @@ export const Button = ({
       case 'secondary':
         return 'btn-secondary-custom';
       case 'outline':
+      case 'outline-danger':
         return 'btn btn-outline-danger rounded-pill';
       case 'danger':
         return 'btn btn-danger rounded-pill';

@@ -10,6 +10,7 @@ import { useCart } from '../../hooks/useCart';
 import BackButton from '../../components/common/BackButton';
 import { getProductSellingPrice } from '../../utils/pricing';
 import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
+import { dishStockLimit, isDishOutOfStock } from '../../utils/filters';
 
 export const FoodDetails = () => {
   const { id } = useParams();
@@ -79,15 +80,7 @@ export const FoodDetails = () => {
     );
   }
 
-  const isOutOfStock = Boolean(
-    dish && (
-      dish.is_orderable === false
-      || dish.is_available === false
-      || dish.status === 'Out of Stock'
-      || dish.status === 'OUT_OF_STOCK'
-      || (dish.stock !== undefined && dish.stock !== null && Number(dish.stock) <= 0)
-    )
-  );
+  const isOutOfStock = isDishOutOfStock(dish);
 
   if (!dish) {
     return (
@@ -104,7 +97,7 @@ export const FoodDetails = () => {
   }
 
   const handleAddToCart = async () => {
-    const maxS = typeof dish.stock === 'number' ? dish.stock : 20;
+    const maxS = dishStockLimit(dish);
     if (isOutOfStock || maxS <= 0) {
       if (showOutOfStockModal) {
         showOutOfStockModal({
@@ -133,7 +126,7 @@ export const FoodDetails = () => {
   };
 
   const handleIncrease = async () => {
-    const maxS = typeof dish.stock === 'number' ? dish.stock : 20;
+    const maxS = dishStockLimit(dish);
     if (inCartQuantity > 0) {
       if (inCartQuantity < maxS) {
         await increaseQuantity(dish.id);
@@ -166,7 +159,7 @@ export const FoodDetails = () => {
   };
 
   const handleChangeQuantity = async (newVal) => {
-    const maxS = typeof dish.stock === 'number' ? dish.stock : 20;
+    const maxS = dishStockLimit(dish);
     const clamped = Math.max(0, Math.min(newVal, maxS));
     if (inCartQuantity > 0) {
       if (clamped === 0) {
@@ -326,7 +319,7 @@ export const FoodDetails = () => {
                   <QuantityControl
                     quantity={currentDisplayQuantity}
                     min={isAdded ? 0 : 1}
-                    max={dish.stock}
+                    max={typeof dish.stock === 'number' ? dish.stock : undefined}
                     onChange={handleChangeQuantity}
                     onIncrease={handleIncrease}
                     onDecrease={handleDecrease}

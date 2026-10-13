@@ -486,8 +486,13 @@ export const authService = {
       const res = await api.post('/auth/otp/send/', { phone: cleanPhone });
       return { success: true, message: 'OTP sent', dev_otp: res.data?.dev_otp };
     } catch (error) {
-      const detail = error.response?.data?.detail;
-      throw new Error(typeof detail === 'string' ? detail : (error.message || 'Unable to send OTP'));
+      const { throttleErrorMessage, getRetryAfterSeconds } = await import('../utils/errorUtils');
+      const wait = getRetryAfterSeconds(error);
+      const throttled = throttleErrorMessage(error);
+      const err = new Error(throttled || error.response?.data?.detail || error.message || 'Unable to send OTP');
+      err.isThrottled = Boolean(error.response?.status === 429 || throttled);
+      err.retryAfter = wait;
+      throw err;
     }
   },
 
@@ -515,6 +520,15 @@ export const authService = {
         },
       };
     } catch (error) {
+      const { throttleErrorMessage, getRetryAfterSeconds } = await import('../utils/errorUtils');
+      const wait = getRetryAfterSeconds(error);
+      const throttled = throttleErrorMessage(error, 'Too many verification attempts. Please wait before trying again.');
+      if (throttled) {
+        const err = new Error(throttled);
+        err.isThrottled = true;
+        err.retryAfter = wait;
+        throw err;
+      }
       if (error.response?.data?.detail) throw new Error(error.response.data.detail);
       throw error;
     }

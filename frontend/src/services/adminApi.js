@@ -621,17 +621,16 @@ export async function createCoupon(couponData) {
   const branch = await currentBranchId();
   const from = new Date();
   let to;
-  if (couponData.validity) {
-    const match = String(couponData.validity).match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (!match) throw new Error('Choose a valid until date.');
-    to = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
-    const startOfToday = new Date();
-    startOfToday.setHours(0, 0, 0, 0);
-    if (to < startOfToday) throw new Error('Valid until cannot be earlier than today.');
-    if (to <= from) throw new Error('Valid until must be after the start date.');
-  } else {
-    to = new Date(from.getTime() + 30 * 24 * 60 * 60 * 1000);
+  if (!couponData.validity) {
+    throw new Error('Valid until is required.');
   }
+  const match = String(couponData.validity).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!match) throw new Error('Choose a valid until date.');
+  to = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  if (to < startOfToday) throw new Error('Valid until cannot be earlier than today.');
+  if (to <= from) throw new Error('Valid until must be after the start date.');
   const created = await staffJson('/coupons/', {
     method: 'POST',
     body: JSON.stringify({

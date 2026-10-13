@@ -1,4 +1,4 @@
-﻿import logging
+import logging
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
@@ -8,6 +8,7 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
+from .throttles import OTPSendIPThrottle, OTPSendPhoneThrottle, OTPVerifyIPThrottle, OTPVerifyPhoneThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -33,10 +34,10 @@ class ThrottledView(APIView):
     throttle_classes = [ScopedRateThrottle]
 
 
-class SendOTPView(ThrottledView):
+class SendOTPView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_scope = "otp_send"
+    throttle_classes = [OTPSendPhoneThrottle, OTPSendIPThrottle]
 
     def post(self, request):
         s = SendOTPSerializer(data=request.data)
@@ -48,7 +49,10 @@ class SendOTPView(ThrottledView):
         try:
             code = otp.send_otp(phone, ip=client_ip(request))
         except otp.OTPError as exc:
-            resp = Response({"detail": str(exc.detail), "code": exc.error_code}, status=exc.status_code)
+            body = {"detail": str(exc.detail), "code": exc.error_code}
+            if exc.retry_after:
+                body["retry_after"] = exc.retry_after
+            resp = Response(body, status=exc.status_code)
             if exc.retry_after:
                 resp["Retry-After"] = str(exc.retry_after)
             return resp
@@ -58,10 +62,10 @@ class SendOTPView(ThrottledView):
         return Response(body)
 
 
-class VerifyOTPView(ThrottledView):
+class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
-    throttle_scope = "otp_verify"
+    throttle_classes = [OTPVerifyPhoneThrottle, OTPVerifyIPThrottle]
 
     def post(self, request):
         s = VerifyOTPSerializer(data=request.data)
@@ -73,7 +77,13 @@ class VerifyOTPView(ThrottledView):
         try:
             otp.verify_otp(phone, s.validated_data["otp"])
         except otp.OTPError as exc:
-            return Response({"detail": str(exc.detail), "code": exc.error_code}, status=exc.status_code)
+            body = {"detail": str(exc.detail), "code": exc.error_code}
+            if getattr(exc, "retry_after", None):
+                body["retry_after"] = exc.retry_after
+            resp = Response(body, status=exc.status_code)
+            if getattr(exc, "retry_after", None):
+                resp["Retry-After"] = str(exc.retry_after)
+            return resp
         with transaction.atomic():
             user = existing or User.objects.create_user(phone=phone, user_type=User.UserType.CUSTOMER)
             if not user.is_active:

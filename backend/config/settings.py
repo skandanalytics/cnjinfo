@@ -1,4 +1,4 @@
-﻿"""Foodie settings. All environment-specific values come from environment variables (.env)."""
+"""Foodie settings. All environment-specific values come from environment variables (.env)."""
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -30,7 +30,7 @@ if not SECRET_KEY:
     else:
         raise RuntimeError("SECRET_KEY environment variable is required when DEBUG is off.")
 
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost")
+ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost,testserver")
 
 INSTALLED_APPS = [
     "daphne",
@@ -144,10 +144,18 @@ REST_FRAMEWORK = {
     ),
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/minute", "user": "240/minute",
-        "otp_send": "10/hour", "otp_verify": "30/hour", "staff_login": "20/minute", "qr_resolve": "60/minute", "quote": "120/minute",
+        # OTP send/verify are scoped on those views. Phone keys keep one diner from blocking the LAN;
+        # IP caps stay high enough for a shared restaurant network. Old otp_send/otp_verify IP buckets
+        # are intentionally unused so leftover hourly locks no longer apply.
+        "otp_send_phone": "8/hour",
+        "otp_send_ip": "120/hour" if DEBUG else "60/hour",
+        "otp_verify_phone": "20/hour",
+        "otp_verify_ip": "180/hour" if DEBUG else "80/hour",
+        "staff_login": "20/minute", "qr_resolve": "60/minute", "quote": "120/minute",
         "public_menu": "120/minute", "guest_token": "30/hour",
         "db_setup": "10/hour", "db_reset": "6/hour",
     },
+    "EXCEPTION_HANDLER": "config.exceptions.foodie_exception_handler",
 }
 
 # Counters for throttling and login lockout. LocMem is per-process: use a shared cache (Redis) in production.

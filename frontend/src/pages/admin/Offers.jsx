@@ -33,6 +33,7 @@ export const Offers = () => {
   const [minOrder, setMinOrder] = useState('');
   const [validity, setValidity] = useState('');
   const [autoApply, setAutoApply] = useState(false);
+  const [couponError, setCouponError] = useState('');
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
@@ -114,7 +115,16 @@ export const Offers = () => {
 
   const handleCreateCoupon = async (e) => {
     e.preventDefault();
+    setCouponError('');
     if (!hasBranches || !code || !discount) return;
+    if (!validity) {
+      setCouponError('Valid until is required.');
+      return;
+    }
+    if (validity < todayIso) {
+      setCouponError('Valid until cannot be earlier than today.');
+      return;
+    }
 
     try {
       await couponService.createCoupon({
@@ -122,7 +132,7 @@ export const Offers = () => {
         discount: parseInt(discount),
         minOrderValue: parseInt(minOrder || '0'),
         type: 'Flat',
-        validity: validity || null,
+        validity,
         status: 'Active',
         autoApply,
       });
@@ -267,7 +277,7 @@ export const Offers = () => {
           showBackButton
           actions={
             <Button
-              onClick={() => setIsAddOpen(true)}
+              onClick={() => { setCouponError(''); setIsAddOpen(true); }}
               variant="primary"
               className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill"
             >
@@ -311,8 +321,11 @@ export const Offers = () => {
               type="date"
               min={todayIso}
               value={validity}
-              onChange={(e) => setValidity(e.target.value)}
+              onChange={(e) => { setValidity(e.target.value); setCouponError(''); }}
+              required
+              error={couponError}
             />
+            {couponError && <div className="text-danger small fw-semibold mb-2">{couponError}</div>}
             <div className="d-grid mt-3">
               <Button type="submit" variant="primary">
                 Create Coupon
@@ -361,7 +374,7 @@ export const Offers = () => {
             )}
             {activeTab === 'coupons' && (
               <Button
-                onClick={() => setIsAddOpen(true)}
+                onClick={() => { setCouponError(''); setIsAddOpen(true); }}
                 variant="primary"
                 className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill"
               >
@@ -652,8 +665,11 @@ export const Offers = () => {
             type="date"
             min={todayIso}
             value={validity}
-            onChange={(e) => setValidity(e.target.value)}
+            onChange={(e) => { setValidity(e.target.value); setCouponError(''); }}
+            required
+            error={couponError}
           />
+          {couponError && <div className="text-danger small fw-semibold mb-2">{couponError}</div>}
           <div className="form-check form-switch mb-3">
             <input
               id="coupon-auto-apply"

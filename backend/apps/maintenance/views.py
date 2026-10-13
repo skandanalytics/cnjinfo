@@ -13,6 +13,7 @@ from .services import (
     change_administrator_password,
     create_administrator,
     create_first_administrator,
+    recover_administrator,
     delete_records,
     list_records,
     overview,
@@ -49,6 +50,44 @@ class SetupView(APIView):
     def post(self, request):
         try:
             return Response(create_first_administrator(request.data), status=201)
+        except MaintenanceError as exc:
+            return fail(exc)
+
+
+class RecoverAdministratorView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "db_setup"
+
+    def post(self, request):
+        try:
+            return Response(recover_administrator(request.data), status=201)
+        except MaintenanceError as exc:
+            return fail(exc)
+
+
+class CreateAuthorizedAdminView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+    throttle_classes = [ScopedRateThrottle]
+    throttle_scope = "db_setup"
+
+    def post(self, request):
+        authorizing_code = str(request.data.get("authorizing_code") or request.data.get("authorizing_admin_id") or "").strip().upper()
+        authorizing_password = str(request.data.get("authorizing_password") or "")
+        if not authorizing_code or not authorizing_password:
+            return Response(
+                {"detail": "Enter your existing administrator ID and password to authorize creating this account."},
+                status=400,
+            )
+        actor = Employee.objects.select_related("user").filter(employee_code=authorizing_code, status=Employee.Status.ACTIVE).first()
+        if not actor or not actor.user.check_password(authorizing_password):
+            return Response({"detail": "Invalid authorizing administrator credentials."}, status=401)
+        if actor.role not in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
+            return Response({"detail": "Only an authorized administrator can create administrator accounts."}, status=403)
+        try:
+            return Response(create_administrator(actor, request.data), status=201)
         except MaintenanceError as exc:
             return fail(exc)
 
@@ -114,8 +153,8 @@ class ResetView(ConsoleView):
 class AdministratorsView(ConsoleView):
     def get(self, request):
         emp = get_active_employee(request.user)
-        if emp.role != Employee.Role.SUPER_ADMIN:
-            return Response({"detail": "Only a super administrator can manage administrator accounts."}, status=403)
+        if emp.role not in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
+            return Response({"detail": "Only an administrator can manage administrator accounts."}, status=403)
         return Response(administrator_rows())
 
     def post(self, request):

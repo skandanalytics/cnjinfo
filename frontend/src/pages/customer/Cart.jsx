@@ -69,7 +69,9 @@ export const Cart = () => {
     return () => { isMounted = false; };
   }, [user, cartItems.length]);
 
-  const isCustomer = (isAuthenticated && user?.role === 'customer') || sessionStorage.getItem('foodie_staff_ordering') === '1';
+  const isCustomer = (isAuthenticated && user?.role === 'customer')
+    || sessionStorage.getItem('foodie_staff_ordering') === '1'
+    || Boolean(sessionStorage.getItem('foodie_guest_token'));
   const [serverCart, setServerCart] = useState(null);
   useEffect(() => {
     const branch = customerBranchId();
@@ -130,6 +132,8 @@ export const Cart = () => {
   const handleCheckout = () => {
     try {
       sessionStorage.setItem('foodie_cart', JSON.stringify(cartItems));
+      sessionStorage.setItem('foodie_guest_cart', JSON.stringify(cartItems));
+      sessionStorage.setItem('foodie_guest_cart_temp', JSON.stringify(cartItems));
       sessionStorage.setItem('foodie_guest_cart_unmerged', JSON.stringify(cartItems));
     } catch (e) {}
 

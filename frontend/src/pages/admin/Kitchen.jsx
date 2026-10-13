@@ -74,7 +74,7 @@ export const Kitchen = () => {
   }, []);
 
   const handleAction = async (id, status) => {
-    if (updatingId === id) return;
+    if (updatingId != null && String(updatingId) === String(id)) return;
     setUpdatingId(id);
     setUpdatingAction(status);
     setActionError('');
@@ -82,18 +82,20 @@ export const Kitchen = () => {
       await updateStatus(id, status);
     } catch (e) {
       setActionError(e.message || 'This status change is no longer valid. The queue was refreshed.');
+    } finally {
+      setUpdatingId(null);
+      setUpdatingAction(null);
     }
-    setUpdatingId(null);
-    setUpdatingAction(null);
   };
 
   const handleReject = async (id) => {
-    if (updatingId === id) return;
+    if (updatingId != null && String(updatingId) === String(id)) return;
     const reason = window.prompt('Enter a reason for cancelling this order.');
     if (!reason || !reason.trim()) return;
     if (window.confirm("Are you sure you want to reject this order?")) {
       setUpdatingId(id);
       setUpdatingAction('reject');
+      setActionError('');
       try {
         await updateStatus(id, 'Cancelled', reason.trim());
       } catch (e) {
@@ -104,6 +106,10 @@ export const Kitchen = () => {
       }
     }
   };
+
+  const isAccepting = (orderId) => String(updatingId) === String(orderId) && updatingAction === 'Preparing';
+  const isRejecting = (orderId) => String(updatingId) === String(orderId) && updatingAction === 'reject';
+  const isUpdatingStatus = (orderId, status) => String(updatingId) === String(orderId) && updatingAction === status;
 
   // Kitchen queue order (FIFO line-up per stage):
   // 1. New Tickets: in the line of when the order was taken/placed (first taken = top of line)
@@ -400,9 +406,10 @@ export const Kitchen = () => {
                         <div className="d-flex align-items-center gap-2">
                           <Button
                             onClick={() => handleReject(ord.id)}
-                            disabled={updatingId === ord.id}
+                            disabled={isRejecting(ord.id)}
+                            loading={isRejecting(ord.id)}
                             size="sm"
-                            variant="outline-danger"
+                            variant="outline"
                             className="py-1 px-2.5 fw-bold shadow-xs"
                             style={{ fontSize: '11.5px' }}
                           >
@@ -410,7 +417,8 @@ export const Kitchen = () => {
                           </Button>
                           <Button
                             onClick={() => handleAction(ord.id, 'Preparing')}
-                            disabled={updatingId === ord.id}
+                            disabled={isAccepting(ord.id)}
+                            loading={isAccepting(ord.id)}
                             size="sm"
                             variant="primary"
                             className="py-1 px-3 fw-bold shadow-xs"
@@ -498,7 +506,8 @@ export const Kitchen = () => {
                         </span>
                         <Button
                           onClick={() => handleAction(ord.id, 'Ready')}
-                          disabled={updatingId === ord.id}
+                          disabled={isUpdatingStatus(ord.id, 'Ready')}
+                          loading={isUpdatingStatus(ord.id, 'Ready')}
                           size="sm"
                           variant="primary"
                           className="py-1 px-3 fw-bold shadow-xs"
@@ -580,7 +589,8 @@ export const Kitchen = () => {
                         </span>
                         <Button
                           onClick={() => handleAction(ord.id, 'Served')}
-                          disabled={updatingId === ord.id}
+                          disabled={isUpdatingStatus(ord.id, 'Served')}
+                          loading={isUpdatingStatus(ord.id, 'Served')}
                           size="sm"
                           variant="primary"
                           className="py-1 px-3 fw-bold shadow-xs"
