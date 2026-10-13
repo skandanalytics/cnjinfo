@@ -1,0 +1,25 @@
+---
+description: Keep the root README in sync with setup and product changes
+alwaysApply: true
+---
+
+# Update README.md with the change
+
+When you change how Foodie is installed, started, configured, or used, update `README.md` in the same work.
+
+Update it when any of these happen:
+
+- New or changed install/run commands (Python, npm, MySQL, migrate, Vite, Daphne)
+- New environment variables or `.env.example` keys
+- A new Django migration operators must run after pull
+- Admin/employee creation or `/db` setup flow changes
+- Login URLs, proxy ports, or WebSocket startup requirements change
+- A user-facing workflow in the README notes section becomes wrong (kitchen sync, table vacate, protein field, cart lifecycle)
+
+Do not:
+
+- Put real passwords, `DB_SETUP_SECRET`, or `.env` values in the README
+- Recommend `createsuperuser` as the way to create the first Foodie admin (use `/db` Create First Admin)
+- Add a testing phase or automated-test instructions unless the user asked for them
+
+Keep the README short. Change the existing sections instead of appending duplicate “latest change” dumps.
