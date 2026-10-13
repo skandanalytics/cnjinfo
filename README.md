@@ -4,6 +4,18 @@ Restaurant ordering app: customer QR / dine-in / takeaway, admin and employee da
 
 **Stack:** React + Vite frontend, Django REST Framework backend, MySQL 8, Django Channels (Daphne) for WebSockets.
 
+## Languages required
+
+| Language | Where it is used |
+|---|---|
+| **Python** | Backend (Django, REST APIs, business logic, migrations, WebSockets) |
+| **SQL** | MySQL 8 database (`foodie_db`). Schema is applied through Django migrations; you still need SQL to create the database and inspect data. |
+| **JavaScript (JSX)** | Frontend (React, Vite, pages, API clients) |
+| **HTML / CSS** | Frontend markup and styling (Bootstrap and project CSS) |
+| **JSON** | API request/response bodies and frontend config |
+
+You need **Python** and **SQL/MySQL** on your machine to run the backend, and **JavaScript** via Node.js/npm to run the frontend.
+
 ---
 
 ## Prerequisites
