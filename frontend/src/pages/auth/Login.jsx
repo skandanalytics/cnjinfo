@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
@@ -7,12 +7,14 @@ import { FiLock, FiMail, FiCheckCircle, FiShield, FiKey } from 'react-icons/fi';
 
 export const Login = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { login } = useAuth();
 
-  const [email, setEmail] = useState('');
+  const [email, setEmail] = useState(location.state?.employee_code || '');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successNotice, setSuccessNotice] = useState(location.state?.successMessage || '');
 
   useEffect(() => {
     let active = true;
@@ -145,6 +147,7 @@ export const Login = () => {
       </div>
 
       <div className="card border-0 shadow-sm p-4 rounded-4 bg-light-subtle">
+        {successNotice && <div className="alert alert-success small mb-3 text-start">{successNotice}</div>}
         <form onSubmit={handleSubmit}>
           <div className="text-start mb-3">
             <Input

@@ -3,24 +3,32 @@ import { createPortal } from 'react-dom';
 import { FiSearch, FiX } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import { getImageUrl } from '../../utils/imageUtils';
+import { filterAndRankDishes, escapeRegex } from '../../utils/searchUtils';
 
 function asRecord(entry) {
   if (entry && typeof entry === 'object') {
-    const title = String(entry.title || entry.name || entry.label || '').trim();
-    const label = String(entry.label || title).trim();
+    const name = String(entry.name || entry.title || entry.label || '').trim();
+    const label = String(entry.label || name).trim();
+    const category = String(
+      (entry.category && typeof entry.category === 'object' ? entry.category.name : entry.category) ||
+      entry.category_name ||
+      entry.subtitle ||
+      ''
+    ).trim();
     return {
       id: entry.id,
       label,
-      title: title || label,
-      subtitle: entry.subtitle || '',
+      title: name || label,
+      name: name || label,
+      category,
+      subtitle: entry.subtitle || category || '',
       image: entry.image || '',
       price: entry.price,
-      searchText: String(entry.searchText || [title, entry.subtitle, label].filter(Boolean).join(' ')),
-      raw: entry,
+      raw: entry.raw || entry,
     };
   }
   const text = String(entry || '').trim();
-  return text ? { id: text, label: text, title: text, subtitle: '', image: '', price: undefined, searchText: text, raw: text } : null;
+  return text ? { id: text, label: text, title: text, name: text, category: '', subtitle: '', image: '', price: undefined, raw: text } : null;
 }
 
 export const SearchBar = ({
@@ -45,16 +53,9 @@ export const SearchBar = ({
     ? records
     : (Array.isArray(suggestions) && suggestions.length > 0 ? suggestions : data);
   const catalog = (Array.isArray(source) ? source : []).map(asRecord).filter(Boolean);
-  const query = String(value || '').trim().toLowerCase();
-  const seen = new Set();
+  const query = String(value || '').trim();
   const matches = query && !disabled
-    ? catalog.filter((item) => {
-      if (!item.searchText.toLowerCase().includes(query)) return false;
-      const key = `${item.id}|${item.title}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 8)
+    ? filterAndRankDishes(catalog, query).slice(0, 8)
     : [];
 
   const placeDropdown = () => {
@@ -117,10 +118,11 @@ export const SearchBar = ({
 
   const renderHighlight = (text) => {
     const sourceText = String(text || '');
-    if (!query) return sourceText;
-    const parts = sourceText.split(new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi'));
+    const q = query.toLowerCase();
+    if (!q) return sourceText;
+    const parts = sourceText.split(new RegExp(`(${escapeRegex(query)})`, 'gi'));
     return parts.map((part, index) => (
-      part.toLowerCase() === query
+      part.toLowerCase() === q
         ? <strong key={index} className="text-danger fw-bold">{part}</strong>
         : <span key={index}>{part}</span>
     ));
@@ -168,7 +170,7 @@ export const SearchBar = ({
           <div className="flex-grow-1 text-truncate">
             <div className="text-truncate fw-semibold text-dark" style={{ fontSize: '12.5px' }}>{renderHighlight(item.title)}</div>
             {item.subtitle ? (
-              <div className="text-secondary text-truncate" style={{ fontSize: '11px' }}>{item.subtitle}</div>
+              <div className="text-secondary text-truncate" style={{ fontSize: '11px' }}>{renderHighlight(item.subtitle)}</div>
             ) : null}
           </div>
           {item.price !== undefined && item.price !== null && item.price !== '' ? (
@@ -196,8 +198,9 @@ export const SearchBar = ({
         placeholder={placeholder}
         value={value || ''}
         onChange={(event) => {
-          if (onChange) onChange(event.target.value);
-          setIsOpen(true);
+          const nextVal = event.target.value;
+          if (onChange) onChange(nextVal);
+          setIsOpen(Boolean(nextVal.trim()));
           setHighlightedIndex(-1);
         }}
         onFocus={() => {
@@ -221,6 +224,7 @@ export const SearchBar = ({
           onClick={() => {
             if (onChange) onChange('');
             setIsOpen(false);
+            setHighlightedIndex(-1);
             inputRef.current?.focus();
           }}
           className="btn btn-link position-absolute top-50 end-0 translate-middle-y me-2 p-1 text-secondary text-decoration-none border-0 bg-transparent"

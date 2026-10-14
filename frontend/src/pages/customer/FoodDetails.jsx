@@ -211,10 +211,13 @@ export const FoodDetails = () => {
             />
             {/* Veg/Non-veg overlay badge (top-right) */}
             <div
-              className="position-absolute top-0 end-0 m-3 bg-white p-1.5 rounded-3 shadow-sm d-flex align-items-center justify-content-center"
+              className="position-absolute top-0 end-0 m-3 bg-white rounded-3 shadow-sm food-type-badge-container d-flex align-items-center justify-content-center"
               style={{ zIndex: 10 }}
+              title={(dish.foodType || dish.type || (dish.is_veg === false || dish.is_veg === 'false' ? 'non-veg' : 'veg'))}
             >
-              <span className={(dish.foodType || dish.type || (dish.is_veg === false || dish.is_veg === 'false' ? 'non-veg' : 'veg')) === 'veg' ? 'veg-badge' : (dish.foodType || dish.type) === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}></span>
+              <span className="food-type-icon-wrapper">
+                <span className={(dish.foodType || dish.type || (dish.is_veg === false || dish.is_veg === 'false' ? 'non-veg' : 'veg')) === 'veg' ? 'veg-badge' : (dish.foodType || dish.type) === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}></span>
+              </span>
             </div>
 
             {isOutOfStock && (

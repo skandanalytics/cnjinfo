@@ -6,7 +6,7 @@ import { FiAlignLeft, FiBell, FiChevronDown, FiLogOut, FiShoppingBag, FiX } from
 import { useNavigate } from 'react-router-dom';
 import { orderService } from '../../services/orderService';
 
-export const AdminLayout = ({ children }) => {
+export const AdminLayout = ({ children, fullHeight = false, contentClassName = "" }) => {
   const { toggleSidebar, notifications, markAllRead, markAsRead, clearAll } = useContext(AppContext);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -93,7 +93,7 @@ export const AdminLayout = ({ children }) => {
       )}
 
       <div 
-        className="flex-grow-1 d-flex flex-column min-vh-100 admin-main-content" 
+        className={`flex-grow-1 d-flex flex-column ${fullHeight ? 'admin-main-fullheight' : 'min-vh-100'} admin-main-content`} 
         style={{ 
           marginLeft: sidebarWidth,
           minWidth: 0, 
@@ -102,7 +102,7 @@ export const AdminLayout = ({ children }) => {
         }}
       >
         {/* Admin Header */}
-        <header className="admin-header shadow-sm position-relative">
+        <header className="admin-header shadow-sm position-relative flex-shrink-0">
           <div className="d-flex align-items-center gap-3">
             <button className="btn border-0 text-dark p-0" onClick={toggleSidebar}>
               <FiAlignLeft size={22} />
@@ -283,7 +283,7 @@ export const AdminLayout = ({ children }) => {
         </header>
 
         {/* Page Content */}
-        <main className="p-4 flex-grow-1">
+        <main className={`p-4 flex-grow-1 ${fullHeight ? 'admin-main-content-fullheight' : ''} ${contentClassName}`}>
           {children}
         </main>
       </div>

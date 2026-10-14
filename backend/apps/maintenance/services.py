@@ -48,6 +48,7 @@ def setup_status():
         "setup_enabled": required,
         "setup_key_required": bool(required and secret),
         "recovery_available": bool((not required) and secret),
+        "recovery_key_required": bool((not required) and secret),
     }
 
 
@@ -103,13 +104,13 @@ def _provision_administrator(payload, role=Employee.Role.SUPER_ADMIN):
                     is_superuser=role == Employee.Role.SUPER_ADMIN)
         user.set_password(password)
         user.save()
-        Employee.objects.create(
+        emp = Employee.objects.create(
             user=user, employee_code=code, role=role,
             department="Administration",
-            job_title="Super Admin" if role == Employee.Role.SUPER_ADMIN else "Admin",
+            job_title="Owner" if role == Employee.Role.SUPER_ADMIN else "Manager",
             status=Employee.Status.ACTIVE,
         )
-    return {"employee_code": code, "name": name}
+    return {"id": emp.id, "employee_code": code, "name": name, "role": role}
 
 
 def create_first_administrator(payload):
@@ -147,11 +148,17 @@ def recover_administrator(payload):
         )
     provided = str(payload.get("setup_key") or "")
     if not provided or not hmac.compare_digest(expected, provided):
+        logger.warning("Administrator recovery failed: unauthorized attempt")
         raise MaintenanceError("Recovery could not be authorized.", 403)
     if not cache.add("foodie-db-recover-lock", "1", timeout=30):
         raise MaintenanceError("Administrator recovery is already in progress.", 409)
     try:
-        return _provision_administrator(payload, role=Employee.Role.SUPER_ADMIN)
+        role = payload.get("role") or Employee.Role.ADMIN
+        if role not in ADMIN_ROLES:
+            raise MaintenanceError("Choose an administrator role.")
+        res = _provision_administrator(payload, role=role)
+        logger.info("Administrator %s recovered successfully with role %s", res["employee_code"], role)
+        return res
     finally:
         cache.delete("foodie-db-recover-lock")
 

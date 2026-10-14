@@ -87,8 +87,14 @@ export const DishCard = ({
           )}
 
           {/* Veg/Non-Veg Tag (top-right) */}
-          <div className="position-absolute top-0 end-0 m-2 bg-white p-1 rounded-3 shadow-sm d-flex align-items-center justify-content-center" style={{ zIndex: 2 }}>
-            <span className={foodType === 'veg' ? 'veg-badge' : foodType === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}></span>
+          <div 
+            className="position-absolute top-0 end-0 m-2 bg-white rounded-3 shadow-sm food-type-badge-container d-flex align-items-center justify-content-center" 
+            style={{ zIndex: 2 }}
+            title={foodType}
+          >
+            <span className="food-type-icon-wrapper">
+              <span className={foodType === 'veg' ? 'veg-badge' : foodType === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}></span>
+            </span>
           </div>
         </div>
 

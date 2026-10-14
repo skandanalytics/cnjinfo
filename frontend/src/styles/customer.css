@@ -101,3 +101,70 @@
     transform: translateY(0);
   }
 }
+
+/* Customer Profile Dropdown Menu & Items */
+.customer-profile-dropdown {
+  -webkit-tap-highlight-color: transparent;
+}
+
+.customer-profile-menu-item {
+  -webkit-tap-highlight-color: transparent !important;
+  color: var(--text-secondary, #475569) !important;
+  background-color: transparent !important;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  user-select: none;
+  cursor: pointer;
+  outline: none;
+  text-decoration: none;
+}
+
+.customer-profile-menu-item:hover {
+  background-color: var(--background-color, #f8fafc) !important;
+  color: var(--text-primary, #0f172a) !important;
+}
+
+.customer-profile-menu-item:focus {
+  background-color: var(--background-color, #f8fafc) !important;
+  color: var(--text-primary, #0f172a) !important;
+  outline: none;
+  box-shadow: none;
+}
+
+.customer-profile-menu-item:focus-visible {
+  outline: 2px solid var(--primary-color, #be123c) !important;
+  outline-offset: -2px;
+}
+
+.customer-profile-menu-item:active,
+.customer-profile-menu-item.active {
+  background-color: var(--border-color, #e2e8f0) !important;
+  color: var(--text-primary, #0f172a) !important;
+}
+
+/* Override any default Bootstrap .dropdown-item active/focus blue states inside the dropdown */
+.customer-profile-dropdown .dropdown-item:active,
+.customer-profile-dropdown .dropdown-item.active {
+  background-color: var(--border-color, #e2e8f0) !important;
+  color: var(--text-primary, #0f172a) !important;
+}
+
+.customer-profile-dropdown .dropdown-item:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* Logout Item within Profile Menu */
+.customer-profile-menu-item.dropdown-item-logout {
+  color: var(--primary-color, #be123c) !important;
+}
+
+.customer-profile-menu-item.dropdown-item-logout:hover,
+.customer-profile-menu-item.dropdown-item-logout:focus {
+  background-color: var(--primary-light, #fff1f2) !important;
+  color: var(--primary-color, #be123c) !important;
+}
+
+.customer-profile-menu-item.dropdown-item-logout:active {
+  background-color: #fecdd3 !important;
+  color: var(--primary-dark, #9f1239) !important;
+}

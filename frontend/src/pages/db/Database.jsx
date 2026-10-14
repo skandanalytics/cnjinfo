@@ -64,7 +64,6 @@ export default function DatabaseConsole() {
   const [admins, setAdmins] = useState([]);
   const [resetToken, setResetToken] = useState('');
   const [resetting, setResetting] = useState(false);
-  const [showRecovery, setShowRecovery] = useState(false);
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
 
   const loadStatus = useCallback(async () => {
@@ -179,34 +178,39 @@ export default function DatabaseConsole() {
     }
   };
 
-  const onRecoverAdmin = async (event) => {
-    event.preventDefault();
-    const form = new FormData(event.target);
-    if (form.get('password') !== form.get('confirm_password')) {
-      setError('Password and confirmation do not match.');
-      return;
-    }
-    setBusy(true);
-    setError('');
-    setNotice('');
-    try {
-      const body = Object.fromEntries(form.entries());
-      const created = await publicJson('/recover-admin/', { method: 'POST', body });
-      setShowRecovery(false);
-      setNotice(`Administrator ${created.employee_code} was created. Sign in with that Admin ID. Existing administrator accounts were not changed.`);
-      await loadStatus();
-    } catch (err) {
-      setError(err.message || 'The administrator could not be created.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const onCreateAdmin = async (event) => {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.target);
-    if (form.get('password') !== form.get('confirm_password')) {
+    const code = String(form.get('employee_code') || '').trim();
+    const name = String(form.get('name') || '').trim();
+    const phone = String(form.get('phone') || '').trim();
+    const password = String(form.get('password') || '');
+    const confirmPassword = String(form.get('confirm_password') || '');
+    const setupKey = String(form.get('setup_key') || '').trim();
+
+    if (!session && status?.recovery_key_required && !setupKey) {
+      setError('Server recovery key is required to create an administrator when not signed in.');
+      return;
+    }
+    if (!code) {
+      setError('Admin ID is required.');
+      return;
+    }
+    if (!name) {
+      setError('Full name is required.');
+      return;
+    }
+    if (!phone) {
+      setError('Phone number is required.');
+      return;
+    }
+    if (password !== confirmPassword) {
       setError('Password and confirmation do not match.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Passwords must be at least 8 characters long.');
       return;
     }
     setBusy(true);
@@ -214,10 +218,17 @@ export default function DatabaseConsole() {
     setNotice('');
     try {
       const body = Object.fromEntries(form.entries());
-      const created = await publicJson('/create-admin/', { method: 'POST', body });
+      const created = session
+        ? await staffJson('/db/create-admin/', { method: 'POST', body: JSON.stringify(body) })
+        : await publicJson('/create-admin/', { method: 'POST', body });
       setShowCreateAdmin(false);
-      setNotice(`Administrator ${created.employee_code} (${created.name}) created successfully as ${created.role === 'SUPER_ADMIN' ? 'Owner' : 'Manager'}. You can now sign in.`);
+      const roleLabel = created.role === 'SUPER_ADMIN' ? 'Owner' : 'Manager';
+      const successMsg = `Administrator ${created.employee_code} (${created.name}) created successfully as ${roleLabel}. You can now sign in with this Admin ID.`;
+      setNotice(successMsg);
       await loadStatus();
+      setTimeout(() => {
+        navigate('/login', { replace: true, state: { successMessage: successMsg, employee_code: created.employee_code } });
+      }, 1500);
     } catch (err) {
       setError(err.message || 'The administrator could not be created.');
     } finally {
@@ -321,18 +332,42 @@ export default function DatabaseConsole() {
 
   const saveAdmin = async (event) => {
     event.preventDefault();
+    if (busy) return;
     const form = new FormData(event.target);
-    if (form.get('password') !== form.get('confirm_password')) {
+    const code = String(form.get('employee_code') || '').trim();
+    const name = String(form.get('name') || '').trim();
+    const phone = String(form.get('phone') || '').trim();
+    const password = String(form.get('password') || '');
+    const confirmPassword = String(form.get('confirm_password') || '');
+
+    if (!code) {
+      setError('Admin ID is required.');
+      return;
+    }
+    if (!name) {
+      setError('Full name is required.');
+      return;
+    }
+    if (!phone) {
+      setError('Phone number is required.');
+      return;
+    }
+    if (password !== confirmPassword) {
       setError('Password and confirmation do not match.');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Passwords must be at least 8 characters long.');
       return;
     }
     setBusy(true);
     setError('');
     try {
-      await staffJson('/db/administrators/', { method: 'POST', body: JSON.stringify(Object.fromEntries(form.entries())) });
+      const body = Object.fromEntries(form.entries());
+      const created = await staffJson('/db/administrators/', { method: 'POST', body: JSON.stringify(body) });
       event.target.reset();
       setAdmins(await staffJson('/db/administrators/'));
-      setNotice('Administrator created.');
+      setNotice(`Administrator ${created.employee_code} (${created.name}) created successfully as ${created.role === 'SUPER_ADMIN' ? 'Owner' : 'Manager'}.`);
     } catch (err) {
       setError(err.message || 'The administrator could not be created.');
     } finally {
@@ -391,7 +426,18 @@ export default function DatabaseConsole() {
         </div>
         {session && <button type="button" className="btn btn-outline-danger" onClick={signOut}>Sign out</button>}
       </div>
-      {notice && <div className="alert alert-success">{notice}</div>}
+      {notice && (
+        <div className="alert alert-success d-flex justify-content-between align-items-center">
+          <span>{notice}</span>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-success ms-3"
+            onClick={() => navigate('/login')}
+          >
+            Go to Admin Login
+          </button>
+        </div>
+      )}
       {error && <div className="alert alert-danger">{error}</div>}
       {statusError && <div className="alert alert-danger">{statusError}</div>}
       {!status && !statusError && <p className="text-secondary">Checking setup status…</p>}
@@ -417,34 +463,30 @@ export default function DatabaseConsole() {
         showCreateAdmin ? (
           <Card title="Create New Administrator">
             <p className="text-secondary small">
-              An authorized administrator (Owner or Manager) can create another administrator account here without a server setup key. Existing administrator accounts remain intact.
+              {status.recovery_key_required
+                ? 'Create or recover an administrator account (Owner or Manager) using the server recovery key from the backend environment. Existing administrator accounts remain completely intact.'
+                : 'Create an administrator account (Owner or Manager). Existing administrator accounts remain completely intact.'}
             </p>
             <form onSubmit={onCreateAdmin} className="row g-3">
-              <div className="col-12">
-                <div className="p-3 bg-light rounded-3">
-                  <div className="fw-semibold small text-muted text-uppercase mb-2">Authorizing Administrator</div>
-                  <div className="row g-2">
-                    <div className="col-md-6">
-                      <label className="form-label small">Your Admin ID</label>
-                      <input className="form-control" name="authorizing_code" placeholder="Existing Admin ID" required autoComplete="username" />
-                    </div>
-                    <div className="col-md-6">
-                      <label className="form-label small">Your Password</label>
-                      <input className="form-control" name="authorizing_password" type="password" placeholder="Existing Admin Password" required autoComplete="current-password" />
-                    </div>
+              {status.recovery_key_required && (
+                <div className="col-12">
+                  <label className="form-label">Server Recovery Key</label>
+                  <input
+                    className="form-control"
+                    name="setup_key"
+                    type="password"
+                    placeholder="Enter DB_SETUP_SECRET from backend environment"
+                    required
+                    autoComplete="off"
+                  />
+                  <div className="form-text">
+                    Required when not signed in as an administrator to authorize account creation/recovery.
                   </div>
                 </div>
-              </div>
-              <div className="col-12">
-                <div className="fw-semibold small text-muted text-uppercase mb-1">New Administrator Details</div>
-              </div>
+              )}
               <div className="col-md-6">
                 <label className="form-label">New Admin ID</label>
                 <input className="form-control" name="employee_code" placeholder="e.g. MGR02 or OWNER02" required autoComplete="off" />
-              </div>
-              <div className="col-md-6">
-                <label className="form-label">Full Name</label>
-                <input className="form-control" name="name" required />
               </div>
               <div className="col-md-6">
                 <label className="form-label">Designation / Role</label>
@@ -454,12 +496,16 @@ export default function DatabaseConsole() {
                 </select>
               </div>
               <div className="col-md-6">
-                <label className="form-label">Phone</label>
-                <input className="form-control" name="phone" required />
+                <label className="form-label">Full Name</label>
+                <input className="form-control" name="name" placeholder="Full name" required />
               </div>
               <div className="col-md-6">
-                <label className="form-label">Email</label>
-                <input className="form-control" name="email" type="email" placeholder="Email (optional)" />
+                <label className="form-label">Phone</label>
+                <input className="form-control" name="phone" placeholder="Mobile number" required />
+              </div>
+              <div className="col-12">
+                <label className="form-label">Email (optional)</label>
+                <input className="form-control" name="email" type="email" placeholder="Email address (optional)" />
               </div>
               <div className="col-md-6">
                 <label className="form-label">Password</label>
@@ -479,28 +525,7 @@ export default function DatabaseConsole() {
                   disabled={busy}
                   onClick={() => { setShowCreateAdmin(false); setError(''); }}
                 >
-                  Back to Login
-                </button>
-              </div>
-            </form>
-          </Card>
-        ) : showRecovery ? (
-          <Card title="Recover Administrator">
-            <p className="text-secondary small">
-              Enter the server setup key from the backend environment, then create a new administrator. Existing administrator accounts stay in place.
-            </p>
-            <form onSubmit={onRecoverAdmin} className="row g-3">
-              <div className="col-12"><label className="form-label">Server setup key</label><input className="form-control" name="setup_key" type="password" required autoComplete="off" /></div>
-              <div className="col-md-6"><label className="form-label">Administrator ID</label><input className="form-control" name="employee_code" required autoComplete="off" /></div>
-              <div className="col-md-6"><label className="form-label">Full name</label><input className="form-control" name="name" required /></div>
-              <div className="col-md-6"><label className="form-label">Phone</label><input className="form-control" name="phone" required /></div>
-              <div className="col-md-6"><label className="form-label">Email</label><input className="form-control" name="email" type="email" /></div>
-              <div className="col-md-6"><label className="form-label">Password</label><input className="form-control" name="password" type="password" required autoComplete="new-password" /></div>
-              <div className="col-md-6"><label className="form-label">Confirm password</label><input className="form-control" name="confirm_password" type="password" required autoComplete="new-password" /></div>
-              <div className="col-12 d-grid d-sm-flex gap-2">
-                <button className="btn btn-danger" disabled={busy} type="submit">{busy ? 'Creating administrator…' : 'Create New Admin'}</button>
-                <button type="button" className="btn btn-outline-secondary" disabled={busy} onClick={() => { setShowRecovery(false); setError(''); }}>
-                  Back to Login
+                  Back to Sign In
                 </button>
               </div>
             </form>
@@ -525,20 +550,19 @@ export default function DatabaseConsole() {
                   setShowCreateAdmin(true);
                 }}
               >
-                Create New Admin
+                Create New Admin / Recover Access
               </button>
             </div>
             <p className="small text-secondary mt-3 mb-0">
-              Multiple administrators are supported. Login with an Owner or Manager account to create additional IDs, or click Create New Admin above.
-              {status.recovery_available && (
-                <>
-                  {' '}If nobody can sign in,{' '}
-                  <button type="button" className="btn btn-link btn-sm p-0 align-baseline" onClick={() => { setError(''); setNotice(''); setShowRecovery(true); }}>
-                    recover with the server setup key
-                  </button>
-                  .
-                </>
-              )}
+              Multiple administrators are supported. Sign in with an Owner or Manager account, or click{' '}
+              <button
+                type="button"
+                className="btn btn-link btn-sm p-0 align-baseline"
+                onClick={() => { setError(''); setNotice(''); setShowCreateAdmin(true); }}
+              >
+                Create New Admin / Recover Access
+              </button>{' '}
+              to set up an administrator without signing in.
             </p>
           </Card>
         )

@@ -1,4 +1,5 @@
-"""OTP throttles keyed by phone (and a separate, higher IP cap for shared restaurant Wi-Fi / NAT)."""
+from django.conf import settings
+from rest_framework.settings import api_settings
 from rest_framework.throttling import SimpleRateThrottle
 from .phone import normalize_phone
 
@@ -17,7 +18,15 @@ def _phone_ident(request):
     return None
 
 
-class OTPSendPhoneThrottle(SimpleRateThrottle):
+class BaseOTPThrottle(SimpleRateThrottle):
+    def get_rate(self):
+        rates = getattr(settings, "REST_FRAMEWORK", {}).get("DEFAULT_THROTTLE_RATES", {})
+        if self.scope in rates:
+            return rates[self.scope]
+        return getattr(api_settings, "DEFAULT_THROTTLE_RATES", {}).get(self.scope) or super().get_rate()
+
+
+class OTPSendPhoneThrottle(BaseOTPThrottle):
     scope = "otp_send_phone"
 
     def get_cache_key(self, request, view):
@@ -27,14 +36,14 @@ class OTPSendPhoneThrottle(SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
-class OTPSendIPThrottle(SimpleRateThrottle):
+class OTPSendIPThrottle(BaseOTPThrottle):
     scope = "otp_send_ip"
 
     def get_cache_key(self, request, view):
         return self.cache_format % {"scope": self.scope, "ident": self.get_ident(request)}
 
 
-class OTPVerifyPhoneThrottle(SimpleRateThrottle):
+class OTPVerifyPhoneThrottle(BaseOTPThrottle):
     scope = "otp_verify_phone"
 
     def get_cache_key(self, request, view):
@@ -44,7 +53,7 @@ class OTPVerifyPhoneThrottle(SimpleRateThrottle):
         return self.cache_format % {"scope": self.scope, "ident": ident}
 
 
-class OTPVerifyIPThrottle(SimpleRateThrottle):
+class OTPVerifyIPThrottle(BaseOTPThrottle):
     scope = "otp_verify_ip"
 
     def get_cache_key(self, request, view):

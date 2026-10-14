@@ -1,4 +1,4 @@
-import React, { useContext, useState, useEffect } from 'react';
+import React, { useContext, useState, useEffect, useRef } from 'react';
 import AdminLayout from '../../components/layout/AdminLayout';
 import PageHeader from '../../components/layout/PageHeader';
 import { OrderContext } from '../../context/OrderContext';
@@ -17,6 +17,40 @@ export const Kitchen = () => {
   const [actionError, setActionError] = useState('');
   const [eBillOrder, setEBillOrder] = useState(null);
   const [branches, setBranches] = useState([]);
+  const headerRef = useRef(null);
+  const [gridHeight, setGridHeight] = useState(null);
+
+  // Dynamic available height calculation for independent queue scrolling
+  useEffect(() => {
+    const calculateAvailableHeight = () => {
+      if (window.innerWidth < 1200) {
+        setGridHeight(null);
+        return;
+      }
+      if (headerRef.current) {
+        const headerRect = headerRef.current.getBoundingClientRect();
+        const bottomPadding = 20;
+        const available = window.innerHeight - headerRect.bottom - bottomPadding;
+        if (available > 250) {
+          setGridHeight(Math.floor(available));
+        }
+      }
+    };
+
+    calculateAvailableHeight();
+    window.addEventListener('resize', calculateAvailableHeight);
+
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined' && headerRef.current) {
+      ro = new ResizeObserver(() => calculateAvailableHeight());
+      ro.observe(headerRef.current);
+    }
+
+    return () => {
+      window.removeEventListener('resize', calculateAvailableHeight);
+      if (ro) ro.disconnect();
+    };
+  }, [actionError, loading]);
 
   // Determine initial branch from user's assigned branch or fallback to main branch
   const userAssignedBranch = user?.branchId || user?.restaurant || user?.restaurant_id || null;
@@ -282,72 +316,79 @@ export const Kitchen = () => {
   const completedOrders = sortCompletedQueue(activeBranchFilteredOrders.filter((o) => isCompleted(o.status)));
 
   return (
-    <AdminLayout>
-      <PageHeader
-        title="Kitchen Queue & Live Status Monitor"
-        showBackButton
-        actions={
-          <div className="d-flex align-items-center gap-2">
-            {!isBranchRestricted && (
+    <AdminLayout fullHeight={true}>
+      <div className="kitchen-queue-page">
+        <div className="kitchen-queue-header" ref={headerRef}>
+          <PageHeader
+            title="Kitchen Queue & Live Status Monitor"
+            showBackButton
+            actions={
               <div className="d-flex align-items-center gap-2">
-                <span className="text-secondary small fw-semibold d-none d-md-inline">Branch:</span>
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => {
-                    const targetId = e.target.value;
-                    const targetBranch = branches.find(b => String(b.id) === String(targetId));
-                    if (targetBranch && isBranchUnderConstruction(targetBranch)) return;
-                    setSelectedBranch(targetId);
-                  }}
-                  className="form-select form-select-sm rounded-pill border-secondary-subtle fw-semibold ps-3 pe-4 py-1.5"
-                  style={{ minWidth: '270px', fontSize: '13px', cursor: 'pointer', backgroundColor: '#ffffff' }}
-                  aria-label="Filter Kitchen by Branch"
+                {!isBranchRestricted && (
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="text-secondary small fw-semibold d-none d-md-inline">Branch:</span>
+                    <select
+                      value={selectedBranch}
+                      onChange={(e) => {
+                        const targetId = e.target.value;
+                        const targetBranch = branches.find(b => String(b.id) === String(targetId));
+                        if (targetBranch && isBranchUnderConstruction(targetBranch)) return;
+                        setSelectedBranch(targetId);
+                      }}
+                      className="form-select form-select-sm rounded-pill border-secondary-subtle fw-semibold ps-3 pe-4 py-1.5"
+                      style={{ minWidth: '270px', fontSize: '13px', cursor: 'pointer', backgroundColor: '#ffffff' }}
+                      aria-label="Filter Kitchen by Branch"
+                    >
+                      {branches.map(b => {
+                        const underConst = isBranchUnderConstruction(b);
+                        return (
+                          <option key={b.id} value={String(b.id)} disabled={underConst}>
+                            {b.name}{underConst ? ' — Under Construction' : ''}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1"
+                  onClick={() => fetchOrders(true)}
+                  title="Refresh Kitchen Queue from Backend"
                 >
-                  {branches.map(b => {
-                    const underConst = isBranchUnderConstruction(b);
-                    return (
-                      <option key={b.id} value={String(b.id)} disabled={underConst}>
-                        {b.name}{underConst ? ' — Under Construction' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
+                  <i className="bi bi-arrow-clockwise"></i>
+                  <span>Refresh</span>
+                </button>
               </div>
-            )}
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1"
-              onClick={() => fetchOrders(true)}
-              title="Refresh Kitchen Queue from Backend"
-            >
-              <i className="bi bi-arrow-clockwise"></i>
-              <span>Refresh</span>
-            </button>
-          </div>
-        }
-      />
+            }
+          />
 
-      {actionError && (
-        <div className="alert alert-warning small py-2 mb-3" role="alert">{actionError}</div>
-      )}
-      {loading ? (
-        <Loader />
-      ) : (
-        <div className="row g-4">
-          {/* Column 1: New Tickets */}
-          <div className="col-12 col-md-6 col-xl-3">
-            <div className="card border-0 rounded-3 shadow-sm p-3 bg-white h-100" style={{ minHeight: '450px' }}>
-              <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
-                <div className="d-flex align-items-center gap-2">
-                  <span className="p-1 rounded bg-danger-subtle text-danger">
-                    <i className="bi bi-receipt"></i>
-                  </span>
-                  <h6 className="fw-bold text-dark mb-0">New Tickets</h6>
+          {actionError && (
+            <div className="alert alert-warning small py-2 mb-3" role="alert">{actionError}</div>
+          )}
+        </div>
+
+        {loading ? (
+          <Loader />
+        ) : (
+          <div 
+            className="kitchen-queue-grid"
+            style={gridHeight ? { height: `${gridHeight}px`, maxHeight: `${gridHeight}px` } : undefined}
+          >
+            {/* Column 1: New Tickets */}
+            <div className="kitchen-queue-column">
+              <div className="card border-0 rounded-3 shadow-sm bg-white kitchen-queue-card">
+                <div className="kitchen-queue-column-header d-flex align-items-center justify-content-between p-3 border-bottom pb-2">
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="p-1 rounded bg-danger-subtle text-danger">
+                      <i className="bi bi-receipt"></i>
+                    </span>
+                    <h6 className="fw-bold text-dark mb-0">New Tickets</h6>
+                  </div>
+                  <span className="badge bg-danger rounded-pill px-2.5 py-1">{pendingOrders.length}</span>
                 </div>
-                <span className="badge bg-danger rounded-pill px-2.5 py-1">{pendingOrders.length}</span>
-              </div>
 
-              <div className="d-flex flex-column gap-3">
+                <div className="kitchen-queue-column-content p-3 d-flex flex-column gap-3">
                 {pendingOrders.length === 0 ? (
                   <EmptyState title="No New Tickets" description="Pending orders appear here." icon="bi-patch-check" />
                 ) : (
@@ -436,9 +477,9 @@ export const Kitchen = () => {
           </div>
 
           {/* Column 2: Preparing */}
-          <div className="col-12 col-md-6 col-xl-3">
-            <div className="card border-0 rounded-3 shadow-sm p-3 bg-white h-100" style={{ minHeight: '450px' }}>
-              <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+          <div className="kitchen-queue-column">
+            <div className="card border-0 rounded-3 shadow-sm bg-white kitchen-queue-card">
+              <div className="kitchen-queue-column-header d-flex align-items-center justify-content-between p-3 border-bottom pb-2">
                 <div className="d-flex align-items-center gap-2">
                   <span className="p-1 rounded bg-warning-subtle text-warning">
                     <i className="bi bi-fire"></i>
@@ -448,7 +489,7 @@ export const Kitchen = () => {
                 <span className="badge bg-warning text-dark rounded-pill px-2.5 py-1">{preparingOrders.length}</span>
               </div>
 
-              <div className="d-flex flex-column gap-3">
+              <div className="kitchen-queue-column-content p-3 d-flex flex-column gap-3">
                 {preparingOrders.length === 0 ? (
                   <EmptyState title="Idle Kitchen" description="Cooking orders appear here." icon="bi-fire" />
                 ) : (
@@ -524,9 +565,9 @@ export const Kitchen = () => {
           </div>
 
           {/* Column 3: Ready for Counter */}
-          <div className="col-12 col-md-6 col-xl-3">
-            <div className="card border-0 rounded-3 shadow-sm p-3 bg-white h-100" style={{ minHeight: '450px' }}>
-              <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+          <div className="kitchen-queue-column">
+            <div className="card border-0 rounded-3 shadow-sm bg-white kitchen-queue-card">
+              <div className="kitchen-queue-column-header d-flex align-items-center justify-content-between p-3 border-bottom pb-2">
                 <div className="d-flex align-items-center gap-2">
                   <span className="p-1 rounded bg-info-subtle text-info">
                     <i className="bi bi-box-seam"></i>
@@ -536,7 +577,7 @@ export const Kitchen = () => {
                 <span className="badge bg-info text-white rounded-pill px-2.5 py-1">{readyOrders.length}</span>
               </div>
 
-              <div className="d-flex flex-column gap-3">
+              <div className="kitchen-queue-column-content p-3 d-flex flex-column gap-3">
                 {readyOrders.length === 0 ? (
                   <EmptyState title="Counter Cleared" description="Prepared food items appear here." icon="bi-collection-play" />
                 ) : (
@@ -607,9 +648,9 @@ export const Kitchen = () => {
           </div>
 
           {/* Column 4: Completed */}
-          <div className="col-12 col-md-6 col-xl-3">
-            <div className="card border-0 rounded-3 shadow-sm p-3 bg-white h-100" style={{ minHeight: '450px' }}>
-              <div className="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+          <div className="kitchen-queue-column">
+            <div className="card border-0 rounded-3 shadow-sm bg-white kitchen-queue-card">
+              <div className="kitchen-queue-column-header d-flex align-items-center justify-content-between p-3 border-bottom pb-2">
                 <div className="d-flex align-items-center gap-2">
                   <span className="p-1 rounded bg-success-subtle text-success">
                     <i className="bi bi-check2-circle"></i>
@@ -619,12 +660,12 @@ export const Kitchen = () => {
                 <span className="badge bg-success text-white rounded-pill px-2.5 py-1">{completedOrders.length}</span>
               </div>
 
-              <div className="d-flex flex-column gap-3" style={{ maxHeight: '650px', overflowY: 'auto' }}>
+              <div className="kitchen-queue-column-content p-3 d-flex flex-column gap-3">
                 {completedOrders.length === 0 ? (
                   <EmptyState title="No Completed Orders" description="Served orders appear here." icon="bi-check2-all" />
                 ) : (
                   completedOrders.map((ord) => (
-                    <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket ticket-completed shadow-xs mb-3">
+                    <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket ticket-completed shadow-xs">
                       <div className="d-flex align-items-center justify-content-between fw-bold mb-3">
                         <span className="text-dark fs-6">#{ord.id}</span>
                         <span className="badge bg-success text-white rounded-pill px-2.5 py-1">
@@ -692,6 +733,7 @@ export const Kitchen = () => {
           </div>
         </div>
       )}
+      </div>
 
       {/* E-Bill Modal for completed orders */}
       {eBillOrder && (

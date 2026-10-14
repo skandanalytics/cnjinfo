@@ -92,8 +92,13 @@ export const FoodCard = ({ food }) => {
         )}
 
         {/* Veg/Non-veg/Vegan overlay badge (top-right) */}
-        <div className="position-absolute top-0 end-0 m-2 z-3 bg-white p-1 rounded-3 shadow-sm d-flex align-items-center justify-content-center">
-          <span className={badgeClass}></span>
+        <div 
+          className="position-absolute top-0 end-0 m-2 z-3 bg-white rounded-3 shadow-sm food-type-badge-container d-flex align-items-center justify-content-center"
+          title={food.foodType || food.type || 'veg'}
+        >
+          <span className="food-type-icon-wrapper">
+            <span className={badgeClass}></span>
+          </span>
         </div>
       </div>
 

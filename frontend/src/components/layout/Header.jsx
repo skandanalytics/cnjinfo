@@ -101,7 +101,7 @@ export const Header = () => {
                     onClick={() => setShowDropdown(false)}
                   />
                   <div 
-                    className="dropdown-menu show position-absolute end-0 mt-2 shadow border-0 p-3 rounded-3" 
+                    className="dropdown-menu show customer-profile-dropdown position-absolute end-0 mt-2 shadow border-0 p-3 rounded-3" 
                     style={{ minWidth: '220px', zIndex: 1000, top: '100%' }}
                   >
                     {/* User details header */}
@@ -127,7 +127,7 @@ export const Header = () => {
                       <>
                         <Link 
                           to={user?.role === 'admin' ? "/admin/tables" : "/admin/employee-dashboard"} 
-                          className="dropdown-item py-2 px-2 small text-danger fw-bold rounded d-flex align-items-center gap-2 hover-bg-light text-decoration-none"
+                          className="dropdown-item customer-profile-menu-item py-2 px-2 small text-danger fw-bold rounded d-flex align-items-center gap-2 text-decoration-none"
                           onClick={() => setShowDropdown(false)}
                         >
                           <i className="bi bi-grid"></i> {user?.role === 'admin' ? "Manage Tables" : "Employee Portal"}
@@ -135,7 +135,7 @@ export const Header = () => {
                         {user?.role === 'admin' && (
                           <Link 
                             to="/admin/dashboard" 
-                            className="dropdown-item py-2 px-2 small text-secondary rounded d-flex align-items-center gap-2 hover-bg-light text-decoration-none"
+                            className="dropdown-item customer-profile-menu-item py-2 px-2 small text-secondary rounded d-flex align-items-center gap-2 text-decoration-none"
                             onClick={() => setShowDropdown(false)}
                           >
                             <i className="bi bi-speedometer2"></i> Admin Dashboard
@@ -146,18 +146,19 @@ export const Header = () => {
 
                     <Link 
                       to="/customer/orders" 
-                      className="dropdown-item py-2 px-2 small text-secondary rounded d-flex align-items-center gap-2 hover-bg-light text-decoration-none"
+                      className="dropdown-item customer-profile-menu-item py-2 px-2 small text-secondary rounded d-flex align-items-center gap-2 text-decoration-none"
                       onClick={() => setShowDropdown(false)}
                     >
                       <FiClock /> Order History
                     </Link>
 
                     <button 
+                      type="button"
                       onClick={() => {
                         setShowDropdown(false);
                         alert('Foodie Restaurant Ordering Platform v1.0. Developed with love.');
                       }}
-                      className="dropdown-item py-2 px-2 small text-secondary rounded d-flex align-items-center gap-2 border-0 bg-transparent text-start"
+                      className="dropdown-item customer-profile-menu-item py-2 px-2 small text-secondary rounded d-flex align-items-center gap-2 border-0 bg-transparent text-start"
                     >
                       <FiInfo /> About Us
                     </button>
@@ -165,11 +166,12 @@ export const Header = () => {
                     <hr className="dropdown-divider my-2" />
 
                     <button 
+                      type="button"
                       onClick={() => {
                         setShowDropdown(false);
                         handleLogout();
                       }}
-                      className="dropdown-item py-2 px-2 small text-danger rounded d-flex align-items-center gap-2 border-0 bg-transparent text-start fw-bold"
+                      className="dropdown-item customer-profile-menu-item dropdown-item-logout py-2 px-2 small text-danger rounded d-flex align-items-center gap-2 border-0 bg-transparent text-start fw-bold"
                     >
                       <FiLogOut /> Log Out
                     </button>

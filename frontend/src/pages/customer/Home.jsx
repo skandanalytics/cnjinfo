@@ -583,11 +583,13 @@ export const Home = () => {
               records={(products || []).map((dish) => ({
                 id: dish.id,
                 label: dish.name,
+                name: dish.name,
                 title: dish.name,
-                subtitle: dish.category || '',
+                category: dish.category_name || (typeof dish.category === 'object' ? dish.category?.name : dish.category) || '',
+                subtitle: dish.category_name || (typeof dish.category === 'object' ? dish.category?.name : dish.category) || '',
                 image: dish.image,
                 price: dish.sellingPrice ?? dish.price,
-                searchText: [dish.name, dish.category, dish.foodType || dish.type].filter(Boolean).join(' '),
+                raw: dish,
               }))}
               onSelectSuggestion={(item) => {
                 if (item?.id) navigate(`/customer/food/${item.id}${window.location.search || ''}`);

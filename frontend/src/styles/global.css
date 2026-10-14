@@ -130,16 +130,25 @@ html, body {
 .non-veg-badge,
 .vegan-badge {
   border: 1.5px solid;
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3px;
+  border-radius: 3.5px;
   background-color: #ffffff;
   flex-shrink: 0;
   vertical-align: middle;
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+  position: relative;
+}
+
+.veg-badge.badge-inline,
+.non-veg-badge.badge-inline,
+.vegan-badge.badge-inline {
   margin-right: 6px;
 }
 
@@ -158,10 +167,14 @@ html, body {
 .veg-badge::after,
 .non-veg-badge::after {
   content: '';
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   display: block;
+  margin: 0 auto;
+  padding: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .veg-badge::after {
@@ -177,10 +190,42 @@ html, body {
   width: 9px;
   height: 9px;
   display: block;
+  margin: 0 auto;
+  padding: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23059669'%3E%3Cpath d='M20.5 3.5C13.5 3.5 7.5 7 5.5 14c-.4 1.5-.5 3-.5 5 2 0 3.5-.1 5-.5 7-2 10.5-8 10.5-15z'/%3E%3Cpath d='M5.5 18.5c3.5-3.5 7-5 10.5-5.5' fill='none' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
+}
+
+/* Card Food-Type Badge Overlay Container */
+.food-type-badge-container {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
+  background-color: #ffffff;
+  border-radius: 6px;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.food-type-icon-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
+  flex-shrink: 0;
+  line-height: 1;
 }
 
 /* Common Card Styles */

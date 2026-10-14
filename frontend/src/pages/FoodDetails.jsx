@@ -80,8 +80,13 @@ export const FoodDetails = () => {
                   }}
                 />
                 {/* Veg/Non-veg/Vegan Overlay */}
-                <div className="position-absolute top-0 start-0 m-3 bg-white p-2 rounded-3 shadow-sm d-flex align-items-center justify-content-center">
-                  <span className={badgeClass}></span>
+                <div 
+                  className="position-absolute top-0 start-0 m-3 bg-white rounded-3 shadow-sm food-type-badge-container d-flex align-items-center justify-content-center"
+                  title={foodType}
+                >
+                  <span className="food-type-icon-wrapper">
+                    <span className={badgeClass}></span>
+                  </span>
                 </div>
               </div>
             </div>

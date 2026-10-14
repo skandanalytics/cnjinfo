@@ -1,5 +1,6 @@
 import { getProductSellingPrice } from './pricing';
 import { normalizeCategoryName } from './categoryUtils';
+import { getSearchRelevanceRank } from './searchUtils';
 
 export const normalizeFoodType = (type) => {
   if (!type) return 'veg';
@@ -104,15 +105,13 @@ export const filterAndSortProducts = (products, options = {}) => {
   let result = products.filter((p) => {
     if (!p) return false;
 
-    // Search against item name, description, and category safely
+    // Search against item name and category safely
     const nameStr = String(p.name || '').toLowerCase();
-    const descStr = String(p.description || '').toLowerCase();
-    const catStr = String(p.category || '').toLowerCase();
+    const catStr = String(p.category || p.category_name || '').toLowerCase();
 
     const matchesSearch =
       !searchTerm ||
       nameStr.includes(searchTerm) ||
-      descStr.includes(searchTerm) ||
       catStr.includes(searchTerm);
 
     // Category Filter (OR logic across selected categories)
@@ -176,7 +175,13 @@ export const filterAndSortProducts = (products, options = {}) => {
       break;
     case 'DEFAULT':
     default:
-      if (activeCategories.includes('Popular')) {
+      if (searchTerm) {
+        result = [...result].sort((a, b) => {
+          const rankA = getSearchRelevanceRank(a, searchTerm) ?? 99;
+          const rankB = getSearchRelevanceRank(b, searchTerm) ?? 99;
+          return rankA - rankB;
+        });
+      } else if (activeCategories.includes('Popular')) {
         result = [...result].sort((a, b) => {
           const aCount = Number(a.orderCount || 0);
           const bCount = Number(b.orderCount || 0);

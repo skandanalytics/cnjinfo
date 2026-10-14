@@ -8,6 +8,7 @@ from apps.accounts.permissions import get_active_employee
 
 from .services import (
     MaintenanceError,
+    administrator_exists,
     administrator_rows,
     authorize_reset,
     change_administrator_password,
@@ -67,33 +68,37 @@ class RecoverAdministratorView(APIView):
             return fail(exc)
 
 
+class ConsoleView(APIView):
+    permission_classes = [IsDatabaseAdmin]
+
+
 class CreateAuthorizedAdminView(APIView):
     permission_classes = [AllowAny]
-    authentication_classes = []
     throttle_classes = [ScopedRateThrottle]
     throttle_scope = "db_setup"
 
     def post(self, request):
-        authorizing_code = str(request.data.get("authorizing_code") or request.data.get("authorizing_admin_id") or "").strip().upper()
-        authorizing_password = str(request.data.get("authorizing_password") or "")
-        if not authorizing_code or not authorizing_password:
+        actor = get_active_employee(request.user)
+        if actor and actor.role in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
+            try:
+                return Response(create_administrator(actor, request.data), status=201)
+            except MaintenanceError as exc:
+                return fail(exc)
+
+        # Unauthenticated recovery workflow
+        if not administrator_exists():
+            return Response({"detail": "No administrator exists yet. Complete initial setup first."}, status=400)
+
+        setup_key = str(request.data.get("setup_key") or "").strip()
+        if not setup_key:
             return Response(
-                {"detail": "Enter your existing administrator ID and password to authorize creating this account."},
-                status=400,
+                {"detail": "Only an authorized administrator can create administrator accounts. Sign in first or provide the server recovery key to recover access."},
+                status=403,
             )
-        actor = Employee.objects.select_related("user").filter(employee_code=authorizing_code, status=Employee.Status.ACTIVE).first()
-        if not actor or not actor.user.check_password(authorizing_password):
-            return Response({"detail": "Invalid authorizing administrator credentials."}, status=401)
-        if actor.role not in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
-            return Response({"detail": "Only an authorized administrator can create administrator accounts."}, status=403)
         try:
-            return Response(create_administrator(actor, request.data), status=201)
+            return Response(recover_administrator(request.data), status=201)
         except MaintenanceError as exc:
             return fail(exc)
-
-
-class ConsoleView(APIView):
-    permission_classes = [IsDatabaseAdmin]
 
 
 class OverviewView(ConsoleView):
