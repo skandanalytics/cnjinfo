@@ -53,6 +53,12 @@ export const OrderConfirmation = () => {
 
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (paymentNote?.status === 'PAID' || raw?.payment_status === 'PAID') {
+      setShowReceipt(true);
+    }
+  }, [paymentNote, raw?.payment_status]);
+
   const staffDestination = (page) => {
     let role = 'employee';
     try {

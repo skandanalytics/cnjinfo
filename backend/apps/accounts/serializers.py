@@ -30,7 +30,7 @@ class VerifyOTPSerializer(serializers.Serializer):
 
 
 class StaffLoginSerializer(serializers.Serializer):
-    employee_code = serializers.CharField(max_length=50)
+    employee_code = serializers.CharField(max_length=150)
     password = serializers.CharField(max_length=128, trim_whitespace=False)
 
 

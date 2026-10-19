@@ -15,19 +15,24 @@ def _send(groups, payload):
 
 
 def publish_branch_event(branch_id, type_name, extra=None, extra_groups=None):
-    if not branch_id:
-        return
-    payload = {"type": type_name, "branch_id": branch_id}
+    payload = {"type": type_name}
+    if branch_id:
+        payload["branch_id"] = branch_id
+        groups = [f"branch-{branch_id}", "branch-all"]
+    else:
+        groups = ["branch-all"]
     if extra:
         payload.update(extra)
-    groups = [f"branch-{branch_id}", "branch-all"]
     if extra_groups:
         groups.extend(extra_groups)
 
     def send():
         _send(groups, payload)
 
-    transaction.on_commit(send)
+    try:
+        transaction.on_commit(send)
+    except Exception:
+        send()
 
 
 def publish_order_event(order):

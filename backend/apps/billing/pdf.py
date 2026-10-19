@@ -106,7 +106,7 @@ def _display_snapshot(invoice):
     return snap
 
 
-def render_invoice_pdf(invoice):
+def render_invoice_pdf(invoice, for_customer=False):
     _ensure_fonts()
     snap = _display_snapshot(invoice)
     branch = snap.get("branch") or {}
@@ -248,7 +248,7 @@ def render_invoice_pdf(invoice):
     ]
     takeaway_charge = _decimal(snap.get("takeaway_charge"))
     if takeaway or takeaway_charge != 0:
-        summary_rows.append(("Takeaway charges", _money(takeaway_charge)))
+        summary_rows.append(("Packing Charges (Takeaway)", _money(takeaway_charge)))
     summary_rows.extend([
         ("Taxable amount", _money(snap.get("taxable_amount"))),
         (gst_label, _money(snap.get("gst_amount"))),
@@ -284,23 +284,29 @@ def render_invoice_pdf(invoice):
         ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
     ]))
 
-    payment_code = str(snap.get("payment_status") or "").upper()
-    payment_label = PAYMENT_LABELS.get(payment_code, payment_code or "Unpaid")
-    method = snap.get("payment_method") or ""
-    payment_lines = [f"<b>Payment status</b>&nbsp;&nbsp;{_text(payment_label)}"]
-    if method:
-        payment_lines.append(f"<b>Payment method</b>&nbsp;&nbsp;{_text(method)}")
-    payment = Paragraph("<br/>".join(payment_lines), body)
-
-    closing = KeepTogether([
+    closing_items = [
         Spacer(1, 8),
         summary_wrap,
-        Spacer(1, 10),
-        payment,
+    ]
+    if not for_customer:
+        payment_code = str(snap.get("payment_status") or "").upper()
+        payment_label = PAYMENT_LABELS.get(payment_code, payment_code or "Unpaid")
+        method = snap.get("payment_method") or ""
+        payment_lines = [f"<b>Payment status</b>&nbsp;&nbsp;{_text(payment_label)}"]
+        if method:
+            payment_lines.append(f"<b>Payment method</b>&nbsp;&nbsp;{_text(method)}")
+        payment = Paragraph("<br/>".join(payment_lines), body)
+        closing_items.extend([
+            Spacer(1, 10),
+            payment,
+        ])
+
+    closing_items.extend([
         Spacer(1, 12),
         Paragraph("Thank you for dining with Foodie.", footer),
         Paragraph("Computer-generated invoice from the saved order.", footer),
     ])
+    closing = KeepTogether(closing_items)
 
     story = [header, Spacer(1, 2), details, Spacer(1, 8), items, closing]
 

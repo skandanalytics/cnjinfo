@@ -10,6 +10,7 @@ import formatCurrency from '../../utils/formatCurrency';
 import Toast from '../common/Toast';
 import { FiChevronRight } from 'react-icons/fi';
 import { getOrderType, hasDineInTable } from '../../utils/orderContext';
+import { formatCompactTableLabel } from '../../utils/tableUtils';
 
 export const CustomerLayout = ({ children }) => {
   const navigate = useNavigate();
@@ -101,9 +102,10 @@ export const CustomerLayout = ({ children }) => {
         }
 
         if (!hasDineInTable()) return null;
-        const tableDisplay = tableContext?.tableNumber && tableContext.tableNumber !== 'Takeaway'
+        const rawTable = tableContext?.tableNumber && tableContext.tableNumber !== 'Takeaway'
           ? tableContext.tableNumber
-          : 'scanned table';
+          : '';
+        const compactTable = formatCompactTableLabel(rawTable);
 
         return (
           <div 
@@ -111,7 +113,7 @@ export const CustomerLayout = ({ children }) => {
             style={{ zIndex: 1010 }}
           >
             <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
-            <span>Ordering for: <strong>Table Dine-In ({tableDisplay})</strong></span>
+            <span>Ordering for: <strong>{compactTable || 'Dine-In'}</strong></span>
           </div>
         );
       })()}

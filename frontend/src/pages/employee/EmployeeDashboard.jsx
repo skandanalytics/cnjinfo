@@ -159,7 +159,14 @@ export const EmployeeDashboard = () => {
         title="Employee Dashboard" 
         actions={
           <div className="d-flex align-items-center gap-2">
-            <span className="small text-secondary fw-semibold">Filter Date:</span>
+            <button
+              onClick={() => navigate('/employee/pos')}
+              className="btn btn-sm btn-danger text-white rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 shadow-sm"
+              style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)' }}
+            >
+              <span>+ Take Order (POS)</span>
+            </button>
+            <span className="small text-secondary fw-semibold ms-2">Filter Date:</span>
             <div className="position-relative d-inline-block" style={{ width: '160px' }}>
               <input
                 type="date"

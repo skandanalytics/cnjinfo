@@ -2,8 +2,8 @@ import { calculateDiscountPrice } from './discount.js';
 
 export const GST_RATE = 0.05; // 5% GST configured for restaurant orders
 export const SERVICE_CHARGE_RATE = 0.02; // 2% Service Charge
-export const DEFAULT_PACKING_CHARGE_PER_ITEM = 15; // 15 rupees per food item for takeaway
-export const DEFAULT_PACKING_CHARGE = 15;
+export const DEFAULT_PACKING_CHARGE_PER_ITEM = 10; // ₹10 per takeaway item
+export const DEFAULT_PACKING_CHARGE = 10;
 
 /**
  * Resolves the final selling price of a product, accounting for discounts.
@@ -117,7 +117,7 @@ export const calculateBillDetails = ({
       isCouponEligible = true;
       discountAmount = calculateCouponDiscount(coupon, subtotalBeforeGst);
     } else {
-      couponRemaining = Math.max(0, minOrder - subtotalBeforeGst);
+      couponRemaining = Math.max(0, Math.round((minOrder - subtotalBeforeGst) * 100) / 100);
     }
   }
 
@@ -146,22 +146,22 @@ export const calculateBillDetails = ({
   const grandTotal = taxableAmount + taxAmount + calculatedServiceCharge + Number(deliveryFee || 0);
 
   return {
-    itemsSubtotal,
-    menuDiscounts,
-    extraCharges,
-    packingCharge: appliedPackingCharge,
+    itemsSubtotal: Math.round(itemsSubtotal * 100) / 100,
+    menuDiscounts: Math.round(menuDiscounts * 100) / 100,
+    extraCharges: Math.round(extraCharges * 100) / 100,
+    packingCharge: Math.round(appliedPackingCharge * 100) / 100,
     isTakeaway: !!isTakeaway,
-    netFoodSubtotal,
-    subtotal: subtotalBeforeGst,
-    discount: discountAmount,
-    taxableAmount,
-    tax: taxAmount,
-    serviceCharge: calculatedServiceCharge,
+    netFoodSubtotal: Math.round(netFoodSubtotal * 100) / 100,
+    subtotal: Math.round(subtotalBeforeGst * 100) / 100,
+    discount: Math.round(discountAmount * 100) / 100,
+    taxableAmount: Math.round(taxableAmount * 100) / 100,
+    tax: Math.round(taxAmount * 100) / 100,
+    serviceCharge: Math.round(calculatedServiceCharge * 100) / 100,
     isServiceChargeRemoved: !!isServiceChargeRemoved,
-    deliveryFee: Number(deliveryFee || 0),
-    grandTotal,
+    deliveryFee: Math.round(Number(deliveryFee || 0) * 100) / 100,
+    grandTotal: Math.round(grandTotal * 100) / 100,
     isCouponEligible,
-    couponRemaining
+    couponRemaining: Math.max(0, Math.round(couponRemaining * 100) / 100)
   };
 };
 

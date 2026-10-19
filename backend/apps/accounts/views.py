@@ -2,6 +2,7 @@ import logging
 
 from django.contrib.auth.hashers import check_password, make_password
 from django.db import transaction
+from django.db.models import Q
 from django.utils.crypto import get_random_string
 from rest_framework import serializers, status, viewsets
 from rest_framework.exceptions import PermissionDenied
@@ -105,7 +106,7 @@ class VerifyOTPView(APIView):
 
 
 class StaffLoginView(ThrottledView):
-    """Admin and employee login with Employee ID + password (SRS 3.3.1). Customers cannot use this."""
+    """Admin and employee login with Employee ID / Admin ID / Email / Phone + password (SRS 3.3.1). Customers cannot use this."""
 
     permission_classes = [AllowAny]
     authentication_classes = []
@@ -114,24 +115,61 @@ class StaffLoginView(ThrottledView):
     def post(self, request):
         s = StaffLoginSerializer(data=request.data)
         s.is_valid(raise_exception=True)
-        code = s.validated_data["employee_code"].strip().upper()
-        password = s.validated_data["password"]
-        if is_locked(code):
+        raw_ident = s.validated_data["employee_code"].strip()
+        code_upper = raw_ident.upper()
+        phone_digits = "".join(ch for ch in raw_ident if ch.isdigit())
+
+        # Check if the entered identifier is locked
+        if is_locked(code_upper):
             return Response({"detail": "Too many failed attempts. Try again later."},
                             status=status.HTTP_429_TOO_MANY_REQUESTS)
-        emp = Employee.objects.select_related("user", "branch").filter(employee_code=code).first()
+
+        # 1. Primary lookup: employee_code (case-insensitive)
+        emp = Employee.objects.select_related("user", "branch").filter(employee_code__iexact=raw_ident).first()
+
+        # 2. Email lookup: if entered identifier is an email
+        if emp is None and "@" in raw_ident:
+            emp = Employee.objects.select_related("user", "branch").filter(user__email__iexact=raw_ident).first()
+
+        # 3. Phone lookup: exact match or 10-digit suffix
+        if emp is None and phone_digits:
+            emp = Employee.objects.select_related("user", "branch").filter(user__phone__iexact=raw_ident).first()
+            if emp is None and len(phone_digits) >= 10:
+                emp = Employee.objects.select_related("user", "branch").filter(
+                    Q(user__phone__iexact=phone_digits) |
+                    Q(user__phone__endswith=phone_digits[-10:])
+                ).first()
+
+        # 4. Username / name lookup
+        if emp is None and raw_ident:
+            emp = Employee.objects.select_related("user", "branch").filter(user__name__iexact=raw_ident).first()
+
+        # If resolved employee code is locked, block
+        lockout_key = emp.employee_code if emp else code_upper
+        if is_locked(lockout_key):
+            return Response({"detail": "Too many failed attempts. Try again later."},
+                            status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+        password = s.validated_data["password"]
         if emp is None:
             check_password(password, _DUMMY_HASH)
             ok = False
         else:
             ok = emp.user.check_password(password)
+
         if not ok:
-            register_failure(code)
+            register_failure(lockout_key)
+            if lockout_key != code_upper:
+                register_failure(code_upper)
             # Explicit 401: with authentication_classes=[] DRF would otherwise downgrade it to 403.
             return Response({"detail": _GENERIC_LOGIN_ERROR}, status=status.HTTP_401_UNAUTHORIZED)
+
         if not emp.user.is_active or emp.status != Employee.Status.ACTIVE:
             raise PermissionDenied("This account is not active. Contact your administrator.")
-        clear_failures(code)
+
+        clear_failures(lockout_key)
+        if lockout_key != code_upper:
+            clear_failures(code_upper)
         mark_login(emp.user)
         return Response({**issue_tokens(emp.user), "user": user_payload(emp.user)})
 

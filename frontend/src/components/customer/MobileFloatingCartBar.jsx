@@ -31,7 +31,7 @@ export const MobileFloatingCartBar = () => {
 
   const lastAddedItem = cartItems[cartItems.length - 1];
   const targetSpendForOffer = 300;
-  const amountNeeded = Math.max(0, targetSpendForOffer - subtotal);
+  const amountNeeded = Math.max(0, Math.round((targetSpendForOffer - subtotal) * 100) / 100);
   const isOfferUnlocked = subtotal >= targetSpendForOffer;
 
   return (
@@ -82,13 +82,13 @@ export const MobileFloatingCartBar = () => {
             </div>
             <div className="text-start min-w-0">
               <div className="fw-bold text-dark text-truncate" style={{ fontSize: '12.5px', lineHeight: '1.3' }}>
-                Unlock 60% OFF up to ₹100
+                Unlock 60% OFF up to {formatCurrency(100)}
               </div>
               <div className="text-secondary text-truncate" style={{ fontSize: '11px', marginTop: '2px', lineHeight: '1.2' }}>
                 {isOfferUnlocked ? (
                   <span className="text-success fw-semibold">🎉 Offer unlocked! Extra savings applied</span>
                 ) : (
-                  <span>Add items worth <strong className="text-dark">₹{amountNeeded}</strong> more to unlock</span>
+                  <span>Add items worth <strong className="text-dark">{formatCurrency(amountNeeded)}</strong> more to unlock</span>
                 )}
               </div>
             </div>

@@ -16,6 +16,7 @@ from apps.carts.services import evaluate
 from apps.coupons.services import CouponError, redeem
 from apps.inventory.services import InsufficientStock, deduct_for_order, restore_for_order
 
+from apps.realtime.publish import publish_catalog_event
 from .models import Order, OrderItem, OrderStatusHistory
 from .pricing import PricingError, price_order
 from .realtime import publish_order_event
@@ -23,7 +24,7 @@ from .realtime import publish_order_event
 # status -> statuses it may move to
 TRANSITIONS = {
     Order.Status.PENDING: {Order.Status.PREPARING, Order.Status.CANCELLED},
-    Order.Status.PREPARING: {Order.Status.READY, Order.Status.CANCELLED},
+    Order.Status.PREPARING: {Order.Status.READY, Order.Status.SERVED, Order.Status.CANCELLED},
     Order.Status.READY: {Order.Status.SERVED},
     Order.Status.SERVED: {Order.Status.COMPLETED},
 }
@@ -47,6 +48,7 @@ def _occupy(table):
     if table.status in (DiningTable.Status.AVAILABLE, DiningTable.Status.RESERVED):
         table.status = DiningTable.Status.OCCUPIED
         table.save(update_fields=["status", "updated_at"])
+        publish_catalog_event(table.branch_id, "table", "updated")
 
 
 def _release_if_idle(table):
@@ -57,6 +59,7 @@ def _release_if_idle(table):
     if not still and table.status == DiningTable.Status.OCCUPIED:
         table.status = DiningTable.Status.AVAILABLE
         table.save(update_fields=["status", "updated_at"])
+        publish_catalog_event(table.branch_id, "table", "updated")
 
 
 def _invoice_contact(order):
@@ -139,6 +142,9 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
         if not _branch_has_orderable_food(branch):
             raise OrderError("Takeaway ordering is unavailable because no dishes are currently available.",
                              "no_dishes", 409)
+    elif cart.order_type == Order.Type.DINE_IN:
+        if cart.table_id is None:
+            raise OrderError("Please select an available table for Dine-In.", "table_required", 400)
     view = evaluate(cart)
     if not view["can_checkout"]:
         raise OrderError("Your cart needs attention before checkout.", "cart_invalid", 409)
@@ -234,13 +240,16 @@ def _write_items(order, priced):
 
 
 @transaction.atomic
-def create_assisted(staff_user, table_id, item_rows, idempotency_key):
-    """A branch employee places a dine-in order for a table. The creator is the logged-in employee."""
+def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=None, order_type=Order.Type.DINE_IN, coupon_code="", customer_phone="", customer_name="", mark_paid=False, payment_method="CASH"):
+    """Staff places a dine-in or takeaway order. The creator is the logged-in staff member."""
     from apps.accounts.permissions import get_active_employee
     from apps.accounts.scoping import can_access_branch
+    from apps.branches.models import Branch
     from apps.orders.pricing import Line
+    from apps.payments.models import Payment
 
-    if get_active_employee(staff_user) is None:
+    emp = get_active_employee(staff_user)
+    if emp is None and not (staff_user.is_superuser or staff_user.is_staff):
         raise OrderError("No active staff profile.", "not_staff", 403)
     if idempotency_key:
         existing = Order.objects.filter(idempotency_key=idempotency_key).first()
@@ -248,23 +257,54 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key):
             if existing.placed_by_id != staff_user.id:
                 raise OrderError("This checkout key was already used.", "idempotency_conflict", 409)
             return existing, False
-    table = DiningTable.objects.select_for_update().filter(pk=table_id).first()
-    if table is None or not can_access_branch(staff_user, table.branch_id):
-        raise OrderError("Not found.", "not_found", 404)
-    if not table.is_active:
-        raise OrderError("This table is not available for a new order.", "table_unavailable", 409)
-    lines = [Line(row["food"], row["quantity"], [], "") for row in item_rows]
+
+    table = None
+    if order_type == Order.Type.DINE_IN:
+        if not table_id:
+            raise OrderError("Please select a table for Dine-In order.", "table_required", 400)
+        table = DiningTable.objects.select_for_update().filter(pk=table_id).first()
+        if table is None or not can_access_branch(staff_user, table.branch_id):
+            raise OrderError("Table not found or unauthorized.", "not_found", 404)
+        if not table.is_active:
+            raise OrderError("This table is not available for a new order.", "table_unavailable", 409)
+        branch = table.branch
+    else:
+        order_type = Order.Type.TAKEAWAY
+        resolved_branch_id = branch_id or (emp.branch_id if emp else None)
+        if not resolved_branch_id:
+            first_b = Branch.objects.filter(is_active=True).first()
+            resolved_branch_id = first_b.id if first_b else None
+        branch = Branch.objects.filter(pk=resolved_branch_id, is_active=True).first()
+        if branch is None or not can_access_branch(staff_user, branch.id):
+            raise OrderError("Branch not found or unauthorized.", "not_found", 404)
+
+    # Customer lookup/association
+    customer = None
+    if customer_phone:
+        customer = User.objects.filter(phone=customer_phone, user_type=User.UserType.CUSTOMER).first()
+
+    lines = [Line(row["food"], row["quantity"], row.get("options", []), row.get("special_instructions", "")) for row in item_rows]
+    coupon_codes = [coupon_code.strip()] if coupon_code and coupon_code.strip() else []
     try:
-        priced = price_order(table.branch, lines, Order.Type.DINE_IN, None, [])
+        priced = price_order(branch, lines, order_type, customer, coupon_codes)
     except PricingError as exc:
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
+
     order = Order(
-        order_number=f"TMP{uuid4().hex[:12]}", branch=table.branch, branch_name=table.branch.name,
-        customer=None, customer_phone="",
-        table=table, table_label=table.table_number, order_type=Order.Type.DINE_IN,
-        source=Order.Source.EMPLOYEE, placed_by=staff_user, placed_by_name=staff_user.name or staff_user.phone,
+        order_number=f"TMP{uuid4().hex[:12]}",
+        branch=branch,
+        branch_name=branch.name,
+        customer=customer,
+        customer_phone=customer_phone or "",
+        table=table,
+        table_label=table.table_number if table else "Takeaway",
+        order_type=order_type,
+        source=Order.Source.EMPLOYEE,
+        placed_by=staff_user,
+        placed_by_name=staff_user.name or staff_user.phone,
         status=Order.Status.PENDING,
-        payment_status=Order.PaymentStatus.UNPAID, idempotency_key=idempotency_key or None,
+        payment_status=Order.PaymentStatus.PAID if mark_paid else Order.PaymentStatus.UNPAID,
+        idempotency_key=idempotency_key or None,
         **_money_fields(priced),
     )
     try:
@@ -284,9 +324,30 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key):
         deduct_for_order(order)
     except InsufficientStock as exc:
         raise OrderError(str(exc), "out_of_stock", 409)
-    OrderStatusHistory.objects.create(order=order, from_status="", to_status=Order.Status.PENDING,
-                                      changed_by=staff_user, note="Order placed by staff")
-    _occupy(table)
+    if priced.get("_applied_coupons"):
+        try:
+            redeem(order, priced["_applied_coupons"])
+        except CouponError as exc:
+            raise OrderError(str(exc), "coupon_invalid", 409)
+    if mark_paid:
+        Payment.objects.create(
+            order=order,
+            branch=branch,
+            amount=order.total_amount,
+            method=Payment.Method.COUNTER,
+            status=Payment.Status.SUCCESS,
+            recorded_by=staff_user,
+            paid_at=timezone.now(),
+        )
+    OrderStatusHistory.objects.create(
+        order=order,
+        from_status="",
+        to_status=Order.Status.PENDING,
+        changed_by=staff_user,
+        note="Order placed via POS",
+    )
+    if table:
+        _occupy(table)
     publish_order_event(order)
     return order, True
 
@@ -307,8 +368,9 @@ def change_status(order_id, new_status, actor, reason=""):
     if new_status == Order.Status.CANCELLED:
         order.cancel_reason = reason.strip()
         restore_for_order(order)
-    if new_status == Order.Status.COMPLETED:
-        order.completed_at = timezone.now()
+    if new_status == Order.Status.COMPLETED or (order.order_type == Order.Type.TAKEAWAY and new_status == Order.Status.SERVED):
+        if not order.completed_at:
+            order.completed_at = timezone.now()
     order.save()
     OrderStatusHistory.objects.create(order=order, from_status=previous, to_status=new_status, changed_by=actor,
                                       note=reason.strip())
@@ -316,9 +378,12 @@ def change_status(order_id, new_status, actor, reason=""):
         # Free the table only when no other unfinished order still uses it. A reservation is left alone
         # because _release_if_idle only changes OCCUPIED tables. Payment status is not changed here.
         _release_if_idle(order.table)
-    if new_status == Order.Status.COMPLETED:
-        # E-bill only after completion. Payment may still be UNPAID; the SRS does not block completion on payment.
+    if new_status == Order.Status.COMPLETED or (order.order_type == Order.Type.TAKEAWAY and new_status == Order.Status.SERVED):
+        # E-bill after completion or takeaway serving.
         from apps.billing.services import ensure_final_invoice
-        ensure_final_invoice(order)
+        try:
+            ensure_final_invoice(order)
+        except Exception:
+            pass
     publish_order_event(order)
     return order

@@ -132,7 +132,10 @@ def price_order(branch, lines, order_type, customer=None, coupon_codes=None, now
     outcome = apply_coupons(branch, merchandise, customer, coupon_codes, now, allow_auto=allow_auto)
     coupon_total = sum((a.amount for a in outcome.applied), ZERO)
     food_after_coupon = merchandise - coupon_total
-    takeaway = money(branch.takeaway_charge) if order_type == "TAKEAWAY" else ZERO
+    # For every takeaway order, apply a packing charge of ₹10 per item quantity:
+    # Packing Charges = Total takeaway item quantities × ₹10
+    total_item_quantity = sum((l.quantity for _, l, _, _ in resolved), 0)
+    takeaway = money(Decimal(total_item_quantity) * Decimal("10.00")) if order_type == "TAKEAWAY" else ZERO
     taxable = food_after_coupon + takeaway
     gst = money(taxable * branch.gst_rate / 100)
     service_rate, service = service_charge_for(food_after_coupon, branch.service_charge_rate)

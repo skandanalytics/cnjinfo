@@ -28,6 +28,25 @@ export const dishStockLimit = (dish) => {
 };
 
 
+// Helper to calculate effective discount percentage
+export const getEffectiveDiscountPercent = (item) => {
+  if (!item) return 0;
+  const explicitPct = parseFloat(item.discountPercent || item.discount_percent || item.offer_percentage || item.discount || 0);
+  if (!isNaN(explicitPct) && explicitPct > 0) {
+    return explicitPct;
+  }
+  const originalPrice = parseFloat(item.originalPrice || item.price || 0);
+  const discPrice = parseFloat(item.discountPrice || item.discount_price || 0);
+  if (originalPrice > 0 && discPrice > 0 && discPrice < originalPrice) {
+    return ((originalPrice - discPrice) / originalPrice) * 100;
+  }
+  const sellingPrice = getProductSellingPrice(item);
+  if (originalPrice > 0 && sellingPrice < originalPrice) {
+    return ((originalPrice - sellingPrice) / originalPrice) * 100;
+  }
+  return 0;
+};
+
 // Helper to identify if product has a discount
 export const isDiscountProduct = (item) => {
   if (!item) return false;
@@ -142,14 +161,16 @@ export const filterAndSortProducts = (products, options = {}) => {
     case 'DISCOUNT_50':
       result = result.filter((p) => Number(p.discountPercent) >= 50 || Number(p.discount) >= 50);
       break;
+    case 'HIGHEST_DISCOUNT':
     case 'DISCOUNT_ANY':
-      result = result.filter(
-        (p) =>
-          Boolean(p.hasDiscount) ||
-          (p.discountPercent && Number(p.discountPercent) > 0) ||
-          (p.discount && Number(p.discount) > 0) ||
-          (p.discountPrice && Number(p.discountPrice) > 0)
-      );
+      result = [...result].sort((a, b) => {
+        const discA = getEffectiveDiscountPercent(a);
+        const discB = getEffectiveDiscountPercent(b);
+        if (Math.abs(discB - discA) > 0.001) {
+          return discB - discA; // Highest discount first
+        }
+        return (Number(a.id) || 0) - (Number(b.id) || 0);
+      });
       break;
     case 'BOGO':
       result = result.filter(

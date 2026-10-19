@@ -36,7 +36,8 @@ export const MenuEditor = () => {
   const [dishes, setDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [foodTypeFilter, setFoodTypeFilter] = useState('all'); // 'all' | 'veg' | 'non-veg' | 'vegan' | 'offers'
+  const [selectedFoodTypes, setSelectedFoodTypes] = useState([]); // array of 'veg' | 'non-veg' | 'vegan'
+  const [offersOnly, setOffersOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   // Modals
@@ -56,7 +57,7 @@ export const MenuEditor = () => {
   // Reset to page 1 on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, foodTypeFilter, selectedCategory]);
+  }, [search, selectedFoodTypes, offersOnly, selectedCategory]);
 
   const fetchDetails = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -211,6 +212,7 @@ export const MenuEditor = () => {
       description: newDescription ?? '',
       status,
     });
+    if (updated) setMenu(updated);
     clearStaticProductCache();
     window.dispatchEvent(new CustomEvent('foodie_categories_updated'));
     await fetchDetails();
@@ -299,26 +301,22 @@ export const MenuEditor = () => {
     return Boolean(d.hasDiscount || d.discountPercent > 0 || (d.discountPrice > 0 && d.discountPrice < d.price));
   });
 
-  // Reset filter if selected food type has no dishes
-  useEffect(() => {
-    if (foodTypeFilter === 'veg' && !hasVegDishes) setFoodTypeFilter('all');
-    else if (foodTypeFilter === 'non-veg' && !hasNonVegDishes) setFoodTypeFilter('all');
-    else if (foodTypeFilter === 'vegan' && !hasVeganDishes) setFoodTypeFilter('all');
-    else if (foodTypeFilter === 'offers' && !hasOffersDishes) setFoodTypeFilter('all');
-  }, [hasVegDishes, hasNonVegDishes, hasVeganDishes, hasOffersDishes, foodTypeFilter]);
+  const handleFoodTypeToggle = (type) => {
+    setSelectedFoodTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  };
 
   // 2. Filter within menu dishes by Food Type / Offer and Search Term
   const filteredDishes = menuDishes.filter((dish) => {
-    const dishFoodType = (dish.foodType || dish.type || 'veg').toLowerCase();
+    const rawType = (dish.foodType || dish.type || 'veg').toLowerCase();
+    const dishFoodType = (rawType === 'nonveg' || rawType === 'nonvegetarian') ? 'non-veg' : rawType;
     let matchesFoodType = true;
-    if (foodTypeFilter === 'veg') {
-      matchesFoodType = dishFoodType === 'veg';
-    } else if (foodTypeFilter === 'non-veg') {
-      matchesFoodType = dishFoodType === 'non-veg';
-    } else if (foodTypeFilter === 'vegan') {
-      matchesFoodType = dishFoodType === 'vegan';
-    } else if (foodTypeFilter === 'offers') {
-      matchesFoodType = Boolean(dish.hasDiscount || dish.discountPercent > 0 || (dish.discountPrice > 0 && dish.discountPrice < dish.price));
+    if (selectedFoodTypes.length > 0) {
+      matchesFoodType = selectedFoodTypes.includes(dishFoodType);
+    }
+    if (offersOnly) {
+      matchesFoodType = matchesFoodType && Boolean(dish.hasDiscount || dish.discountPercent > 0 || (dish.discountPrice > 0 && dish.discountPrice < dish.price));
     }
 
     const term = search.trim().toLowerCase();
@@ -468,10 +466,17 @@ export const MenuEditor = () => {
       {hasCategories && !isAllSelected && currentCategoryObj && (
         <div className="card rounded-3 border-0 shadow-sm p-3 mb-4 bg-white">
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-            <div className="d-flex align-items-center gap-3 flex-wrap text-secondary" style={{ fontSize: '13px' }}>
-              <span>Category: <strong className="text-dark">{currentCategoryName}</strong></span>
-              <span>Dish count: <strong className="text-dark">{menuDishes.length}</strong></span>
-              <span>Status: <strong className="text-dark">{menu?.status || currentCategoryObj?.status || 'Active'}</strong></span>
+            <div>
+              <div className="d-flex align-items-center gap-3 flex-wrap text-secondary" style={{ fontSize: '13px' }}>
+                <span>Category: <strong className="text-dark">{currentCategoryName}</strong></span>
+                <span>Dish count: <strong className="text-dark">{menuDishes.length}</strong></span>
+                <span>Status: <strong className="text-dark">{menu?.status || currentCategoryObj?.status || 'Active'}</strong></span>
+              </div>
+              {(menu?.description || currentCategoryObj?.description) && (
+                <div className="text-muted small mt-1 text-start" style={{ fontSize: '12px' }}>
+                  {menu?.description || currentCategoryObj?.description}
+                </div>
+              )}
             </div>
 
             {isAdmin && (
@@ -540,8 +545,8 @@ export const MenuEditor = () => {
             <div className="d-flex align-items-center gap-2 flex-wrap">
               <button
                 type="button"
-                onClick={() => setFoodTypeFilter('all')}
-                className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${foodTypeFilter === 'all'
+                onClick={() => { setSelectedFoodTypes([]); setOffersOnly(false); }}
+                className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${selectedFoodTypes.length === 0 && !offersOnly
                   ? 'bg-danger text-white border-danger shadow-sm'
                   : 'bg-white text-secondary border-light-subtle shadow-sm'
                   }`}
@@ -551,55 +556,73 @@ export const MenuEditor = () => {
               </button>
 
               {hasVegDishes && (
-                <button
-                  type="button"
-                  onClick={() => setFoodTypeFilter('veg')}
-                  className={`btn btn-sm d-flex align-items-center gap-2 rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${foodTypeFilter === 'veg'
-                    ? 'bg-success text-white border-success shadow-sm'
-                    : 'bg-white text-secondary border-light-subtle shadow-sm'
-                    }`}
-                  style={{ fontSize: '12px', cursor: 'pointer' }}
+                <label
+                  htmlFor="admin-food-filter-veg"
+                  className={`food-type-control food-type-control-veg ${
+                    selectedFoodTypes.includes('veg') ? 'is-selected-veg' : ''
+                  }`}
+                  style={{ fontSize: '12px' }}
                 >
-                  <span className="veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                  <span>Veg</span>
-                </button>
+                  <input
+                    type="checkbox"
+                    id="admin-food-filter-veg"
+                    checked={selectedFoodTypes.includes('veg')}
+                    onChange={() => handleFoodTypeToggle('veg')}
+                    className="food-type-checkbox checkbox-veg"
+                    aria-label="Filter Vegetarian"
+                  />
+                  <span className="veg-badge ms-0.5"></span>
+                  <span className="ms-0.5">Veg</span>
+                </label>
               )}
 
               {hasNonVegDishes && (
-                <button
-                  type="button"
-                  onClick={() => setFoodTypeFilter('non-veg')}
-                  className={`btn btn-sm d-flex align-items-center gap-2 rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${foodTypeFilter === 'non-veg'
-                    ? 'bg-danger text-white border-danger shadow-sm'
-                    : 'bg-white text-secondary border-light-subtle shadow-sm'
-                    }`}
-                  style={{ fontSize: '12px', cursor: 'pointer' }}
+                <label
+                  htmlFor="admin-food-filter-non-veg"
+                  className={`food-type-control food-type-control-non-veg ${
+                    selectedFoodTypes.includes('non-veg') ? 'is-selected-non-veg' : ''
+                  }`}
+                  style={{ fontSize: '12px' }}
                 >
-                  <span className="non-veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                  <span>Non-Veg</span>
-                </button>
+                  <input
+                    type="checkbox"
+                    id="admin-food-filter-non-veg"
+                    checked={selectedFoodTypes.includes('non-veg')}
+                    onChange={() => handleFoodTypeToggle('non-veg')}
+                    className="food-type-checkbox checkbox-non-veg"
+                    aria-label="Filter Non-Vegetarian"
+                  />
+                  <span className="non-veg-badge ms-0.5"></span>
+                  <span className="ms-0.5">Non-Veg</span>
+                </label>
               )}
 
               {hasVeganDishes && (
-                <button
-                  type="button"
-                  onClick={() => setFoodTypeFilter('vegan')}
-                  className={`btn btn-sm d-flex align-items-center gap-2 rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${foodTypeFilter === 'vegan'
-                    ? 'bg-success text-white border-success shadow-sm'
-                    : 'bg-white text-secondary border-light-subtle shadow-sm'
-                    }`}
-                  style={{ fontSize: '12px', cursor: 'pointer' }}
+                <label
+                  htmlFor="admin-food-filter-vegan"
+                  className={`food-type-control food-type-control-vegan ${
+                    selectedFoodTypes.includes('vegan') ? 'is-selected-vegan' : ''
+                  }`}
+                  style={{ fontSize: '12px' }}
                 >
-                  <span className="vegan-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                  <span>Vegan</span>
-                </button>
+                  <input
+                    type="checkbox"
+                    id="admin-food-filter-vegan"
+                    checked={selectedFoodTypes.includes('vegan')}
+                    onChange={() => handleFoodTypeToggle('vegan')}
+                    className="food-type-checkbox checkbox-vegan"
+                    aria-label="Filter Vegan"
+                  />
+                  <span className="vegan-badge ms-0.5"></span>
+                  <span className="ms-0.5">Vegan</span>
+                </label>
               )}
 
               {hasOffersDishes && (
                 <button
                   type="button"
-                  onClick={() => setFoodTypeFilter('offers')}
-                  className={`btn btn-sm d-flex align-items-center gap-1 rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${foodTypeFilter === 'offers'
+                  onClick={() => setOffersOnly((prev) => !prev)}
+                  className={`btn btn-sm d-flex align-items-center gap-1 rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${offersOnly
                     ? 'bg-danger text-white border-danger shadow-sm'
                     : 'bg-white text-danger border-danger-subtle shadow-sm'
                     }`}

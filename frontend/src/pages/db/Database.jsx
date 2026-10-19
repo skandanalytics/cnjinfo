@@ -187,12 +187,7 @@ export default function DatabaseConsole() {
     const phone = String(form.get('phone') || '').trim();
     const password = String(form.get('password') || '');
     const confirmPassword = String(form.get('confirm_password') || '');
-    const setupKey = String(form.get('setup_key') || '').trim();
 
-    if (!session && status?.recovery_key_required && !setupKey) {
-      setError('Server recovery key is required to create an administrator when not signed in.');
-      return;
-    }
     if (!code) {
       setError('Admin ID is required.');
       return;
@@ -463,27 +458,9 @@ export default function DatabaseConsole() {
         showCreateAdmin ? (
           <Card title="Create New Administrator">
             <p className="text-secondary small">
-              {status.recovery_key_required
-                ? 'Create or recover an administrator account (Owner or Manager) using the server recovery key from the backend environment. Existing administrator accounts remain completely intact.'
-                : 'Create an administrator account (Owner or Manager). Existing administrator accounts remain completely intact.'}
+              Create an administrator account (Owner or Manager). Existing administrator accounts remain completely intact.
             </p>
             <form onSubmit={onCreateAdmin} className="row g-3">
-              {status.recovery_key_required && (
-                <div className="col-12">
-                  <label className="form-label">Server Recovery Key</label>
-                  <input
-                    className="form-control"
-                    name="setup_key"
-                    type="password"
-                    placeholder="Enter DB_SETUP_SECRET from backend environment"
-                    required
-                    autoComplete="off"
-                  />
-                  <div className="form-text">
-                    Required when not signed in as an administrator to authorize account creation/recovery.
-                  </div>
-                </div>
-              )}
               <div className="col-md-6">
                 <label className="form-label">New Admin ID</label>
                 <input className="form-control" name="employee_code" placeholder="e.g. MGR02 or OWNER02" required autoComplete="off" />

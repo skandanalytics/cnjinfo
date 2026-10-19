@@ -153,10 +153,12 @@ REST_FRAMEWORK = {
         "otp_verify_ip": "180/hour" if DEBUG else "80/hour",
         "staff_login": "20/minute", "qr_resolve": "60/minute", "quote": "120/minute",
         "public_menu": "120/minute", "guest_token": "30/hour",
-        "db_setup": "10/hour", "db_reset": "6/hour",
+        "db_setup": "60/minute" if DEBUG else "30/hour", "db_reset": "6/hour",
     },
     "EXCEPTION_HANDLER": "config.exceptions.foodie_exception_handler",
 }
+
+ALLOW_UNRESTRICTED_ADMIN_CREATION = env_bool("ALLOW_UNRESTRICTED_ADMIN_CREATION", default=True)
 
 # Counters for throttling and login lockout. LocMem is per-process: use a shared cache (Redis) in production.
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}

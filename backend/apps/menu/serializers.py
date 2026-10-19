@@ -25,7 +25,10 @@ class CategorySerializer(BranchBoundSerializerMixin, serializers.ModelSerializer
         validators = []
 
     def validate_name(self, value):
-        return value.strip()
+        name = value.strip()
+        if name.lower() in {"all", "all categories", "all category"}:
+            raise serializers.ValidationError("Cannot create a category named 'All Categories'. This is a reserved aggregate view.")
+        return name
 
     def validate(self, attrs):
         attrs = super().validate(attrs)

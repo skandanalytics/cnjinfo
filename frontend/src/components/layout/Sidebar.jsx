@@ -4,7 +4,7 @@ import { AppContext } from '../../context/AppContext';
 import { useAuth } from '../../hooks/useAuth';
 import { 
   FiGrid, FiShoppingBag, FiLayers, FiActivity, 
-  FiSliders, FiLogOut, FiUsers, FiCpu, FiTag, FiBookOpen, FiMapPin 
+  FiSliders, FiLogOut, FiUsers, FiCpu, FiTag, FiBookOpen, FiMapPin, FiMonitor
 } from 'react-icons/fi';
 
 export const Sidebar = () => {
@@ -62,6 +62,12 @@ export const Sidebar = () => {
           <NavLink to={isEmployee ? "/employee/dashboard" : "/admin/dashboard"} className="sidebar-link">
             <FiGrid size={18} />
             {!sidebarCollapsed && <span>Dashboard</span>}
+          </NavLink>
+        </li>
+        <li>
+          <NavLink to={isEmployee ? "/employee/pos" : "/admin/pos"} className="sidebar-link">
+            <FiMonitor size={18} />
+            {!sidebarCollapsed && <span>POS / Take Order</span>}
           </NavLink>
         </li>
         <li>

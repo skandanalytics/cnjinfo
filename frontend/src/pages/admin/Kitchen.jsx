@@ -68,6 +68,20 @@ export const Kitchen = () => {
 
   useEffect(() => {
     fetchOrders(false);
+    const handleSync = () => fetchOrders(false);
+    window.addEventListener('foodie_orders_updated', handleSync);
+    window.addEventListener('foodie_data_sync_refetch', handleSync);
+    window.addEventListener('focus', handleSync);
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') fetchOrders(false);
+    };
+    document.addEventListener('visibilitychange', handleVis);
+    return () => {
+      window.removeEventListener('foodie_orders_updated', handleSync);
+      window.removeEventListener('foodie_data_sync_refetch', handleSync);
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleVis);
+    };
   }, []);
 
   useEffect(() => {
@@ -248,6 +262,36 @@ export const Kitchen = () => {
     return `Table: ${str}`;
   };
 
+  const isTakeawayOrder = (ord) => {
+    if (!ord) return false;
+    const type = String(ord.order_type || ord.orderType || '').toUpperCase();
+    if (type === 'TAKEAWAY') return true;
+    if (type === 'DINE_IN' || type === 'DINING') return false;
+    const tbl = String(ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? ord.table?.table_number : ord.table) || '').toLowerCase().trim();
+    return tbl === 'takeaway' || tbl === '';
+  };
+
+  const getCustomizationsList = (item) => {
+    const list = item?.customizations || item?.extraIngredients || item?.toppings || item?.options || [];
+    if (!Array.isArray(list)) return [];
+    return list.map((c) => {
+      if (typeof c === 'string') return c.trim();
+      if (c && typeof c === 'object') {
+        const name = (c.name || c.title || c.option_name || '').trim();
+        const price = Number(c.extra_price ?? c.price ?? c.extraPrice ?? 0);
+        if (price > 0) {
+          return `${name} (+₹${price.toFixed(2)})`;
+        }
+        return name;
+      }
+      return '';
+    }).filter(Boolean);
+  };
+
+  const getInstructions = (item) => {
+    return String(item?.special_instructions || item?.instructions || item?.specialInstructions || '').trim();
+  };
+
   const areOrdersDuplicate = (ordA, ordB) => {
     if (!ordA || !ordB) return false;
     const idA = String(ordA.id || ordA.order_id || ordA.orderId || '').trim();
@@ -413,16 +457,24 @@ export const Kitchen = () => {
                                   <span className="text-dark fw-medium">• {i.name || i.title || i.food_name || i.dish_name || 'Dish Item'}</span>
                                   <strong className="text-danger ms-2 flex-shrink-0">× {i.quantity || i.qty || 1}</strong>
                                 </div>
-                                {(i.instructions || i.special_instructions) && (
-                                  <div className="text-muted fst-italic ms-2 text-wrap" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.2' }}>
-                                    Note: {i.instructions || i.special_instructions}
-                                  </div>
-                                )}
-                                {Array.isArray(i.extraIngredients) && i.extraIngredients.length > 0 && (
-                                  <div className="text-muted ms-2 text-wrap fw-medium" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.2', color: '#64748b' }}>
-                                    Extras: {i.extraIngredients.map(ex => ex.name || ex).join(', ')}
-                                  </div>
-                                )}
+                                {(() => {
+                                  const customs = getCustomizationsList(i);
+                                  const instructions = getInstructions(i);
+                                  return (
+                                    <>
+                                      {customs.length > 0 && (
+                                        <div className="text-secondary ms-2 text-wrap fw-medium mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3', color: '#64748b' }}>
+                                          <span className="fw-semibold text-dark">• Extra ingredients:</span> {customs.join(', ')}
+                                        </div>
+                                      )}
+                                      {Boolean(instructions) && (
+                                        <div className="text-muted fst-italic ms-2 text-wrap mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3' }}>
+                                          <span className="fw-semibold text-secondary fst-normal">• Instructions:</span> {instructions}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             ));
                           }
@@ -514,16 +566,24 @@ export const Kitchen = () => {
                                   <span className="text-dark fw-medium">• {i.name || i.title || i.food_name || i.dish_name || 'Dish Item'}</span>
                                   <strong className="text-warning-emphasis ms-2 flex-shrink-0">× {i.quantity || i.qty || 1}</strong>
                                 </div>
-                                {(i.instructions || i.special_instructions) && (
-                                  <div className="text-muted fst-italic ms-2 text-wrap" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.2' }}>
-                                    Note: {i.instructions || i.special_instructions}
-                                  </div>
-                                )}
-                                {Array.isArray(i.extraIngredients) && i.extraIngredients.length > 0 && (
-                                  <div className="text-muted ms-2 text-wrap fw-medium" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.2', color: '#64748b' }}>
-                                    Extras: {i.extraIngredients.map(ex => ex.name || ex).join(', ')}
-                                  </div>
-                                )}
+                                {(() => {
+                                  const customs = getCustomizationsList(i);
+                                  const instructions = getInstructions(i);
+                                  return (
+                                    <>
+                                      {customs.length > 0 && (
+                                        <div className="text-secondary ms-2 text-wrap fw-medium mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3', color: '#64748b' }}>
+                                          <span className="fw-semibold text-dark">• Extra ingredients:</span> {customs.join(', ')}
+                                        </div>
+                                      )}
+                                      {Boolean(instructions) && (
+                                        <div className="text-muted fst-italic ms-2 text-wrap mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3' }}>
+                                          <span className="fw-semibold text-secondary fst-normal">• Instructions:</span> {instructions}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             ));
                           }
@@ -546,15 +606,18 @@ export const Kitchen = () => {
                           {ord.time || 'Cooking'}
                         </span>
                         <Button
-                          onClick={() => handleAction(ord.id, 'Ready')}
-                          disabled={isUpdatingStatus(ord.id, 'Ready')}
-                          loading={isUpdatingStatus(ord.id, 'Ready')}
+                          onClick={() => handleAction(ord.id, isTakeawayOrder(ord) ? 'Served' : 'Ready')}
+                          disabled={isUpdatingStatus(ord.id, isTakeawayOrder(ord) ? 'Served' : 'Ready')}
+                          loading={isUpdatingStatus(ord.id, isTakeawayOrder(ord) ? 'Served' : 'Ready')}
                           size="sm"
                           variant="primary"
                           className="py-1 px-3 fw-bold shadow-xs"
-                          style={{ backgroundColor: '#fd7e14', borderColor: '#fd7e14' }}
+                          style={{
+                            backgroundColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14',
+                            borderColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14'
+                          }}
                         >
-                          Mark Ready
+                          {isTakeawayOrder(ord) ? 'Mark Serving' : 'Mark Ready'}
                         </Button>
                       </div>
                     </div>
@@ -602,16 +665,24 @@ export const Kitchen = () => {
                                   <span className="text-dark fw-medium">• {i.name || i.title || i.food_name || i.dish_name || 'Dish Item'}</span>
                                   <strong className="text-info ms-2 flex-shrink-0">× {i.quantity || i.qty || 1}</strong>
                                 </div>
-                                {(i.instructions || i.special_instructions) && (
-                                  <div className="text-muted fst-italic ms-2 text-wrap" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.2' }}>
-                                    Note: {i.instructions || i.special_instructions}
-                                  </div>
-                                )}
-                                {Array.isArray(i.extraIngredients) && i.extraIngredients.length > 0 && (
-                                  <div className="text-muted ms-2 text-wrap fw-medium" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.2', color: '#64748b' }}>
-                                    Extras: {i.extraIngredients.map(ex => ex.name || ex).join(', ')}
-                                  </div>
-                                )}
+                                {(() => {
+                                  const customs = getCustomizationsList(i);
+                                  const instructions = getInstructions(i);
+                                  return (
+                                    <>
+                                      {customs.length > 0 && (
+                                        <div className="text-secondary ms-2 text-wrap fw-medium mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3', color: '#64748b' }}>
+                                          <span className="fw-semibold text-dark">• Extra ingredients:</span> {customs.join(', ')}
+                                        </div>
+                                      )}
+                                      {Boolean(instructions) && (
+                                        <div className="text-muted fst-italic ms-2 text-wrap mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3' }}>
+                                          <span className="fw-semibold text-secondary fst-normal">• Instructions:</span> {instructions}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             ));
                           }
@@ -683,16 +754,24 @@ export const Kitchen = () => {
                                   <span className="text-dark fw-medium">• {i.name || i.title || i.food_name || i.dish_name || 'Dish Item'}</span>
                                   <strong className="text-success ms-2 flex-shrink-0">× {i.quantity || i.qty || 1}</strong>
                                 </div>
-                                {(i.instructions || i.special_instructions) && (
-                                  <div className="text-muted fst-italic ms-2 text-wrap mt-1" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.2' }}>
-                                    Note: {i.instructions || i.special_instructions}
-                                  </div>
-                                )}
-                                {Array.isArray(i.extraIngredients) && i.extraIngredients.length > 0 && (
-                                  <div className="text-muted ms-2 text-wrap fw-medium mt-1" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.2', color: '#64748b' }}>
-                                    Extras: {i.extraIngredients.map(ex => ex.name || ex).join(', ')}
-                                  </div>
-                                )}
+                                {(() => {
+                                  const customs = getCustomizationsList(i);
+                                  const instructions = getInstructions(i);
+                                  return (
+                                    <>
+                                      {customs.length > 0 && (
+                                        <div className="text-secondary ms-2 text-wrap fw-medium mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3', color: '#64748b' }}>
+                                          <span className="fw-semibold text-dark">• Extra ingredients:</span> {customs.join(', ')}
+                                        </div>
+                                      )}
+                                      {Boolean(instructions) && (
+                                        <div className="text-muted fst-italic ms-2 text-wrap mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3' }}>
+                                          <span className="fw-semibold text-secondary fst-normal">• Instructions:</span> {instructions}
+                                        </div>
+                                      )}
+                                    </>
+                                  );
+                                })()}
                               </div>
                             ));
                           }
@@ -705,7 +784,7 @@ export const Kitchen = () => {
                       </div>
 
                       <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
-                        {String(ord.status).toLowerCase() === 'served' && (
+                        {String(ord.status).toLowerCase() === 'served' && !isTakeawayOrder(ord) && (
                           <Button
                             size="sm"
                             variant="primary"

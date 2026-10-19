@@ -27,14 +27,16 @@ class InvoiceDownloadView(APIView):
         order = _visible(request, pk)
         if order is None:
             return Response({"detail": "Not found."}, status=404)
-        if order.status != Order.Status.COMPLETED:
+        is_takeaway = (order.order_type == Order.Type.TAKEAWAY)
+        if order.status != Order.Status.COMPLETED and not (is_takeaway and order.status == Order.Status.SERVED):
             return Response(
                 {"detail": "The invoice is available after the order is completed.", "code": "invoice_not_ready"},
                 status=409,
             )
         invoice = ensure_final_invoice(order)
         # Render from the saved snapshot on each download, so a layout change does not need a new invoice.
-        response = HttpResponse(render_invoice_pdf(invoice), content_type="application/pdf")
+        is_customer = getattr(request.user, "user_type", None) == "CUSTOMER"
+        response = HttpResponse(render_invoice_pdf(invoice, for_customer=is_customer), content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="Foodie-Invoice-{invoice.invoice_number}.pdf"'
         return response
 

@@ -18,7 +18,7 @@ import { useAuth } from '../../hooks/useAuth';
 import api from '../../services/api';
 import { getFrontendCategoryName, normalizeCategoryName } from '../../utils/categoryUtils';
 import { classifyStock } from '../../utils/stockStatus';
-import { FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiPackage, FiFilter, FiTrash2 } from 'react-icons/fi';
+import { FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiPackage } from 'react-icons/fi';
 
 export const Inventory = () => {
   const { user } = useAuth();
@@ -41,16 +41,13 @@ export const Inventory = () => {
   const [categoryFilter, setCategoryFilter] = useState('All');
   const [stockStatusFilter, setStockStatusFilter] = useState(getInitialStatus);
 
+
   // Restock modal state
   const [restockingItem, setRestockingItem] = useState(null);
   const [restockQuantity, setRestockQuantity] = useState('');
   
   const [validationError, setValidationError] = useState('');
   const [saveLoading, setSaveLoading] = useState(false);
-
-  // Delete inventory item state
-  const [deletingItem, setDeletingItem] = useState(null);
-  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const s = getInitialStatus();
@@ -116,13 +113,22 @@ export const Inventory = () => {
     window.addEventListener('foodie_categories_updated', handleUpdateEvents);
     window.addEventListener('foodie_products_updated', handleUpdateEvents);
     window.addEventListener('foodie_inventory_updated', handleUpdateEvents);
+    window.addEventListener('foodie_data_sync_refetch', handleUpdateEvents);
     window.addEventListener('storage', handleStorageEvent);
+    window.addEventListener('focus', handleUpdateEvents);
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') handleUpdateEvents();
+    };
+    document.addEventListener('visibilitychange', handleVis);
 
     return () => {
       window.removeEventListener('foodie_categories_updated', handleUpdateEvents);
       window.removeEventListener('foodie_products_updated', handleUpdateEvents);
       window.removeEventListener('foodie_inventory_updated', handleUpdateEvents);
+      window.removeEventListener('foodie_data_sync_refetch', handleUpdateEvents);
       window.removeEventListener('storage', handleStorageEvent);
+      window.removeEventListener('focus', handleUpdateEvents);
+      document.removeEventListener('visibilitychange', handleVis);
     };
   }, []);
 
@@ -473,23 +479,13 @@ export const Inventory = () => {
                         </td>
                         {canManageStock && (
                           <td className="text-end">
-                            <div className="d-flex align-items-center justify-content-end gap-2">
-                              <button 
-                                onClick={() => handleStartRestock(item)}
-                                className="btn btn-sm btn-outline-danger rounded-pill px-3 fw-bold"
-                                style={{ fontSize: '11px' }}
-                              >
-                                Restock
-                              </button>
-                              <button 
-                                onClick={() => setDeletingItem(item)}
-                                className="btn btn-sm btn-outline-secondary rounded-pill px-2 py-1"
-                                title="Delete Item"
-                                style={{ fontSize: '11px' }}
-                              >
-                                <FiTrash2 size={13} className="text-danger" />
-                              </button>
-                            </div>
+                            <button 
+                              onClick={() => handleStartRestock(item)}
+                              className="btn btn-sm btn-outline-danger rounded-pill px-3 fw-bold"
+                              style={{ fontSize: '11px' }}
+                            >
+                              Restock
+                            </button>
                           </td>
                         )}
                       </tr>
@@ -546,29 +542,6 @@ export const Inventory = () => {
             )}
           </form>
         </Modal>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {canManageStock && (
-        <ConfirmModal
-          isOpen={Boolean(deletingItem)}
-          title="Delete Inventory Item"
-          message={`Are you sure you want to delete "${deletingItem?.name}" from inventory? This action cannot be undone.`}
-          onClose={() => setDeletingItem(null)}
-          onConfirm={async () => {
-            if (!deletingItem) return;
-            setDeleteLoading(true);
-            try {
-              await inventoryService.deleteInventoryItem(deletingItem.id);
-              await fetchInventorySilently();
-            } catch (e) {
-              window.alert(e.message || 'The inventory record could not be deleted.');
-            }
-            setDeleteLoading(false);
-            setDeletingItem(null);
-          }}
-          loading={deleteLoading}
-        />
       )}
     </AdminLayout>
   );

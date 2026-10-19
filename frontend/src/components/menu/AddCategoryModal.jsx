@@ -19,8 +19,14 @@ export const AddCategoryModal = ({
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       setErrorMsg('Please enter a category name.');
+      return;
+    }
+
+    if (['all', 'all categories', 'all category'].includes(trimmedName.toLowerCase())) {
+      setErrorMsg('"All Categories" is an aggregate view and cannot be created as a category.');
       return;
     }
 

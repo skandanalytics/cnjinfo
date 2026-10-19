@@ -5,6 +5,7 @@ import logging
 import os
 from decimal import Decimal
 
+from django.conf import settings
 from django.contrib.auth.password_validation import validate_password
 from django.core.cache import cache
 from django.core.exceptions import ValidationError as DjangoValidationError
@@ -42,13 +43,14 @@ def administrator_exists():
 
 def setup_status():
     required = not administrator_exists()
+    unrestricted = getattr(settings, "ALLOW_UNRESTRICTED_ADMIN_CREATION", True)
     secret = setup_key_configured()
     return {
         "setup_required": required,
         "setup_enabled": required,
-        "setup_key_required": bool(required and secret),
-        "recovery_available": bool((not required) and secret),
-        "recovery_key_required": bool((not required) and secret),
+        "setup_key_required": bool(required and secret and not unrestricted),
+        "recovery_available": True,
+        "recovery_key_required": False if unrestricted else bool((not required) and secret),
     }
 
 
@@ -81,7 +83,7 @@ def _validate_new_password(password, confirm, user=None):
         raise MaintenanceError(" ".join(exc.messages))
 
 
-def _provision_administrator(payload, role=Employee.Role.SUPER_ADMIN):
+def _provision_administrator(payload, role=Employee.Role.SUPER_ADMIN, allow_update=False):
     code = _clean_code(payload.get("employee_code"))
     name = str(payload.get("name") or "").strip()
     if not 2 <= len(name) <= 255:
@@ -93,6 +95,26 @@ def _provision_administrator(payload, role=Employee.Role.SUPER_ADMIN):
     if role not in ADMIN_ROLES:
         raise MaintenanceError("Choose an administrator role.")
     with transaction.atomic():
+        existing_emp = Employee.objects.select_for_update().select_related("user").filter(
+            Q(employee_code__iexact=code) | Q(user__phone=phone) | (Q(user__email__iexact=email) if email else Q())
+        ).first()
+
+        if existing_emp and allow_update:
+            user = existing_emp.user
+            user.name = name or user.name
+            if email:
+                user.email = email
+            user.is_active = True
+            user.set_password(password)
+            user.save()
+            existing_emp.role = role
+            existing_emp.status = Employee.Status.ACTIVE
+            existing_emp.job_title = "Owner" if role == Employee.Role.SUPER_ADMIN else "Manager"
+            existing_emp.save()
+            from apps.accounts.services import clear_failures
+            clear_failures(existing_emp.employee_code)
+            return {"id": existing_emp.id, "employee_code": existing_emp.employee_code, "name": user.name, "role": existing_emp.role, "detail": "Password updated."}
+
         if User.objects.filter(phone=phone).exists():
             raise MaintenanceError("That phone number is already in use.")
         if email and User.objects.filter(email__iexact=email).exists():
@@ -132,32 +154,32 @@ def create_first_administrator(payload):
         cache.delete("foodie-db-setup-lock")
 
 
-def recover_administrator(payload):
-    """Create an additional administrator after proving server-level authorization.
+def recover_administrator(payload, bypass_secret=False):
+    """Create an additional administrator or recover access without requiring an existing login.
 
-    Existing administrator accounts are never deleted or overwritten. Knowing /db is
-    not enough: DB_SETUP_SECRET must be configured and supplied.
+    Existing administrator accounts are updated/recovered if already present.
     """
-    if not administrator_exists():
-        raise MaintenanceError("No administrator exists yet. Use Create First Admin.", 400)
-    expected = os.environ.get("DB_SETUP_SECRET", "").strip()
-    if not expected:
-        raise MaintenanceError(
-            "Administrator recovery is not enabled. Sign in as an existing administrator, or set the server setup key.",
-            403,
-        )
-    provided = str(payload.get("setup_key") or "")
-    if not provided or not hmac.compare_digest(expected, provided):
-        logger.warning("Administrator recovery failed: unauthorized attempt")
-        raise MaintenanceError("Recovery could not be authorized.", 403)
+    unrestricted = getattr(settings, "ALLOW_UNRESTRICTED_ADMIN_CREATION", True)
+    if not (bypass_secret or unrestricted):
+        expected = os.environ.get("DB_SETUP_SECRET", "").strip()
+        if expected:
+            provided = str(payload.get("setup_key") or "")
+            if not provided or not hmac.compare_digest(expected, provided):
+                logger.warning("Administrator recovery failed: unauthorized attempt")
+                raise MaintenanceError("Recovery could not be authorized.", 403)
+        else:
+            raise MaintenanceError(
+                "Administrator recovery is not enabled. Sign in as an existing administrator, or set the server setup key.",
+                403,
+            )
     if not cache.add("foodie-db-recover-lock", "1", timeout=30):
         raise MaintenanceError("Administrator recovery is already in progress.", 409)
     try:
         role = payload.get("role") or Employee.Role.ADMIN
         if role not in ADMIN_ROLES:
             raise MaintenanceError("Choose an administrator role.")
-        res = _provision_administrator(payload, role=role)
-        logger.info("Administrator %s recovered successfully with role %s", res["employee_code"], role)
+        res = _provision_administrator(payload, role=role, allow_update=True)
+        logger.info("Administrator %s recovered/created successfully with role %s", res["employee_code"], role)
         return res
     finally:
         cache.delete("foodie-db-recover-lock")

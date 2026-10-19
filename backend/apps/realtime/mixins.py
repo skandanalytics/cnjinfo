@@ -26,3 +26,9 @@ class CatalogBroadcastMixin:
     def perform_update(self, serializer):
         super().perform_update(serializer)
         self._broadcast_catalog(serializer.instance, "updated")
+
+    def perform_destroy(self, instance):
+        branch_id = self._catalog_branch_id(instance)
+        super().perform_destroy(instance)
+        if branch_id:
+            publish_catalog_event(branch_id, self.catalog_resource, "deleted")

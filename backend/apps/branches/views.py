@@ -15,6 +15,8 @@ from apps.accounts.permissions import IsAdminLevel, IsOwnerLevel, IsStaffMember,
 from apps.accounts.scoping import BranchScopedMixin, allowed_branch_id
 from apps.accounts.services import client_ip
 from apps.orders.models import Order
+from apps.realtime.mixins import CatalogBroadcastMixin
+from apps.realtime.publish import publish_catalog_event
 
 from .models import Branch, DiningTable, TableView, qr_ordering_enabled
 from .qr import render_png
@@ -22,7 +24,8 @@ from .serializers import BranchSerializer, TableSerializer, TableViewSerializer
 from .services import BranchDeleteError, delete_branch
 
 
-class BranchViewSet(AuditedMixin, viewsets.ModelViewSet):
+class BranchViewSet(CatalogBroadcastMixin, AuditedMixin, viewsets.ModelViewSet):
+    catalog_resource = "branch"
     """Create/delete: owner-level staff only. Edit: admin-level. Read: staff (own branch only if limited).
     DELETE removes the branch and its configuration (see branches.services); orders and bills are kept.
     If the deleted branch is primary, another surviving branch is promoted automatically."""
@@ -79,7 +82,8 @@ class BranchViewSet(AuditedMixin, viewsets.ModelViewSet):
         return Response({"detail": "Branch deleted.", "deleted": True, "summary": summary})
 
 
-class TableViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
+class TableViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
+    catalog_resource = "table"
     audit_entity = "Table"
     queryset = DiningTable.objects.select_related("branch").order_by("branch_id", "table_number")
     serializer_class = TableSerializer
@@ -100,7 +104,9 @@ class TableViewSet(AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
         with transaction.atomic():
             Order.objects.filter(table=table, table_label="").update(table_label=table.table_number)
             self.audit("delete", table)
+            branch_id = table.branch_id
             table.delete()
+        publish_catalog_event(branch_id, "table", "deleted")
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @action(detail=True, methods=["post"], url_path="set-status", permission_classes=[IsStaffMember])

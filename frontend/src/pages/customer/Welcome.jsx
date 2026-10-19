@@ -12,6 +12,7 @@ import { availableTables, resolvePublicBranchId, selectableTables } from '../../
 import {
   DINE_IN, NO_TABLES_MESSAGE, TAKEAWAY, hasScannedTable, rememberScannedTableQr, setOrderType, setSelectedTableId,
 } from '../../utils/orderContext';
+import { formatCompactTableLabel } from '../../utils/tableUtils';
 
 export const Welcome = () => {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ export const Welcome = () => {
   const { sendOTP, verifyOTP } = useAuth();
 
   const [tableNum, setTableNum] = useState(() => {
-    return tableParam ? tableService.getCanonicalTableNumber(tableParam) : '';
+    return tableParam ? formatCompactTableLabel(tableParam) : '';
   });
   const [phone, setPhone] = useState('');
   const [otp, setOtp] = useState('');
@@ -418,7 +419,7 @@ export const Welcome = () => {
             <div className="mb-4">
               {tableNum && String(tableNum).toLowerCase() !== 'takeaway' && (
                 <div className="badge bg-danger-subtle text-danger px-3 py-1.5 rounded-pill fw-bold mb-2 font-monospace" style={{ fontSize: '12px' }}>
-                  Table: {tableService.getCanonicalTableNumber(tableNum)}
+                  {formatCompactTableLabel(tableNum)}
                 </div>
               )}
               <h4 className="fw-bold text-dark mb-1">Choose Dining Option</h4>
@@ -426,18 +427,30 @@ export const Welcome = () => {
             </div>
 
             {tableChoices && !qrParam && !hasScannedTable() && (
-              <div className="d-flex flex-column gap-2 mb-3 text-start">
-                <p className="small fw-semibold mb-1">Choose your table</p>
-                {tableChoices.map((table) => (
-                  <button
-                    key={table.id}
-                    type="button"
-                    className="btn btn-outline-danger text-start"
-                    onClick={() => claimTable(table)}
-                  >
-                    Table {table.table_number}{table.location ? ` · ${table.location}` : ''}
-                  </button>
-                ))}
+              <div className="mb-3 text-start">
+                <p className="small fw-semibold mb-2 text-secondary">Choose your table:</p>
+                <div className="d-flex flex-wrap gap-2">
+                  {tableChoices.map((table) => {
+                    const label = formatCompactTableLabel(table.table_number);
+                    const isSelected = tableNum && formatCompactTableLabel(tableNum) === label;
+                    return (
+                      <button
+                        key={table.id}
+                        type="button"
+                        className={`btn btn-sm rounded-3 px-3 py-1.5 fw-bold font-monospace transition-all border ${
+                          isSelected
+                            ? 'btn-danger text-white border-danger shadow-xs'
+                            : 'btn-outline-danger bg-white'
+                        }`}
+                        style={{ fontSize: '13px', minWidth: '56px' }}
+                        title={table.location ? `${label} (${table.location})` : label}
+                        onClick={() => claimTable(table)}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -465,7 +478,7 @@ export const Welcome = () => {
                       : qrParam && !hasScannedTable()
                         ? (qrDisabled ? 'This table QR cannot be used' : 'Confirming this table…')
                         : tableNum && String(tableNum).toLowerCase() !== 'takeaway' && (qrParam || hasScannedTable())
-                          ? `Dine in at table ${tableService.getCanonicalTableNumber(tableNum)}`
+                          ? `Dine in at table ${formatCompactTableLabel(tableNum)}`
                           : 'Served at an available table, or scan the QR code on your table'}
                   </span>
                 </div>

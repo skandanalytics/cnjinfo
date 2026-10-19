@@ -130,9 +130,10 @@ def _table_for_dine_in(branch, qr_code=None, table_id=None):
     qs = DiningTable.objects.select_for_update().filter(branch=branch, is_active=True)
     if qr_code is not None:
         table = qs.filter(qr_code=qr_code, qr_is_active=True).first()
-        if table is None:
+        if table:
+            return table
+        if table_id is None:
             raise CartError("Invalid or inactive QR code for this branch.", "qr_invalid")
-        return table
     if table_id is not None:
         table = qs.filter(pk=table_id).first()
         if table is None:
@@ -238,9 +239,7 @@ def evaluate(cart, request=None, code_override=None):
                 issues.append({"item_id": None, "detail": e["detail"]})
 
     context_issue = None
-    if cart.order_type == Cart.OrderType.DINE_IN and cart.table_id is None:
-        context_issue = "Scan the table QR code to order Dine-In, or choose Takeaway."
-    elif cart.table_id:
+    if cart.table_id:
         table = DiningTable.objects.filter(pk=cart.table_id).first()
         if table is None or table.branch_id != cart.branch_id or not table.is_active:
             context_issue = "This table is no longer available."

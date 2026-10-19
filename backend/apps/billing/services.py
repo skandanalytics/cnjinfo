@@ -66,7 +66,8 @@ def preview_bill(order):
 
 @transaction.atomic
 def ensure_final_invoice(order):
-    if order.status != Order.Status.COMPLETED:
+    is_takeaway = (order.order_type == Order.Type.TAKEAWAY)
+    if order.status != Order.Status.COMPLETED and not (is_takeaway and order.status == Order.Status.SERVED):
         raise BillingError("The invoice is available after the order is completed.", "invoice_not_ready", 409)
     existing = Invoice.objects.filter(order_id=order.pk).first()
     if existing:

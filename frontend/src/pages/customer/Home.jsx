@@ -23,6 +23,8 @@ import { couponService } from '../../services/couponService';
 import OrderTypeModal from '../../components/customer/OrderTypeModal';
 import { getOrderType, hasDineInTable, hasScannedTable, setOrderType } from '../../utils/orderContext';
 import SearchBar from '../../components/common/SearchBar';
+import formatCurrency from '../../utils/formatCurrency';
+import { formatCompactTableLabel } from '../../utils/tableUtils';
 
 const ITEMS_PER_PAGE = 12;
 
@@ -71,14 +73,14 @@ export const Home = () => {
   const [selectedCategories, setSelectedCategories] = useState(['All']);
   const [search, setSearch] = useState('');
   const [sortBy, setSortBy] = useState('DEFAULT');
-  const [selectedFoodType, setSelectedFoodType] = useState(null);
+  const [selectedFoodTypes, setSelectedFoodTypes] = useState([]);
   const foodTypeOf = (dish) => normalizeFoodType(
     dish.foodType ?? dish.type ?? dish.food_type ?? (dish.is_veg === false || dish.is_veg === 'false' ? 'non-veg' : 'veg')
   );
   const availableFoodTypes = new Set((products || []).map(foodTypeOf));
   useEffect(() => {
-    if (selectedFoodType && !availableFoodTypes.has(selectedFoodType)) setSelectedFoodType(null);
-  }, [products, selectedFoodType]);
+    setSelectedFoodTypes((prev) => prev.filter((t) => availableFoodTypes.has(t)));
+  }, [products]);
   const [currentPage, setCurrentPage] = useState(1);
   const [activeOrders, setActiveOrders] = useState([]);
   const [customerOrders, setCustomerOrders] = useState([]);
@@ -124,7 +126,6 @@ export const Home = () => {
   const isAllSelected = selectedCategories.includes('All') || selectedCategories.length === 0;
 
   const handleToggleCategory = (cat) => {
-    setSelectedFoodType(null);
     setCurrentPage(1);
 
     if (cat === 'All') {
@@ -255,7 +256,7 @@ export const Home = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [selectedCategories, sortBy, selectedFoodType, search]);
+  }, [selectedCategories, sortBy, selectedFoodTypes, search]);
 
   useEffect(() => {
     let isMounted = true;
@@ -321,8 +322,10 @@ export const Home = () => {
     };
   }, [user, isEmployee]);
 
-  const handleFoodTypeClick = (type) => {
-    setSelectedFoodType((prev) => (prev === type ? null : type));
+  const handleFoodTypeToggle = (type) => {
+    setSelectedFoodTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
     setCurrentPage(1);
   };
 
@@ -355,14 +358,12 @@ export const Home = () => {
     sortBy
   });
 
-  const effectiveSelectedFoodTypes = selectedFoodType ? [selectedFoodType] : [];
-
   const filteredDishes = filterAndSortProducts(baseFilteredDishes, {
     selectedCategories: ['All'], // Already filtered by categories
     category: 'All', // Already filtered by category
     search: '', // Already filtered by search
     sortBy,
-    selectedFoodTypes: effectiveSelectedFoodTypes
+    selectedFoodTypes: selectedFoodTypes
   });
 
   const totalPages = Math.ceil(filteredDishes.length / ITEMS_PER_PAGE);
@@ -418,9 +419,11 @@ export const Home = () => {
                 <span className="badge bg-danger text-white fw-bold rounded-pill px-3 py-1.5" style={{ fontSize: '11px' }}>
                   Taking Order
                 </span>
-                <span className="fw-bold fs-6 text-white">
-                  Table {tableContext?.tableNumber ? (String(tableContext.tableNumber).startsWith('T') ? tableContext.tableNumber : `T0${tableContext.tableNumber}`) : 'T01'}
-                </span>
+                {formatCompactTableLabel(tableContext?.tableNumber) && (
+                  <span className="fw-bold fs-6 text-white font-monospace">
+                    {formatCompactTableLabel(tableContext?.tableNumber)}
+                  </span>
+                )}
                 {tableContext?.diners && (
                   <span className="badge bg-secondary rounded-pill small" style={{ fontSize: '10px' }}>
                     {tableContext.diners} Diners
@@ -477,7 +480,7 @@ export const Home = () => {
             >
               OFFER OF THE DAY
             </span>
-            <h2 className="fw-bold mb-1">{activeBanner.type === 'percentage' ? `Flat ${activeBanner.discount}% OFF` : `Flat ₹${activeBanner.discount} OFF`}</h2>
+            <h2 className="fw-bold mb-1">{activeBanner.type === 'percentage' ? `Flat ${activeBanner.discount}% OFF` : `Flat ${formatCurrency(activeBanner.discount)} OFF`}</h2>
             <p className="small mb-0 opacity-90">
               Use code: <strong className="text-white">{activeBanner.code}</strong> | {activeBanner.description}
             </p>
@@ -519,7 +522,7 @@ export const Home = () => {
                           {stText}
                         </span>
                         <span className="small text-white opacity-90 fw-semibold" style={{ fontSize: '12px' }}>
-                          Table {ord.table || 'Takeaway'}
+                          {formatCompactTableLabel(ord.table) || 'Takeaway'}
                         </span>
                         {ord.items && ord.items.length > 0 && (
                           <span className="small text-white opacity-80" style={{ fontSize: '11px' }}>
@@ -532,7 +535,7 @@ export const Home = () => {
                         {(ord.items || []).length > 3 ? '…' : ''}
                       </div>
                       <div className="small text-white-50">
-                        Total: <strong className="text-white">₹{ord.total || ord.total_amount}</strong>
+                        Total: <strong className="text-white">{formatCurrency(ord.total || ord.total_amount)}</strong>
                       </div>
                     </div>
 
@@ -611,9 +614,9 @@ export const Home = () => {
                 aria-label="Filter and sort options"
               >
                 <option value="DEFAULT">Sort: All</option>
+                <option value="HIGHEST_DISCOUNT">Highest Discount</option>
                 <option value="PRICE_LOW_HIGH">Price: Low to High</option>
                 <option value="PRICE_HIGH_LOW">Price: High to Low</option>
-                <option value="DISCOUNT_ANY">Discount</option>
               </select>
             )}
           </div>
@@ -668,53 +671,74 @@ export const Home = () => {
               <span className="small fw-semibold text-secondary me-1" style={{ fontSize: '12px' }}>Food Type:</span>
 
               {availableFoodTypes.has('veg') && (
-              <button
-                type="button"
-                onClick={() => handleFoodTypeClick('veg')}
-                className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'veg'
-                  ? 'bg-success text-white border-success shadow-sm'
-                  : 'bg-white text-dark border-light shadow-sm'
+                <label
+                  htmlFor="customer-food-filter-veg"
+                  className={`food-type-control food-type-control-veg ${
+                    selectedFoodTypes.includes('veg') ? 'is-selected-veg' : ''
                   }`}
-                style={{ fontSize: '11px', cursor: 'pointer' }}
-              >
-                <span className="veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                <span>Veg</span>
-              </button>
+                >
+                  <input
+                    type="checkbox"
+                    id="customer-food-filter-veg"
+                    checked={selectedFoodTypes.includes('veg')}
+                    onChange={() => handleFoodTypeToggle('veg')}
+                    className="food-type-checkbox checkbox-veg"
+                    aria-label="Filter Vegetarian"
+                  />
+                  <span className="veg-badge ms-0.5"></span>
+                  <span className="ms-0.5">Veg</span>
+                </label>
               )}
 
               {availableFoodTypes.has('non-veg') && (
-              <button
-                type="button"
-                onClick={() => handleFoodTypeClick('non-veg')}
-                className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'non-veg'
-                  ? 'bg-danger text-white border-danger shadow-sm'
-                  : 'bg-white text-dark border-light shadow-sm'
+                <label
+                  htmlFor="customer-food-filter-non-veg"
+                  className={`food-type-control food-type-control-non-veg ${
+                    selectedFoodTypes.includes('non-veg') ? 'is-selected-non-veg' : ''
                   }`}
-                style={{ fontSize: '11px', cursor: 'pointer' }}
-              >
-                <span className="non-veg-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                <span>Non-Veg</span>
-              </button>
+                >
+                  <input
+                    type="checkbox"
+                    id="customer-food-filter-non-veg"
+                    checked={selectedFoodTypes.includes('non-veg')}
+                    onChange={() => handleFoodTypeToggle('non-veg')}
+                    className="food-type-checkbox checkbox-non-veg"
+                    aria-label="Filter Non-Vegetarian"
+                  />
+                  <span className="non-veg-badge ms-0.5"></span>
+                  <span className="ms-0.5">Non-Veg</span>
+                </label>
               )}
 
               {availableFoodTypes.has('vegan') && (
-              <button
-                type="button"
-                onClick={() => handleFoodTypeClick('vegan')}
-                className={`btn btn-sm d-flex align-items-center gap-1.5 rounded-pill px-3 py-1.5 fw-semibold transition-all border ${selectedFoodType === 'vegan'
-                  ? 'text-white shadow-sm'
-                  : 'bg-white text-dark border-light shadow-sm'
+                <label
+                  htmlFor="customer-food-filter-vegan"
+                  className={`food-type-control food-type-control-vegan ${
+                    selectedFoodTypes.includes('vegan') ? 'is-selected-vegan' : ''
                   }`}
-                style={{
-                  fontSize: '11px',
-                  cursor: 'pointer',
-                  backgroundColor: selectedFoodType === 'vegan' ? '#059669' : '#ffffff',
-                  borderColor: selectedFoodType === 'vegan' ? '#059669' : undefined
-                }}
-              >
-                <span className="vegan-badge me-1" style={{ backgroundColor: '#ffffff' }}></span>
-                <span>Vegan</span>
-              </button>
+                >
+                  <input
+                    type="checkbox"
+                    id="customer-food-filter-vegan"
+                    checked={selectedFoodTypes.includes('vegan')}
+                    onChange={() => handleFoodTypeToggle('vegan')}
+                    className="food-type-checkbox checkbox-vegan"
+                    aria-label="Filter Vegan"
+                  />
+                  <span className="vegan-badge ms-0.5"></span>
+                  <span className="ms-0.5">Vegan</span>
+                </label>
+              )}
+
+              {selectedFoodTypes.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedFoodTypes([])}
+                  className="btn btn-link btn-sm text-secondary text-decoration-none p-0 ms-1"
+                  style={{ fontSize: '11px' }}
+                >
+                  Clear filter
+                </button>
               )}
             </div>
           )}
@@ -736,8 +760,8 @@ export const Home = () => {
               title="No Dishes Found"
               description="We couldn't find anything matching your filters. Try selecting another category or sort option!"
               icon="bi-emoji-frown"
-              buttonText={(sortBy !== 'DEFAULT' || selectedFoodType !== null) ? "Back to Previous Sort" : undefined}
-              onButtonClick={(sortBy !== 'DEFAULT' || selectedFoodType !== null) ? () => { setSortBy('DEFAULT'); setSelectedFoodType(null); } : undefined}
+              buttonText={(sortBy !== 'DEFAULT' || selectedFoodTypes.length > 0) ? "Back to Previous Sort" : undefined}
+              onButtonClick={(sortBy !== 'DEFAULT' || selectedFoodTypes.length > 0) ? () => { setSortBy('DEFAULT'); setSelectedFoodTypes([]); } : undefined}
             />
           ) : (
             <>

@@ -57,8 +57,7 @@ class OrderListCreateView(APIView):
             qs = Order.objects.all()
             if emp.branch_id is not None:
                 qs = qs.filter(branch_id=emp.branch_id)
-            # Staff below manager only receive orders they placed. A query parameter cannot widen that.
-            if emp.role not in ADMIN_ROLES or request.query_params.get("mine") == "1":
+            if request.query_params.get("mine") == "1":
                 qs = qs.filter(placed_by=user)
         status_filter = request.query_params.get("status")
         if status_filter:
@@ -72,12 +71,21 @@ class OrderListCreateView(APIView):
 class AssistedItemSerializer(serializers.Serializer):
     food = serializers.IntegerField(min_value=1)
     quantity = serializers.IntegerField(min_value=1, max_value=99)
+    options = serializers.ListField(child=serializers.IntegerField(), required=False, default=list)
+    special_instructions = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
 
 
 class AssistedOrderSerializer(serializers.Serializer):
-    table = serializers.IntegerField(min_value=1)
+    table = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    branch = serializers.IntegerField(min_value=1, required=False, allow_null=True)
+    order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY"], default="DINE_IN")
     items = AssistedItemSerializer(many=True)
     idempotency_key = serializers.CharField(max_length=64)
+    coupon_code = serializers.CharField(max_length=50, required=False, allow_blank=True, default="")
+    customer_phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+    customer_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    payment_method = serializers.CharField(max_length=30, required=False, default="CASH")
+    mark_paid = serializers.BooleanField(required=False, default=False)
 
 
 class AssistedOrderView(APIView):
@@ -90,7 +98,19 @@ class AssistedOrderView(APIView):
         if not data["items"]:
             return Response({"detail": "Add at least one dish.", "code": "cart_empty"}, status=400)
         try:
-            order, created = create_assisted(request.user, data["table"], data["items"], data["idempotency_key"])
+            order, created = create_assisted(
+                request.user,
+                data.get("table"),
+                data["items"],
+                data["idempotency_key"],
+                branch_id=data.get("branch"),
+                order_type=data.get("order_type", Order.Type.DINE_IN),
+                coupon_code=data.get("coupon_code", ""),
+                customer_phone=data.get("customer_phone", ""),
+                customer_name=data.get("customer_name", ""),
+                mark_paid=data.get("mark_paid", False),
+                payment_method=data.get("payment_method", "CASH"),
+            )
         except OrderError as exc:
             return _error(exc)
         if created:
@@ -123,7 +143,10 @@ class OrderDetailView(APIView):
 
     def _visible(self, request, pk):
         try:
-            order = Order.objects.prefetch_related("items", "status_history").get(pk=pk)
+            if str(pk).isdigit():
+                order = Order.objects.prefetch_related("items", "status_history").get(pk=int(pk))
+            else:
+                order = Order.objects.prefetch_related("items", "status_history").get(order_number=str(pk))
         except Order.DoesNotExist:
             return None
         user = request.user
@@ -133,8 +156,6 @@ class OrderDetailView(APIView):
             return order if order.customer_id == user.id else None
         if not can_access_branch(user, order.branch_id):
             return None
-        if not _sees_every_order(user) and order.placed_by_id != user.id:
-            return None
         return order
 
 
@@ -142,10 +163,11 @@ class OrderTransitionView(APIView):
     permission_classes = [IsStaffMember]
 
     def post(self, request, pk):
-        order = Order.objects.filter(pk=pk).first()
+        if str(pk).isdigit():
+            order = Order.objects.filter(pk=int(pk)).first()
+        else:
+            order = Order.objects.filter(order_number=str(pk)).first()
         if order is None or not can_access_branch(request.user, order.branch_id):
-            return Response({"detail": "Not found."}, status=404)
-        if not _sees_every_order(request.user) and order.placed_by_id != request.user.id:
             return Response({"detail": "Not found."}, status=404)
         new_status = request.data.get("status", "")
         if new_status not in Order.Status.values:
@@ -168,8 +190,6 @@ class KitchenQueueView(APIView):
                                               Order.Status.SERVED, Order.Status.COMPLETED])
         if emp.branch_id is not None:
             qs = qs.filter(branch_id=emp.branch_id)
-        if emp.role not in ADMIN_ROLES:
-            qs = qs.filter(placed_by=request.user)
         wanted = request.query_params.get("status")
         if wanted:
             qs = qs.filter(status=wanted)

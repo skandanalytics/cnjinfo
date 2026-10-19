@@ -42,6 +42,10 @@ export const Offers = () => {
   const [deletingDishOffer, setDeletingDishOffer] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
+  // Deleting coupon confirmation modal
+  const [deletingCoupon, setDeletingCoupon] = useState(null);
+  const [deleteCouponLoading, setDeleteCouponLoading] = useState(false);
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -104,12 +108,21 @@ export const Offers = () => {
     window.addEventListener('foodie_offers_updated', handleSync);
     window.addEventListener('foodie_products_updated', handleSync);
     window.addEventListener('foodie_inventory_updated', handleSync);
+    window.addEventListener('foodie_data_sync_refetch', handleSync);
     window.addEventListener('storage', handleStorage);
+    window.addEventListener('focus', handleSync);
+    const handleVis = () => {
+      if (document.visibilityState === 'visible') handleSync();
+    };
+    document.addEventListener('visibilitychange', handleVis);
     return () => {
       window.removeEventListener('foodie_offers_updated', handleSync);
       window.removeEventListener('foodie_products_updated', handleSync);
       window.removeEventListener('foodie_inventory_updated', handleSync);
+      window.removeEventListener('foodie_data_sync_refetch', handleSync);
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleVis);
     };
   }, []);
 
@@ -175,16 +188,25 @@ export const Offers = () => {
     }
   };
 
-  const handleDeleteCoupon = async (id, couponCode) => {
-    if (window.confirm("Are you sure you want to delete this coupon?")) {
-      // Optimistic update
-      setCoupons(prev => prev.filter(c => c.id !== id && String(c.code).toUpperCase() !== String(couponCode).toUpperCase()));
-      try {
-        const updated = await couponService.deleteCoupon(id, couponCode);
-        setCoupons(updated);
-      } catch (e) {
-        console.error("Error deleting coupon:", e);
-      }
+  const handleDeleteCouponClick = (id, couponCode) => {
+    setDeletingCoupon({ id, code: couponCode });
+  };
+
+  const handleConfirmDeleteCoupon = async () => {
+    if (!deletingCoupon) return;
+    setDeleteCouponLoading(true);
+    const { id, code } = deletingCoupon;
+    setCoupons(prev => prev.filter(c => c.id !== id && String(c.code).toUpperCase() !== String(code).toUpperCase()));
+    try {
+      const updated = await couponService.deleteCoupon(id, code);
+      setCoupons(updated);
+    } catch (e) {
+      console.error("Error deleting coupon:", e);
+      window.alert(e.message || "Failed to delete coupon.");
+      await fetchDataSilently();
+    } finally {
+      setDeleteCouponLoading(false);
+      setDeletingCoupon(null);
     }
   };
 
@@ -592,7 +614,7 @@ export const Offers = () => {
                             {c.status === 'Active' ? 'Deactivate' : 'Activate'}
                           </button>
                           <button
-                            onClick={() => handleDeleteCoupon(c.id, c.code)}
+                            onClick={() => handleDeleteCouponClick(c.id, c.code)}
                             className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-flex align-items-center gap-1"
                             title="Delete Coupon"
                             style={{ fontSize: '11px' }}
@@ -690,6 +712,17 @@ export const Offers = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Delete Coupon Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deletingCoupon)}
+        title="Delete Promo Coupon"
+        message={`Are you sure you want to delete coupon "${deletingCoupon?.code}"? Customers will no longer be able to apply this discount.`}
+        confirmText="Delete Coupon"
+        onClose={() => setDeletingCoupon(null)}
+        onConfirm={handleConfirmDeleteCoupon}
+        loading={deleteCouponLoading}
+      />
     </AdminLayout>
   );
 };

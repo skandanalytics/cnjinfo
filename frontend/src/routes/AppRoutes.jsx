@@ -33,6 +33,7 @@ import Branches from '../pages/admin/Branches';
 import Offers from '../pages/admin/Offers';
 import Analytics from '../pages/admin/Analytics';
 import Settings from '../pages/admin/Settings';
+import Pos from '../pages/admin/Pos';
 import EmployeeDashboard from '../pages/employee/EmployeeDashboard';
 import DatabaseConsole from '../pages/db/Database';
 
@@ -98,6 +99,16 @@ export const AppRoutes = () => {
       <Route path="/employee/tables" element={
         <AdminRoute>
           <Tables />
+        </AdminRoute>
+      } />
+      <Route path="/admin/pos" element={
+        <AdminRoute>
+          <Pos />
+        </AdminRoute>
+      } />
+      <Route path="/employee/pos" element={
+        <AdminRoute>
+          <Pos />
         </AdminRoute>
       } />
       <Route path="/admin/orders" element={

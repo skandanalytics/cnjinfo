@@ -145,12 +145,12 @@ export const Cart = () => {
     }
   };
 
-  const currentNetSubtotal = Number(serverCart?.pricing?.merchandise_total ?? getSubtotal());
+  const currentNetSubtotal = Math.round(Number(serverCart?.pricing?.merchandise_total ?? getSubtotal()) * 100) / 100;
   const suggestion = availableCoupons
     .filter((row) => isFirstTime || !(row.isFirstTimeOffer || row.is_first_time_offer))
     .map((row) => ({
       coupon: row,
-      remaining: Math.max(0, Number(row.minOrderValue || row.minimum_order_amount || 0) - currentNetSubtotal),
+      remaining: Math.max(0, Math.round((Number(row.minOrderValue || row.minimum_order_amount || 0) - currentNetSubtotal) * 100) / 100),
     }))
     .filter((row) => row.remaining > 0)
     .sort((a, b) => a.remaining - b.remaining)[0] || { coupon: null, remaining: 0 };
@@ -271,7 +271,7 @@ export const Cart = () => {
                       Unlock {suggestion.coupon.code} Savings!
                     </h6>
                     <p className="text-secondary small mb-2" style={{ fontSize: '11px', lineHeight: '1.4' }}>
-                      Add <strong className="text-danger">{formatCurrency(suggestion.remaining)}</strong> more to save with this coupon.
+                      Add items worth <strong className="text-danger">{formatCurrency(suggestion.remaining)}</strong> more to save with this coupon.
                     </p>
                   </div>
                 </div>
@@ -375,7 +375,7 @@ export const Cart = () => {
                           </span>
                         </div>
                         <div className="text-success fw-bold small" style={{ fontSize: '13px' }}>
-                          Discount: ₹{getDiscount()}
+                          Discount: {formatCurrency(getDiscount())}
                         </div>
                       </div>
                       <button 
@@ -417,15 +417,15 @@ export const Cart = () => {
 
               {/* Available Coupons Section */}
               <div className="mt-3 pt-3 border-top text-start">
-                <span className="small fw-semibold text-secondary mb-2 d-block">Available Coupons:</span>
+                <span className="small fw-semibold text-secondary mb-2 d-block">{coupon ? 'More Coupons:' : 'Available Coupons:'}</span>
                 <div className="d-flex flex-column gap-2">
                   {(() => {
                     const describeCoupon = (c) => {
                       const isPct = c.discount_type === 'PERCENTAGE' || c.type === 'percentage';
                       const value = Number(c.discount_value || c.discount || 0);
                       const minReq = Number(c.minOrderValue || c.minimum_order_amount || 0);
-                      const maxOff = c.maxDiscount != null ? ` up to ₹${c.maxDiscount}` : '';
-                      const valueLabel = isPct ? `${value}% off${maxOff}` : `₹${value} off`;
+                      const maxOff = c.maxDiscount != null ? ` up to ${formatCurrency(c.maxDiscount)}` : '';
+                      const valueLabel = isPct ? `${value}% off${maxOff}` : `${formatCurrency(value)} off`;
                       const until = c.valid_until ? new Date(c.valid_until) : null;
                       const from = c.valid_from ? new Date(c.valid_from) : null;
                       const now = new Date();
@@ -445,7 +445,8 @@ export const Cart = () => {
                         reason = 'This coupon is only for first-time customers.';
                       } else if (currentNetSubtotal < minReq) {
                         enabled = false;
-                        reason = `Add ₹${Math.max(0, Math.ceil(minReq - currentNetSubtotal))} more. Minimum order ₹${minReq}.`;
+                        const needed = Math.max(0, Math.round((minReq - currentNetSubtotal) * 100) / 100);
+                        reason = `Add items worth ${formatCurrency(needed)} more. Minimum order ${formatCurrency(minReq)}.`;
                       }
                       return {
                         valueLabel,
@@ -493,7 +494,7 @@ export const Cart = () => {
                           </span>
                           <div>
                             <div className="small fw-semibold text-dark" style={{ fontSize: '11px' }}>
-                              {info.valueLabel} · Min ₹{minReq}
+                              {info.valueLabel} · Min {formatCurrency(minReq)}
                             </div>
                             {c.description && <div className="text-secondary" style={{ fontSize: '10px' }}>{c.description}</div>}
                             {info.expiry && <div className="text-secondary" style={{ fontSize: '10px' }}>{info.expiry}</div>}
@@ -504,9 +505,19 @@ export const Cart = () => {
                         </div>
                         <div className="d-flex align-items-center gap-1.5 ms-auto">
                           {isApplied ? (
-                            <span className="badge bg-success text-white small fw-bold px-2.5 py-1 rounded-pill" style={{ fontSize: '11px' }}>
-                              Applied
-                            </span>
+                            <div className="d-flex align-items-center gap-1.5">
+                              <span className="badge bg-success text-white small fw-bold px-2.5 py-1 rounded-pill" style={{ fontSize: '11px' }}>
+                                Applied
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleRemovePromo}
+                                className="btn btn-sm btn-link text-danger fw-bold text-decoration-none py-0 px-1"
+                                style={{ fontSize: '11px' }}
+                              >
+                                Remove
+                              </button>
+                            </div>
                           ) : isEligible ? (
                             <button 
                               onClick={() => handleQuickApply(c.code)}
@@ -520,7 +531,7 @@ export const Cart = () => {
                               disabled
                               className="btn btn-sm btn-link text-muted fw-normal text-decoration-none py-0 px-2 opacity-50"
                               style={{ fontSize: '11px', cursor: 'not-allowed' }}
-                              title={`Requires minimum order subtotal of ₹${minReq}`}
+                              title={`Requires minimum order subtotal of ${formatCurrency(minReq)}`}
                             >
                               Apply
                             </button>
@@ -635,7 +646,7 @@ export const Cart = () => {
                   <span className="text-secondary small">Estimated Service Charge</span>
                 </div>
                 <span className={`fw-bold ${isServiceChargeRemoved ? 'text-muted text-decoration-line-through' : 'text-dark'}`}>
-                  {isServiceChargeRemoved ? '₹0' : formatCurrency(getServiceCharge())}
+                  {isServiceChargeRemoved ? formatCurrency(0) : formatCurrency(getServiceCharge())}
                 </span>
               </div>
               

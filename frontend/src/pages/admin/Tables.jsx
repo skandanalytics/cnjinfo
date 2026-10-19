@@ -191,32 +191,12 @@ export const Tables = () => {
   const sameBranchTables = (branchId) => (branchId ? tables.filter((t) => String(t.branch) === String(branchId)) : tables);
 
   const startStaffOrder = async ({ orderType, table }) => {
-    const { currentBranchId } = await import('../../services/adminApi');
-    const { staffJson } = await import('../../services/staffClient');
-    const { setOrderType, setSelectedTableId, rememberScannedTableQr } = await import('../../utils/orderContext');
-    const branchId = table?.branch || await currentBranchId();
-    sessionStorage.setItem('foodie_staff_ordering', '1');
-    sessionStorage.setItem('foodie_public_branch', String(branchId));
-    sessionStorage.setItem('foodie_branch_source', 'chosen');
-    sessionStorage.removeItem('foodie_cart');
-    rememberScannedTableQr(null);
-    setOrderType(orderType);
-    const body = { branch: Number(branchId), order_type: orderType };
-    if (orderType === 'DINE_IN') {
-      setSelectedTableId(table.id);
-      body.table = table.id;
+    const targetUrl = isAdmin ? '/admin/pos' : '/employee/pos';
+    if (orderType === 'DINE_IN' && table?.id) {
+      navigate(`${targetUrl}?table=${table.id}`);
     } else {
-      setSelectedTableId(null);
+      navigate(`${targetUrl}?type=takeaway`);
     }
-    try {
-      await staffJson(`/cart/?branch=${Number(branchId)}`, { method: 'DELETE' });
-      await clearCart();
-      await staffJson('/cart/context/', { method: 'PUT', body: JSON.stringify(body) });
-    } catch (err) {
-      sessionStorage.removeItem('foodie_staff_ordering');
-      throw err;
-    }
-    navigate('/customer/home');
   };
 
   const handleTakeOrder = async (table) => {
@@ -224,11 +204,8 @@ export const Tables = () => {
       window.alert('This table is inactive and cannot take a new order.');
       return;
     }
-    try {
-      await startStaffOrder({ orderType: 'DINE_IN', table });
-    } catch (err) {
-      window.alert(err.message || 'This table cannot be used for a new order.');
-    }
+    const targetUrl = isAdmin ? '/admin/pos' : '/employee/pos';
+    navigate(`${targetUrl}?table=${table.id}`);
   };
 
   const filteredTables = tables.filter((t) => {

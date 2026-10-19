@@ -132,10 +132,14 @@ html, body {
   border: 1.5px solid;
   width: 16px;
   height: 16px;
+  min-width: 16px;
+  min-height: 16px;
+  max-width: 16px;
+  max-height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 3.5px;
+  border-radius: 4px;
   background-color: #ffffff;
   flex-shrink: 0;
   vertical-align: middle;
@@ -167,11 +171,15 @@ html, body {
 .veg-badge::after,
 .non-veg-badge::after {
   content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 7px;
   height: 7px;
   border-radius: 50%;
   display: block;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -187,10 +195,14 @@ html, body {
 
 .vegan-badge::after {
   content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   width: 9px;
   height: 9px;
   display: block;
-  margin: 0 auto;
+  margin: 0;
   padding: 0;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -198,6 +210,108 @@ html, body {
   background-repeat: no-repeat;
   background-position: center;
   background-size: contain;
+}
+
+/* Food Type Filter Control (pill wrapper) */
+.food-type-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease-in-out;
+  margin-bottom: 0;
+  box-sizing: border-box;
+}
+
+.food-type-control:hover {
+  background-color: #f8fafc;
+}
+
+.food-type-control:focus-within {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
+/* When selected: CHANGE ONLY THE BACKGROUND COLOR OF THE FOOD-TYPE CONTROL */
+/* Do NOT change text color, border style, padding, dimensions, or icon appearance */
+.food-type-control.is-selected-veg,
+.food-type-control-veg:has(.food-type-checkbox:checked) {
+  background-color: #dcfce7 !important; /* Soft green tint */
+}
+
+.food-type-control.is-selected-non-veg,
+.food-type-control-non-veg:has(.food-type-checkbox:checked) {
+  background-color: #fee2e2 !important; /* Soft red tint */
+}
+
+.food-type-control.is-selected-vegan,
+.food-type-control-vegan:has(.food-type-checkbox:checked) {
+  background-color: #d1fae5 !important; /* Soft emerald tint */
+}
+
+/* Functional Checkbox - Absolutely NO Tick Mark */
+.food-type-checkbox {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px !important;
+  min-height: 15px !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 3.5px !important;
+  background-color: #ffffff !important;
+  background-image: none !important; /* STRICTLY NO TICK MARK */
+  outline: none !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+  box-sizing: border-box !important;
+  transition: all 0.15s ease-in-out !important;
+}
+
+.food-type-checkbox:hover {
+  border-color: #94a3b8 !important;
+}
+
+.food-type-checkbox:focus-visible {
+  outline: 2px solid var(--primary-color) !important;
+  outline-offset: 1px !important;
+}
+
+.food-type-checkbox:checked {
+  background-image: none !important; /* STRICTLY NO TICK MARK */
+}
+
+.food-type-control-veg .food-type-checkbox:checked {
+  background-color: #16a34a !important;
+  border-color: #16a34a !important;
+  background-image: none !important;
+}
+
+.food-type-control-non-veg .food-type-checkbox:checked {
+  background-color: #dc2626 !important;
+  border-color: #dc2626 !important;
+  background-image: none !important;
+}
+
+.food-type-control-vegan .food-type-checkbox:checked {
+  background-color: #059669 !important;
+  border-color: #059669 !important;
+  background-image: none !important;
 }
 
 /* Card Food-Type Badge Overlay Container */
@@ -449,3 +563,94 @@ html, body {
     break-inside: auto;
   }
 }
+
+/* ==========================================================================
+   Food-Type Checkbox System (Phase 2)
+   Eliminates browser/native blue highlight and blue tick.
+   Applies theme-consistent indicators: Green (Veg), Red (Non-Veg), Emerald (Vegan).
+   ========================================================================== */
+.foodie-checkbox,
+input[type="checkbox"].foodie-checkbox,
+.form-check-input.foodie-checkbox {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  -moz-appearance: none !important;
+  width: 15px !important;
+  height: 15px !important;
+  min-width: 15px !important;
+  min-height: 15px !important;
+  border: 1.5px solid #cbd5e1 !important;
+  border-radius: 4px !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  cursor: pointer !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  transition: all 0.15s ease-in-out !important;
+  flex-shrink: 0 !important;
+  vertical-align: middle !important;
+  outline: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  -webkit-tap-highlight-color: transparent !important;
+}
+
+.foodie-checkbox:focus-visible,
+input[type="checkbox"].foodie-checkbox:focus-visible {
+  box-shadow: 0 0 0 2px rgba(220, 53, 69, 0.25) !important;
+  border-color: var(--primary-color, #dc2626) !important;
+}
+
+.foodie-checkbox:checked,
+input[type="checkbox"].foodie-checkbox:checked {
+  background-color: var(--primary-color, #dc2626) !important;
+  border-color: var(--primary-color, #dc2626) !important;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%23ffffff'%3e%3cpath fill-rule='evenodd' d='M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z' clip-rule='evenodd'/%3e%3c/svg%3e") !important;
+  background-repeat: no-repeat !important;
+  background-position: center !important;
+  background-size: 11px 11px !important;
+}
+
+/* Veg Food-Type Checkbox */
+.foodie-checkbox.checkbox-veg:checked,
+input[type="checkbox"].foodie-checkbox.checkbox-veg:checked {
+  background-color: #16a34a !important;
+  border-color: #16a34a !important;
+  box-shadow: 0 1px 2px rgba(22, 163, 74, 0.25) !important;
+}
+
+.foodie-checkbox.checkbox-veg:focus-visible,
+input[type="checkbox"].foodie-checkbox.checkbox-veg:focus-visible {
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.35) !important;
+  border-color: #16a34a !important;
+}
+
+/* Non-Veg Food-Type Checkbox */
+.foodie-checkbox.checkbox-non-veg:checked,
+input[type="checkbox"].foodie-checkbox.checkbox-non-veg:checked {
+  background-color: #dc2626 !important;
+  border-color: #dc2626 !important;
+  box-shadow: 0 1px 2px rgba(220, 38, 38, 0.25) !important;
+}
+
+.foodie-checkbox.checkbox-non-veg:focus-visible,
+input[type="checkbox"].foodie-checkbox.checkbox-non-veg:focus-visible {
+  box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.35) !important;
+  border-color: #dc2626 !important;
+}
+
+/* Vegan Food-Type Checkbox */
+.foodie-checkbox.checkbox-vegan:checked,
+input[type="checkbox"].foodie-checkbox.checkbox-vegan:checked {
+  background-color: #059669 !important;
+  border-color: #059669 !important;
+  box-shadow: 0 1px 2px rgba(5, 150, 105, 0.25) !important;
+}
+
+.foodie-checkbox.checkbox-vegan:focus-visible,
+input[type="checkbox"].foodie-checkbox.checkbox-vegan:focus-visible {
+  box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.35) !important;
+  border-color: #059669 !important;
+}

@@ -95,11 +95,13 @@ export const OrderProvider = ({ children }) => {
       }
     };
     window.addEventListener('foodie_orders_updated', handleOrdersUpdated);
+    window.addEventListener('foodie_data_sync_refetch', handleOrdersUpdated);
     window.addEventListener('storage', handleStorage);
     const handleLogout = () => setOrders([]);
     window.addEventListener('foodie_logout', handleLogout);
     return () => {
       window.removeEventListener('foodie_orders_updated', handleOrdersUpdated);
+      window.removeEventListener('foodie_data_sync_refetch', handleOrdersUpdated);
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('foodie_logout', handleLogout);
     };
@@ -108,7 +110,7 @@ export const OrderProvider = ({ children }) => {
   useEffect(() => {
     const path = location.pathname || '';
     if (!staffHasSession()) return undefined;
-    if (path.includes('/kitchen') || path.includes('/orders') || path.includes('/tables') || path.includes('/dashboard')) {
+    if (path.includes('/kitchen') || path.includes('/orders') || path.includes('/tables') || path.includes('/dashboard') || path.includes('/pos')) {
       loadStaffOrders(false);
     }
   }, [location.pathname, loadStaffOrders]);

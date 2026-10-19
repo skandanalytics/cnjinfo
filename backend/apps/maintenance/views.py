@@ -85,18 +85,9 @@ class CreateAuthorizedAdminView(APIView):
             except MaintenanceError as exc:
                 return fail(exc)
 
-        # Unauthenticated recovery workflow
-        if not administrator_exists():
-            return Response({"detail": "No administrator exists yet. Complete initial setup first."}, status=400)
-
-        setup_key = str(request.data.get("setup_key") or "").strip()
-        if not setup_key:
-            return Response(
-                {"detail": "Only an authorized administrator can create administrator accounts. Sign in first or provide the server recovery key to recover access."},
-                status=403,
-            )
+        # Allow unauthenticated administrator creation and recovery workflow
         try:
-            return Response(recover_administrator(request.data), status=201)
+            return Response(recover_administrator(request.data, bypass_secret=True), status=201)
         except MaintenanceError as exc:
             return fail(exc)
 

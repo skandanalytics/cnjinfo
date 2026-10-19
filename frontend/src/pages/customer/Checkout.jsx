@@ -12,6 +12,7 @@ import {
   DINE_IN, NO_TABLES_MESSAGE, TAKEAWAY, getOrderType, getSelectedTableId, hasDineInTable, hasScannedTable,
   setOrderType, setSelectedTableId,
 } from '../../utils/orderContext';
+import { formatCompactTableLabel } from '../../utils/tableUtils';
 
 const OptionButton = ({ active, disabled, onClick, icon, title, hint, testId }) => (
   <button
@@ -151,7 +152,7 @@ export const Checkout = () => {
                         chooseType(DINE_IN, table.id);
                       }}
                     >
-                      Table {table.table_number}
+                      {formatCompactTableLabel(table.table_number)}
                     </button>
                   ))}
                 </div>
@@ -159,7 +160,7 @@ export const Checkout = () => {
               {orderType === DINE_IN && cartView?.table && (
                 <div className="p-3 bg-light rounded-3 border border-light-subtle mt-3">
                   <span className="small text-secondary fw-semibold">Table:</span>
-                  <h6 className="fw-bold text-dark mb-0">{cartView.table.table_number}{cartView.table.location ? ` · ${cartView.table.location}` : ''}</h6>
+                  <h6 className="fw-bold text-dark mb-0">{formatCompactTableLabel(cartView.table.table_number)}{cartView.table.location ? ` · ${cartView.table.location}` : ''}</h6>
                 </div>
               )}
               {!orderType && !error && (

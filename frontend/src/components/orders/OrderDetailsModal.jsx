@@ -119,10 +119,15 @@ export const OrderDetailsModal = ({
               <div key={idx} className="d-flex align-items-start justify-content-between mb-2 small border-bottom border-light pb-2 last-border-0">
                 <div className="text-dark fw-semibold text-break me-2">
                   {item.name || 'Dish Item'} <strong className="text-danger ms-1">x{item.quantity || 1}</strong>
-                  {item.instructions && <div className="text-muted fw-normal mt-1" style={{ fontSize: '11px' }}>Note: {item.instructions}</div>}
+                  {item.instructions && <div className="text-muted fw-normal mt-1" style={{ fontSize: '11px' }}>Instructions: {item.instructions}</div>}
                   {item.extraIngredients && item.extraIngredients.length > 0 && (
                     <div className="text-muted fw-normal mt-1" style={{ fontSize: '11px' }}>
-                      Extras: {item.extraIngredients.join(', ')}
+                      Extra ingredients: {item.extraIngredients.map(ex => {
+                        if (typeof ex === 'string') return ex;
+                        const name = ex?.name || ex?.title || '';
+                        const price = Number(ex?.extra_price ?? ex?.price ?? 0);
+                        return price > 0 ? `${name} (+₹${price.toFixed(2)})` : name;
+                      }).filter(Boolean).join(', ')}
                     </div>
                   )}
                 </div>

@@ -77,7 +77,7 @@ function clearSocket() {
 
 function dispatchLivePayload(data) {
   if (!data || typeof window === 'undefined') return;
-  if (data.order_id) {
+  if (data.order_id || data.resource === 'order') {
     window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: data }));
     window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: data }));
   }
@@ -87,17 +87,20 @@ function dispatchLivePayload(data) {
     window.dispatchEvent(new CustomEvent('foodie_inventory_updated', { detail: data }));
     window.dispatchEvent(new CustomEvent('foodie_categories_updated', { detail: data }));
   }
-  if (resource === 'coupon' || resource === 'menu' || resource === 'inventory') {
+  if (resource === 'coupon' || resource === 'offer' || resource === 'menu' || resource === 'inventory') {
     window.dispatchEvent(new CustomEvent('foodie_offers_updated', { detail: data }));
   }
   if (resource === 'table') {
     window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: data }));
   }
-  if (resource) {
-    try {
-      localStorage.setItem('foodie_data_sync', JSON.stringify({ t: Date.now(), resource, action: data.action }));
-    } catch { /* other tabs */ }
+  if (resource === 'branch') {
+    window.dispatchEvent(new CustomEvent('foodie_branches_updated', { detail: data }));
   }
+  try {
+    const syncTag = resource || (data.order_id ? 'order' : 'data');
+    localStorage.setItem('foodie_data_sync', JSON.stringify({ t: Date.now(), resource: syncTag, action: data.action }));
+    localStorage.setItem('foodie_orders_sync_trigger', String(Date.now()));
+  } catch { /* other tabs */ }
 }
 
 async function connect() {
@@ -175,6 +178,41 @@ function handleLogout() {
   clearSocket();
 }
 
+let lifecycleBound = false;
+function bindLifecycleEvents() {
+  if (lifecycleBound || typeof window === 'undefined') return;
+  lifecycleBound = true;
+
+  window.addEventListener('online', () => {
+    networkRetries = 0;
+    delayMs = 2000;
+    stopped = false;
+    connect();
+    window.dispatchEvent(new CustomEvent('foodie_data_sync_refetch'));
+  });
+
+  window.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+        networkRetries = 0;
+        delayMs = 2000;
+        stopped = false;
+        connect();
+      }
+      window.dispatchEvent(new CustomEvent('foodie_data_sync_refetch'));
+    }
+  });
+
+  window.addEventListener('focus', () => {
+    if (!socket || socket.readyState === WebSocket.CLOSED) {
+      networkRetries = 0;
+      delayMs = 2000;
+      stopped = false;
+      connect();
+    }
+  });
+}
+
 export function startOrderEvents(listener) {
   subscribers.add(listener);
   stopped = false;
@@ -182,6 +220,7 @@ export function startOrderEvents(listener) {
     window.addEventListener('foodie_logout', handleLogout);
     logoutBound = true;
   }
+  bindLifecycleEvents();
   connect();
   return () => {
     subscribers.delete(listener);

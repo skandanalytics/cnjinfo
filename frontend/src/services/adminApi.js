@@ -456,6 +456,35 @@ async function uploadPrimaryImage(foodId, file) {
   await staffJson('/food-images/', { method: 'POST', body: form });
 }
 
+async function syncCustomizations(foodId, toppings) {
+  if (!Array.isArray(toppings)) return;
+  const existing = listOf(await staffJson(`/customization-options/?food=${foodId}`));
+  const keptIds = new Set();
+  for (const t of toppings) {
+    if (!t.name || !t.name.trim()) continue;
+    const price = Number(t.price ?? t.extra_price ?? 0);
+    const existingOpt = t.id ? existing.find(e => e.id === t.id) : existing.find(e => e.name.toLowerCase() === t.name.trim().toLowerCase());
+    if (existingOpt) {
+      keptIds.add(existingOpt.id);
+      await staffJson(`/customization-options/${existingOpt.id}/`, {
+        method: 'PATCH',
+        body: JSON.stringify({ name: t.name.trim(), extra_price: String(price), is_active: t.is_active !== false }),
+      });
+    } else {
+      const created = await staffJson('/customization-options/', {
+        method: 'POST',
+        body: JSON.stringify({ food: foodId, name: t.name.trim(), extra_price: String(price), is_active: true }),
+      });
+      keptIds.add(created.id);
+    }
+  }
+  for (const e of existing) {
+    if (!keptIds.has(e.id)) {
+      await staffJson(`/customization-options/${e.id}/`, { method: 'DELETE' }).catch(() => {});
+    }
+  }
+}
+
 export async function createFood(data) {
   const branch = await currentBranchId();
   const category = await categoryIdByName(data.category, branch);
@@ -479,6 +508,9 @@ export async function createFood(data) {
     if (data.imageFile) await uploadPrimaryImage(created.id, data.imageFile);
     await syncDiscount(created.id, data);
     await syncStock(created.id, data.stock, null);
+    if (Array.isArray(data.toppings) || Array.isArray(data.customizations)) {
+      await syncCustomizations(created.id, data.toppings || data.customizations);
+    }
   } catch (err) {
     publishCatalogChange({ resource: 'menu', action: 'created' });
     const wrapped = new Error(`"${created.name}" was saved, but ${explain(err)}. Edit the dish to finish setting it up.`);
@@ -511,6 +543,9 @@ export async function updateFood(id, data) {
   if (data.stock !== undefined && data.stock !== null && data.stock !== '') {
     const row = (await stockMap()).get(Number(id));
     if (!row || Number(row.quantity) !== Number(data.stock)) await syncStock(id, data.stock, row?.id);
+  }
+  if (Array.isArray(data.toppings) || Array.isArray(data.customizations)) {
+    await syncCustomizations(id, data.toppings || data.customizations);
   }
   publishCatalogChange({ resource: 'menu', action: 'updated' });
   const foods = await listFoods();
@@ -780,28 +815,30 @@ export function mapOrder(o) {
     placedByName: o.placed_by_name || '',
     user: o.customer_phone || '',
     customerPhone: o.customer_phone || '',
-    items: (o.items || []).map((item) => ({
-      id: item.id,
-      food_id: item.food_id,
-      name: item.name,
-      quantity: item.quantity,
-      price: Number(item.unit_price),
-      lineTotal: Number(item.line_total),
-      customizations: item.customizations || [],
-      special_instructions: item.special_instructions || '',
-    })),
+    items: (o.items || []).map((item) => {
+      const customs = Array.isArray(item.customizations) ? item.customizations : (Array.isArray(item.extraIngredients) ? item.extraIngredients : (Array.isArray(item.toppings) ? item.toppings : (Array.isArray(item.options) ? item.options : [])));
+      const instructions = item.special_instructions || item.instructions || item.specialInstructions || '';
+      return {
+        id: item.id,
+        food_id: item.food_id,
+        name: item.name || item.food_name || item.dish_name || 'Dish Item',
+        quantity: item.quantity,
+        price: Number(item.unit_price),
+        lineTotal: Number(item.line_total),
+        customizations: customs,
+        extraIngredients: customs,
+        toppings: customs,
+        instructions: instructions,
+        special_instructions: instructions,
+        specialInstructions: instructions,
+      };
+    }),
   };
 }
 
-export async function listOrdersForUi() {
-  let mine = false;
-  try {
-    const user = JSON.parse(sessionStorage.getItem('foodie_auth_admin') || '{}').user;
-    mine = user?.role === 'employee';
-  } catch {
-    mine = false;
-  }
-  const rows = listOf(await staffJson(`/orders/${mine ? '?mine=1' : ''}`));
+export async function listOrdersForUi(options = {}) {
+  const query = options?.mine ? '?mine=1' : '';
+  const rows = listOf(await staffJson(`/orders/${query}`));
   return rows.map(mapOrder);
 }
 
@@ -838,7 +875,8 @@ export async function recordCounterPayment(orderId) {
 
 export async function downloadInvoice(order) {
   const status = String(order?.status || '').toLowerCase();
-  if (status !== 'completed') {
+  const isTakeaway = order?.order_type === 'TAKEAWAY' || order?.orderType === 'Takeaway';
+  if (status !== 'completed' && !(isTakeaway && status === 'served')) {
     window.alert('The invoice is not ready until the order is completed.');
     return;
   }
@@ -863,4 +901,18 @@ export async function downloadInvoice(order) {
 
 export function explain(err) {
   return messageFrom(err?.data) || err?.message || 'Request failed';
+}
+
+export async function createAssistedOrder(payload) {
+  return await staffJson('/orders/assisted/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getPricingQuote(payload) {
+  return await staffJson('/pricing/quote/', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
 }

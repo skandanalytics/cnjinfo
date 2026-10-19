@@ -56,8 +56,8 @@ export const CustomerLogin = () => {
   const fromState = location.state?.from;
   const destination = typeof fromState === 'string'
     ? fromState
-    : (fromState?.pathname || '/customer/checkout');
-  const returningToCheckout = String(destination).includes('checkout');
+    : (fromState?.pathname ? `${fromState.pathname}${fromState.search || ''}${fromState.hash || ''}` : null);
+  const returningToCheckout = Boolean(destination && destination.includes('checkout'));
 
   const persistGuestCart = () => {
     try {
@@ -198,18 +198,12 @@ export const CustomerLogin = () => {
         }
       }
 
-      if (returningToCheckout || hasGuestCartItems) {
-        navigate(destination.includes('checkout') ? destination : '/customer/checkout', { replace: true });
-      } else if (res && res.isNewUser && !hasGuestCartItems) {
-        sessionStorage.removeItem('foodie_cart');
-        localStorage.removeItem('foodie_cart');
-        try {
-          if (typeof clearCart === 'function') await clearCart();
-        } catch (e) {}
-        window.dispatchEvent(new CustomEvent('foodie_cart_updated'));
-        navigate('/customer/home', { replace: true });
-      } else {
+      if (destination) {
         navigate(destination, { replace: true });
+      } else if (hasGuestCartItems) {
+        navigate('/customer/checkout', { replace: true });
+      } else {
+        navigate('/customer/home', { replace: true });
       }
     } catch (err) {
       if (err.retryAfter > 0) {

@@ -33,16 +33,25 @@ export const OrderTracking = () => {
     }
   }, [user, navigate]);
 
-  const normalizeStatus = (status) => {
+  const normalizeStatus = (status, isTakeaway = false) => {
     if (!status) return 'Pending';
     const s = String(status).toLowerCase().trim();
     if (s === 'placed' || s === 'pending' || s === 'confirmed' || s === 'new' || s === 'ordered' || s === 'created' || s === 'processing') return 'Pending';
     if (s === 'preparing' || s === 'cooking' || s === 'accepted' || s === 'in_kitchen') return 'Preparing';
     if (s === 'ready' || s === 'out_for_delivery' || s === 'prepared' || s === 'ready_for_pickup') return 'Ready';
-    if (s === 'served' || s === 'serving') return 'Serving';
+    if (s === 'served' || s === 'serving') return isTakeaway ? 'Completed' : 'Serving';
     if (s === 'delivered' || s === 'completed' || s === 'done' || s === 'settled') return 'Completed';
     if (s === 'cancelled' || s === 'canceled' || s === 'rejected' || s === 'void') return 'Cancelled';
     return status;
+  };
+
+  const STATUS_RANK = {
+    Pending: 0,
+    Preparing: 1,
+    Ready: 2,
+    Serving: 3,
+    Completed: 4,
+    Cancelled: 5,
   };
 
   const getOrderTotal = (ord) => {
@@ -52,7 +61,7 @@ export const OrderTracking = () => {
 
     const isTakeaway = ord.orderType === 'Takeaway' || ord.table === 'Takeaway' || String(ord.table).toLowerCase() === 'takeaway' || ord.packingCharge > 0 || ord.packing_charge > 0;
     const totalQty = (ord.items || []).reduce((s, i) => s + (parseInt(i.quantity) || 1), 0) || 1;
-    const packingCharge = parseFloat(ord.packingCharge || ord.packing_charge || (isTakeaway ? totalQty * 15 : 0));
+    const packingCharge = parseFloat(ord.packingCharge || ord.packing_charge || (isTakeaway ? totalQty * 10 : 0));
 
     if (Array.isArray(ord.items) && ord.items.length > 0) {
       const itemsSum = ord.items.reduce((s, i) => s + (parseFloat(i.price || 0) * (parseInt(i.quantity) || 1)), 0);
@@ -84,9 +93,8 @@ export const OrderTracking = () => {
     statusRef.current = order?.status;
   }, [order?.status]);
 
-  // Real-time polling and current order retrieval
+  // Real-time polling, event sync, and authoritative backend retrieval
   useEffect(() => {
-    let intervalId;
     const fetchTrackingData = async (isInitial = false) => {
       if (isInitial && !order) setLoading(true);
       setError(null);
@@ -95,7 +103,22 @@ export const OrderTracking = () => {
         const raw = await fetchCustomerOrder(orderId);
         const currentData = raw?.id ? { ...mapOrder(raw), status: raw.status } : null;
         if (currentData) {
-          const effectiveStatus = currentData.status;
+          const isTakeaway = currentData.orderType === 'Takeaway' ||
+            currentData.order_type === 'TAKEAWAY' ||
+            currentData.table === 'Takeaway' ||
+            String(currentData.table || '').toLowerCase() === 'takeaway';
+
+          const rawStatus = currentData.status;
+          const normalizedNew = normalizeStatus(rawStatus, isTakeaway);
+          const normalizedCurrent = normalizeStatus(statusRef.current, isTakeaway);
+
+          // Guard against stale events overwriting newer status (Requirement 11)
+          const newRank = STATUS_RANK[normalizedNew] ?? 0;
+          const currRank = STATUS_RANK[normalizedCurrent] ?? 0;
+          const effectiveStatus = (newRank >= currRank || normalizedNew === 'Cancelled' || !statusRef.current)
+            ? rawStatus
+            : statusRef.current;
+
           statusRef.current = effectiveStatus;
           const effectiveTotal = (currentData.total && Number(currentData.total) > 0)
             ? currentData.total
@@ -128,9 +151,18 @@ export const OrderTracking = () => {
       };
 
       window.addEventListener('foodie_orders_updated', handleSync);
+      window.addEventListener('focus', handleSync);
+      window.addEventListener('online', handleSync);
+      const handleVisibility = () => {
+        if (document.visibilityState === 'visible') fetchTrackingData(false);
+      };
+      document.addEventListener('visibilitychange', handleVisibility);
 
       return () => {
         window.removeEventListener('foodie_orders_updated', handleSync);
+        window.removeEventListener('focus', handleSync);
+        window.removeEventListener('online', handleSync);
+        document.removeEventListener('visibilitychange', handleVisibility);
       };
     }
   }, [orderId]);
@@ -177,24 +209,38 @@ export const OrderTracking = () => {
     );
   }
 
-  // Pipeline order stages mapping
-  const stages = [
+  const isTakeawayOrder = order?.orderType === 'Takeaway' ||
+    order?.order_type === 'TAKEAWAY' ||
+    order?.table === 'Takeaway' ||
+    String(order?.table || '').toLowerCase() === 'takeaway';
+
+  // Pipeline order stages mapping (Takeaway orders omit the Dine-in only Serving stage)
+  const stages = isTakeawayOrder ? [
+    { key: 'Pending', label: 'Order Confirmed', sub: 'We received your food ticket' },
+    { key: 'Preparing', label: 'Preparing', sub: 'Our Chef is preparing your dish' },
+    { key: 'Ready', label: 'Ready for Pickup', sub: 'Packed & ready for counter pickup' },
+    { key: 'Completed', label: 'Completed', sub: 'Order handed over successfully' }
+  ] : [
     { key: 'Pending', label: 'Order Confirmed', sub: 'We received your food ticket' },
     { key: 'Preparing', label: 'Preparing', sub: 'Our Chef is preparing your dish' },
     { key: 'Ready', label: 'Ready', sub: 'Food packaged at counter' },
-    { key: 'Serving', label: 'Serving', sub: `Delivered to Table ${order.table || 'Takeaway'}` },
+    { key: 'Serving', label: 'Serving', sub: `Delivered to Table ${order.table || ''}` },
     { key: 'Completed', label: 'Completed', sub: 'Bill settled successfully' }
   ];
 
   const resolveCurrentStatus = () => {
-    return normalizeStatus(order?.status);
+    return normalizeStatus(order?.status, isTakeawayOrder);
   };
 
   const currentStatus = resolveCurrentStatus();
   const getStatusIndex = (status) => {
     const keys = stages.map(s => s.key);
     const idx = keys.indexOf(status);
-    return idx >= 0 ? idx : 0;
+    if (idx >= 0) return idx;
+    if (isTakeawayOrder && (status === 'Serving' || status === 'Served')) {
+      return keys.indexOf('Completed');
+    }
+    return 0;
   };
 
   const currentIndex = getStatusIndex(currentStatus);
@@ -259,13 +305,13 @@ export const OrderTracking = () => {
             {stages.map((stage, idx) => {
               const isPast = currentIndex > idx;
               const isCurrent = currentIndex === idx;
-              const isServing = currentStatus === 'Serving' || currentStatus === 'Served' || currentIndex === 3;
-              const isStageCompletedWhenServing = isServing && stage.key === 'Completed';
+              const isOrderFinished = currentStatus === 'Completed' || (isTakeawayOrder && (order?.status === 'SERVED' || order?.status === 'Served'));
+              const isDone = isPast || (isCurrent && isOrderFinished);
 
               let textClass = 'text-muted';
               let icon = null;
               
-              if (isPast || isStageCompletedWhenServing) {
+              if (isDone) {
                 textClass = 'text-dark';
                 icon = <FiCheck size={10} />;
               } else if (isCurrent) {
@@ -273,7 +319,7 @@ export const OrderTracking = () => {
                 icon = <span className="bg-white rounded-circle" style={{ width: '6px', height: '6px' }}></span>;
               }
 
-              const isColoured = isPast || isCurrent || isStageCompletedWhenServing;
+              const isColoured = isPast || isCurrent || isOrderFinished;
 
               return (
                 <div key={stage.key} className={`position-relative ${textClass}`}>
@@ -324,10 +370,15 @@ export const OrderTracking = () => {
                     <div>
                       <span className="fw-bold text-dark">{i.name || 'Dish Item'}</span>
                       <span className="text-secondary small ms-2">x{i.quantity || 1}</span>
-                      {i.instructions && (
-                        <span className="d-block text-danger small mt-0.5 font-italic">
-                          Note: "{i.instructions}"
-                        </span>
+                      {Array.isArray(i.extraIngredients || i.customizations) && (i.extraIngredients || i.customizations).length > 0 && (
+                        <div className="text-muted small mt-0.5">
+                          <strong className="text-secondary">Extra ingredients:</strong> {(i.extraIngredients || i.customizations).map(ex => typeof ex === 'string' ? ex : (ex?.name || '')).filter(Boolean).join(', ')}
+                        </div>
+                      )}
+                      {(i.instructions || i.special_instructions) && (
+                        <div className="text-muted fst-italic small mt-0.5">
+                          <strong className="text-secondary fst-normal">Instructions:</strong> {i.instructions || i.special_instructions}
+                        </div>
                       )}
                     </div>
                   </div>

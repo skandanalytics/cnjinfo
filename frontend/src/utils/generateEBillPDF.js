@@ -31,7 +31,7 @@ const printHtmlInvoice = (order, backendId, payment, customer) => {
     const subtotal = parseFloat(order.subtotal || 0) || items.reduce((s, i) => s + (parseFloat(i.price || 0) * (parseInt(i.quantity) || 1)), 0);
     const isTakeaway = order.orderType === 'Takeaway' || order.table === 'Takeaway' || order.packingCharge > 0 || order.packing_charge > 0;
     const totalQty = items.reduce((s, i) => s + (parseInt(i.quantity) || 1), 0) || 1;
-    const packingCharge = parseFloat(order.packingCharge || order.packing_charge || (isTakeaway ? totalQty * 15 : 0));
+    const packingCharge = parseFloat(order.packingCharge || order.packing_charge || (isTakeaway ? totalQty * 10 : 0));
     const discount = parseFloat(order.discount || 0);
     const taxableAmount = Math.max(0, subtotal - discount) + (isTakeaway ? packingCharge : 0);
     const customRound = (value) => {
@@ -146,9 +146,7 @@ const printHtmlInvoice = (order, backendId, payment, customer) => {
               ${maskedPhone ? `<div><strong>Mobile:</strong> ${maskedPhone}</div>` : ''}
             </div>
             <div class="meta-box">
-              <div><strong>Payment Method:</strong> ${pmDisplay}</div>
-              <div><strong>Payment Status:</strong> <span style="color:${payStatusColor}; font-weight:bold;">${payStatusDisplay}</span></div>
-              <div><strong>Transaction Ref:</strong> ${payment?.transaction_id || `TXN_${rawPm}_${String(backendId || '101')}`}</div>
+              <div><strong>Invoice:</strong> INV-${displayOrderNum}</div>
             </div>
           </div>
           <table>
@@ -512,48 +510,11 @@ export const generateEBillPDF = async (orderOrId) => {
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
     doc.setTextColor(...textGray);
-    doc.text("Payment Method:", box2X, box2Y);
+    doc.text("Invoice Ref:", box2X, box2Y);
     doc.setFont("helvetica", "bold");
-    const rawPm = (payment?.payment_method || order.paymentMethod || order.payment_method || 'COD').toUpperCase();
-    let pmDisplay = 'Cash (COD)';
-    if (rawPm.includes('UPI')) pmDisplay = 'UPI Mobile';
-    else if (rawPm.includes('CARD') || rawPm.includes('CREDIT') || rawPm.includes('DEBIT')) pmDisplay = 'Credit / Debit Card';
-    else if (rawPm.includes('CASH') || rawPm.includes('COD')) pmDisplay = 'Cash (COD)';
     doc.setTextColor(...darkSlate);
-    doc.text(pmDisplay, box2X + 27, box2Y);
+    doc.text(`INV-${displayOrderNum}`, box2X + 27, box2Y);
     box2Y += 5.2;
-
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...textGray);
-    doc.text("Payment Status:", box2X, box2Y);
-    doc.setFont("helvetica", "bold");
-
-    // Payment Status Logic: Completed for UPI, Card, COD. If unpaid/cancelled/failed -> Failed
-    const rawPayStatus = String(payment?.payment_status || payment?.status || order.paymentStatus || order.payment_status || '').toUpperCase();
-    const orderStatus = String(order.status || '').toUpperCase();
-    const isFailed = rawPayStatus.includes('FAIL') ||
-      rawPayStatus.includes('CANCEL') ||
-      rawPayStatus.includes('REJECT') ||
-      rawPayStatus === 'UNPAID' ||
-      rawPayStatus === 'DECLINED' ||
-      orderStatus === 'CANCELLED' ||
-      orderStatus === 'REJECTED';
-
-    const payStatus = isFailed ? 'FAILED' : 'COMPLETED';
-    if (payStatus === 'COMPLETED') {
-      doc.setTextColor(22, 101, 52); // Green
-    } else {
-      doc.setTextColor(220, 38, 38); // Red
-    }
-    doc.text(payStatus, box2X + 27, box2Y);
-    box2Y += 5.2;
-
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...textGray);
-    doc.text("Transaction Ref:", box2X, box2Y);
-    doc.setTextColor(...darkSlate);
-    const txnId = payment?.transaction_id || `TXN_${rawPm}_${String(backendId || '101')}`;
-    doc.text(String(txnId), box2X + 27, box2Y);
 
     y += boxHeight + 8;
 
@@ -653,7 +614,7 @@ export const generateEBillPDF = async (orderOrId) => {
     const voucherCode = order.voucher || order.voucherCode || order.coupon || null;
     const isTakeaway = order.orderType === 'Takeaway' || order.table === 'Takeaway' || order.packingCharge > 0 || order.packing_charge > 0;
     const totalQty = items.reduce((s, i) => s + (parseInt(i.quantity) || 1), 0) || 1;
-    const packingCharge = parseFloat(order.packingCharge || order.packing_charge || (isTakeaway ? totalQty * 15 : 0));
+    const packingCharge = parseFloat(order.packingCharge || order.packing_charge || (isTakeaway ? totalQty * 10 : 0));
     
     const foodAfterDiscount = Math.max(0, subtotal - discount);
     const taxableAmount = foodAfterDiscount + (isTakeaway ? packingCharge : 0);

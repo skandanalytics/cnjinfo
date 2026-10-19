@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import formatCurrency from '../../utils/formatCurrency';
 import QuantityControl from './QuantityControl';
 import { FiTrash2 } from 'react-icons/fi';
@@ -18,9 +18,13 @@ export const CartItem = ({
   const [instructionText, setInstructionText] = useState(item.instructions || '');
   const [selectedExtras, setSelectedExtras] = useState(item.extraIngredients || []);
   const [isRemoving, setIsRemoving] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
   const [fetchedAddons, setFetchedAddons] = useState(null);
   const [addonError, setAddonError] = useState('');
   const [addonLoading, setAddonLoading] = useState(!Array.isArray(item.customizations));
+  
+  const debounceTimerRef = useRef(null);
 
   useEffect(() => {
     if (!showEdit) {
@@ -28,6 +32,14 @@ export const CartItem = ({
       setSelectedExtras(item.extraIngredients || []);
     }
   }, [item.instructions, item.extraIngredients, item.lineId, showEdit]);
+
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (Array.isArray(item.customizations)) {
@@ -54,6 +66,108 @@ export const CartItem = ({
       });
     return () => { cancelled = true; };
   }, [item.id, item.customizations, item.lineId]);
+
+  const triggerDebouncedSave = (newText, extras) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    setIsSaving(true);
+    setSaveError('');
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        await onUpdateInstructions(item.lineId || item.cartItemId || item.id, newText, extras);
+      } catch (err) {
+        setSaveError(err.message || 'Could not auto-save instructions.');
+      } finally {
+        setIsSaving(false);
+      }
+    }, 500);
+  };
+
+  const handleCustomInstructionsChange = (e) => {
+    const text = e.target.value;
+    setInstructionText(text);
+    triggerDebouncedSave(text, selectedExtras);
+  };
+
+  const handleCustomInstructionsBlur = async () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onUpdateInstructions(item.lineId || item.cartItemId || item.id, instructionText, selectedExtras);
+    } catch (err) {
+      setSaveError(err.message || 'Could not auto-save instructions.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleToggleAddon = async (addon) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    const isChecked = selectedExtras.some((ing) => String(ing.id) === String(addon.id));
+    const nextExtras = isChecked
+      ? selectedExtras.filter((ing) => String(ing.id) !== String(addon.id))
+      : [...selectedExtras.filter((ing) => String(ing.id) !== String(addon.id)), addon];
+    setSelectedExtras(nextExtras);
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onUpdateInstructions(item.lineId || item.cartItemId || item.id, instructionText, nextExtras);
+    } catch (err) {
+      setSaveError(err.message || 'The topping change could not be saved.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSelectPrepPill = async (inst) => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    let nextText = '';
+    const trimmed = (instructionText || '').trim();
+    if (!trimmed) {
+      nextText = inst;
+    } else {
+      const regex = new RegExp(`(^|,\\s*)${inst}(,\\s*|$)`, 'i');
+      if (regex.test(trimmed)) {
+        nextText = trimmed.replace(regex, '$2').replace(/^,\s*/, '').replace(/,\s*$/, '');
+      } else {
+        nextText = `${trimmed}, ${inst}`;
+      }
+    }
+    setInstructionText(nextText);
+    setIsSaving(true);
+    setSaveError('');
+    try {
+      await onUpdateInstructions(item.lineId || item.cartItemId || item.id, nextText, selectedExtras);
+    } catch (err) {
+      setSaveError(err.message || 'Could not save note.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCloseEdit = async () => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+      try {
+        await onUpdateInstructions(item.lineId || item.cartItemId || item.id, instructionText, selectedExtras);
+      } catch (err) {
+        // Log or handle error
+      }
+    }
+    setShowEdit(false);
+  };
 
   const handleRemove = async () => {
     if (isRemoving) return;
@@ -146,7 +260,7 @@ export const CartItem = ({
               )}
               {item.extraIngredients && item.extraIngredients.length > 0 && (
                 <span className="text-secondary" style={{ fontSize: '11px' }}>
-                  <strong className="text-dark">Add-ons:</strong> {item.extraIngredients.map(ing => `${ing.name} (+₹${ing.price})`).join(', ')}
+                  <strong className="text-dark">Add-ons:</strong> {item.extraIngredients.map(ing => `${ing.name} (+${formatCurrency(ing.price)})`).join(', ')}
                 </span>
               )}
               <div className="d-flex gap-2 mt-0.5">
@@ -196,8 +310,22 @@ export const CartItem = ({
 
           {showEdit && (
             <div className="mt-3 p-3 rounded-3 bg-light border text-start">
+              {saveError && (
+                <div className="alert alert-danger py-1 px-2 small mb-2" style={{ fontSize: '11px' }}>
+                  {saveError}
+                </div>
+              )}
+
               {/* Default instruction pills */}
-              <label className="small fw-bold text-dark d-block mb-1.5" style={{ fontSize: '11px' }}>Select Preparation Note</label>
+              <div className="d-flex align-items-center justify-content-between mb-1.5">
+                <label className="small fw-bold text-dark d-block mb-0" style={{ fontSize: '11px' }}>Select Preparation Note</label>
+                {isSaving && (
+                  <span className="text-secondary small d-flex align-items-center" style={{ fontSize: '10px' }}>
+                    <span className="spinner-border spinner-border-sm me-1" style={{ width: '10px', height: '10px' }}></span>
+                    Auto-saving…
+                  </span>
+                )}
+              </div>
               <div className="d-flex flex-wrap gap-1.5 mb-3">
                 {[
                   'Less Spicy', 'Extra Spicy', 'No Onion', 'No Garlic',
@@ -206,17 +334,7 @@ export const CartItem = ({
                   <button
                     key={inst}
                     type="button"
-                    onClick={() => {
-                      setInstructionText(prev => {
-                        const trimmed = prev.trim();
-                        if (!trimmed) return inst;
-                        const regex = new RegExp(`(^|,\\s*)${inst}(,\\s*|$)`, 'i');
-                        if (regex.test(trimmed)) {
-                          return trimmed.replace(regex, '$2').replace(/^,\s*/, '').replace(/,\s*$/, '');
-                        }
-                        return `${trimmed}, ${inst}`;
-                      });
-                    }}
+                    onClick={() => handleSelectPrepPill(inst)}
                     className={`btn btn-sm rounded-pill py-0.5 px-2.5 transition-all text-nowrap hover-bg-light-red ${
                       new RegExp(`(^|,\\s*)${inst}(,\\s*|$)`, 'i').test(instructionText)
                         ? 'btn-danger text-white border-danger'
@@ -235,12 +353,21 @@ export const CartItem = ({
                 className="form-control form-control-sm mb-3"
                 placeholder="Or enter custom instructions..."
                 value={instructionText}
-                onChange={(e) => setInstructionText(e.target.value)}
+                onChange={handleCustomInstructionsChange}
+                onBlur={handleCustomInstructionsBlur}
                 style={{ fontSize: '12px' }}
               />
 
               {/* Extra toppings list */}
-              <label className="small fw-bold text-dark d-block mb-1.5" style={{ fontSize: '11px' }}>Add Extra Ingredients & Toppings</label>
+              <div className="d-flex align-items-center justify-content-between mb-1.5">
+                <label className="small fw-bold text-dark d-block mb-0" style={{ fontSize: '11px' }}>Add Extra Ingredients & Toppings</label>
+                {isSaving && (
+                  <span className="text-secondary small d-flex align-items-center" style={{ fontSize: '10px' }}>
+                    <span className="spinner-border spinner-border-sm me-1" style={{ width: '10px', height: '10px' }}></span>
+                    Auto-saving…
+                  </span>
+                )}
+              </div>
               <div className="d-flex flex-column gap-2 mb-3 p-2.5 rounded-3 border" style={{ backgroundColor: '#f8fafc' }}>
                 {addonLoading && (
                   <span className="text-secondary small">Loading add-ons…</span>
@@ -267,13 +394,7 @@ export const CartItem = ({
                         <input
                           type="checkbox"
                           checked={isChecked}
-                          onChange={() => {
-                            setSelectedExtras(prev =>
-                              isChecked
-                                ? prev.filter((ing) => String(ing.id) !== String(addon.id))
-                                : [...prev.filter((ing) => String(ing.id) !== String(addon.id)), addon]
-                            );
-                          }}
+                          onChange={() => handleToggleAddon(addon)}
                           className="form-check-input mt-0"
                           style={{ width: '15px', height: '15px', cursor: 'pointer', accentColor: 'var(--primary-color)' }}
                         />
@@ -295,49 +416,46 @@ export const CartItem = ({
                   <div className="bg-white p-2.5 rounded-3 border mb-3">
                     <div className="d-flex justify-content-between text-secondary" style={{ fontSize: '10px' }}>
                       <span>Base Price:</span>
-                      <span>₹{basePrice}</span>
+                      <span>{formatCurrency(basePrice)}</span>
                     </div>
                     {extraCharges > 0 && (
                       <div className="d-flex justify-content-between text-secondary mt-0.5" style={{ fontSize: '10px' }}>
                         <span>Add-on Charges:</span>
-                        <span className="text-danger">+ ₹{extraCharges}</span>
+                        <span className="text-danger">+{formatCurrency(extraCharges)}</span>
                       </div>
                     )}
                     <div className="d-flex justify-content-between fw-bold text-dark border-top pt-1 mt-1" style={{ fontSize: '11.5px' }}>
                       <span>Unit Total:</span>
-                      <span className="text-danger">₹{totalUnit}</span>
+                      <span className="text-danger">{formatCurrency(totalUnit)}</span>
                     </div>
                     <div className="d-flex justify-content-between text-secondary mt-0.5" style={{ fontSize: '10px' }}>
                       <span>Item Subtotal ({item.quantity}x):</span>
-                      <span>₹{totalUnit * item.quantity}</span>
+                      <span>{formatCurrency(totalUnit * item.quantity)}</span>
                     </div>
                   </div>
                 );
               })()}
 
-              <div className="d-flex justify-content-end gap-2">
+              <div className="d-flex justify-content-between align-items-center pt-1">
+                <div className="small" style={{ fontSize: '11px' }}>
+                  {isSaving ? (
+                    <span className="text-secondary d-inline-flex align-items-center">
+                      <span className="spinner-border spinner-border-sm me-1.5" style={{ width: '10px', height: '10px' }}></span>
+                      Saving…
+                    </span>
+                  ) : saveError ? (
+                    <span className="text-danger fw-semibold">{saveError}</span>
+                  ) : (
+                    <span className="text-success fw-medium">✓ Saved</span>
+                  )}
+                </div>
                 <button 
                   type="button" 
-                  onClick={() => {
-                    setShowEdit(false);
-                    setInstructionText(item.instructions || '');
-                    setSelectedExtras(item.extraIngredients || []);
-                  }} 
-                  className="btn btn-sm btn-light border py-1.5 px-3 fw-bold" 
+                  onClick={handleCloseEdit} 
+                  className="btn btn-sm btn-light border py-1 px-3 fw-bold rounded-pill shadow-xs" 
                   style={{ fontSize: '11px' }}
                 >
-                  Cancel
-                </button>
-                <button 
-                  type="button" 
-                  onClick={() => {
-                    onUpdateInstructions(item.lineId || item.cartItemId || item.id, instructionText, selectedExtras);
-                    setShowEdit(false);
-                  }} 
-                  className="btn btn-sm btn-danger py-1.5 px-3 text-white fw-bold" 
-                  style={{ fontSize: '11px' }}
-                >
-                  Save
+                  Done
                 </button>
               </div>
             </div>

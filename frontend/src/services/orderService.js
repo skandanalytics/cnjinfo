@@ -513,7 +513,7 @@ const formatOrderObject = (order, allItems = [], allFoods = [], allTables = [], 
   const totalItemQty = orderItems.reduce((sum, i) => sum + (parseInt(i.quantity) || 1), 0) || 1;
   const subtotal = parseFloat(order.subtotal || order.subTotal || 0) || calculatedSum;
   const isTakeawayOrd = orderType === 'Takeaway' || isExplicitTakeaway || order.packingCharge > 0 || order.packing_charge > 0;
-  const packingCharge = parseFloat(order.packing_charge || order.packingCharge || (isTakeawayOrd ? totalItemQty * 15 : 0));
+  const packingCharge = parseFloat(order.packing_charge || order.packingCharge || (isTakeawayOrd ? totalItemQty * 10 : 0));
   const discount = parseFloat(order.discount_amount || order.discount || 0);
   const taxableAmount = Math.max(0, subtotal - discount) + (isTakeawayOrd ? packingCharge : 0);
   const tax = parseFloat(order.tax_amount || order.tax || 0) || Math.round(taxableAmount * 0.05);
@@ -1188,7 +1188,7 @@ export const orderService = {
 
     const isTakeaway = !data.tableNumber || String(data.tableNumber).toLowerCase() === 'takeaway' || data.orderType === 'Takeaway';
     const totalItemQty = (data.items || []).reduce((s, i) => s + (parseInt(i.quantity) || 1), 0) || 1;
-    const packingCharge = parseFloat(data.packingCharge || data.packing_charge || (isTakeaway ? totalItemQty * 15 : 0));
+    const packingCharge = parseFloat(data.packingCharge || data.packing_charge || (isTakeaway ? totalItemQty * 10 : 0));
 
     // Ensure discount never exceeds subtotal
     discount = Math.min(Math.max(0, discount), subtotal);

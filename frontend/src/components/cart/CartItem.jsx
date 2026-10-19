@@ -1,6 +1,7 @@
 import React from 'react';
 import QuantityControl from './QuantityControl';
 import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
+import formatCurrency from '../../utils/formatCurrency';
 
 export const CartItem = ({
   item,
@@ -33,7 +34,7 @@ export const CartItem = ({
             <span className={badgeClass}></span>
             <h6 className="fw-bold mb-0 text-dark text-truncate">{item.name}</h6>
           </div>
-          <p className="text-muted small mb-0">₹{item.price} each</p>
+          <p className="text-muted small mb-0">{formatCurrency(item.price)} each</p>
         </div>
 
         {/* Quantity and Price */}
@@ -44,7 +45,7 @@ export const CartItem = ({
             onDecrease={onDecrease}
           />
           <div className="d-flex align-items-center gap-3">
-            <span className="fw-bold text-dark fs-5">₹{item.price * item.quantity}</span>
+            <span className="fw-bold text-dark fs-5">{formatCurrency(item.price * item.quantity)}</span>
             <button 
               onClick={onRemove}
               className="btn btn-link text-danger p-0 border-0"

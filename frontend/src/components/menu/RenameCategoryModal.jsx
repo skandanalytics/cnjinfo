@@ -30,8 +30,14 @@ export const RenameCategoryModal = ({
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
     if (loading) return;
-    if (!newCategoryName.trim()) {
+    const trimmedName = newCategoryName.trim();
+    if (!trimmedName) {
       setErrorMsg('Please enter a category name.');
+      return;
+    }
+
+    if (['all', 'all categories', 'all category'].includes(trimmedName.toLowerCase())) {
+      setErrorMsg('"All Categories" is an aggregate view and cannot be used as a category name.');
       return;
     }
     setLoading(true);

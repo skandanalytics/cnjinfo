@@ -37,10 +37,14 @@ export async function applyOrderContext(orderType) {
     const tableId = getSelectedTableId();
     const qr = getScannedTableQr();
     const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
-    if (staffOrdering && tableId) body.table = tableId;
-    else if (qr) body.qr = qr;
-    else if (tableId) body.table = tableId;
-    else throw new Error(DINE_IN_NEEDS_QR);
+    if (staffOrdering && tableId) {
+      body.table = tableId;
+    } else if (qr || tableId) {
+      if (qr) body.qr = qr;
+      if (tableId) body.table = tableId;
+    } else {
+      throw new Error(DINE_IN_NEEDS_QR);
+    }
   }
   try {
     const res = await api.put('/cart/context/', body);

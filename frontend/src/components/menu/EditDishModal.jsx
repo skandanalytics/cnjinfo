@@ -8,6 +8,7 @@ import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+import { FiPlus, FiTrash2 } from 'react-icons/fi';
 
 export const EditDishModal = ({
   isOpen,
@@ -30,6 +31,22 @@ export const EditDishModal = ({
   const fileInputRef = useRef(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Toppings / Add-ons state
+  const [toppings, setToppings] = useState([]);
+  const [toppingName, setToppingName] = useState('');
+  const [toppingPrice, setToppingPrice] = useState('');
+
+  const handleAddTopping = () => {
+    if (!toppingName.trim()) return;
+    setToppings(prev => [...prev, { name: toppingName.trim(), extra_price: toppingPrice ? parseFloat(toppingPrice) : 0 }]);
+    setToppingName('');
+    setToppingPrice('');
+  };
+
+  const handleRemoveTopping = (index) => {
+    setToppings(prev => prev.filter((_, i) => i !== index));
+  };
 
   const [categories, setCategories] = useState([]);
 
@@ -122,6 +139,14 @@ export const EditDishModal = ({
       setImage(dish.imageUrl || dish.image || '');
       setImageFile(null);
       setImageMode(dish.imageUrl ? 'url' : 'file');
+      const existingToppings = Array.isArray(dish.customizations) ? dish.customizations.map(c => ({
+        id: c.id,
+        name: c.name,
+        extra_price: c.extra_price ?? c.price ?? 0,
+      })) : [];
+      setToppings(existingToppings);
+      setToppingName('');
+      setToppingPrice('');
       setErrorMsg('');
     }
   }, [dish, isOpen]);
@@ -248,6 +273,8 @@ export const EditDishModal = ({
         type: foodType,
         foodType: foodType,
         stock: stockNum,
+        toppings: toppings.map(t => ({ id: t.id, name: t.name, extra_price: t.extra_price, price: t.extra_price })),
+        customizations: toppings.map(t => ({ id: t.id, name: t.name, extra_price: t.extra_price, price: t.extra_price })),
         ...imageChanges
       });
       setLoading(false);
@@ -419,6 +446,63 @@ export const EditDishModal = ({
               value={description} 
               onChange={(e) => setDescription(e.target.value)} 
             />
+
+            {/* Toppings / Customizations Add-on Section */}
+            <div className="mb-3 text-start">
+              <label className="form-label text-secondary small fw-semibold mb-1">
+                Toppings / Add-ons (Optional)
+              </label>
+              <div className="d-flex gap-2 mb-2">
+                <input
+                  type="text"
+                  placeholder="e.g. Extra Cheese"
+                  value={toppingName}
+                  onChange={(e) => setToppingName(e.target.value)}
+                  className="form-control form-control-sm"
+                  style={{ flex: 2 }}
+                />
+                <input
+                  type="number"
+                  placeholder="Price (₹)"
+                  value={toppingPrice}
+                  onChange={(e) => setToppingPrice(e.target.value)}
+                  className="form-control form-control-sm"
+                  style={{ flex: 1 }}
+                  min="0"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddTopping}
+                  disabled={!toppingName.trim()}
+                  className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 rounded-pill px-3 fw-bold"
+                >
+                  <FiPlus size={14} /> Add
+                </button>
+              </div>
+              {toppings.length > 0 && (
+                <div className="d-flex flex-wrap gap-2 pt-1">
+                  {toppings.map((t, idx) => (
+                    <span
+                      key={idx}
+                      className="badge bg-light text-dark border d-inline-flex align-items-center gap-1.5 px-2.5 py-1.5 rounded-pill shadow-xs"
+                      style={{ fontSize: '12px' }}
+                    >
+                      <span className="fw-semibold">{t.name}</span>
+                      <span className="text-secondary small">(+₹{t.extra_price})</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTopping(idx)}
+                        className="btn btn-link text-danger p-0 ms-1 d-inline-flex align-items-center"
+                        style={{ lineHeight: 1 }}
+                        title="Remove topping"
+                      >
+                        <FiTrash2 size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
           </>
         )}
       </form>

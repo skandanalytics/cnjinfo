@@ -43,13 +43,29 @@ export const Login = () => {
     setError('');
 
     if (!email.trim() || !password.trim()) {
-      setError('Please enter your employee code and password.');
+      setError('Please enter your Admin ID / employee code and password.');
       return;
     }
 
     setLoading(true);
     try {
       const userObj = await login(email, password);
+      const fromUrl = location.state?.from;
+      if (fromUrl && typeof fromUrl === 'string') {
+        const isEmployeeDest = fromUrl.startsWith('/employee');
+        const isAdminDest = fromUrl.startsWith('/admin') || fromUrl.startsWith('/db');
+        if (userObj.role === 'admin') {
+          navigate(fromUrl, { replace: true });
+          return;
+        } else if (userObj.role === 'employee' && (isEmployeeDest || isAdminDest)) {
+          if (fromUrl.startsWith('/admin/employees') || fromUrl.startsWith('/admin/settings')) {
+            navigate('/employee/dashboard', { replace: true });
+          } else {
+            navigate(fromUrl, { replace: true });
+          }
+          return;
+        }
+      }
       if (userObj.role === 'employee') {
         navigate('/employee/dashboard', { replace: true });
       } else if (userObj.role === 'admin') {
@@ -151,9 +167,9 @@ export const Login = () => {
         <form onSubmit={handleSubmit}>
           <div className="text-start mb-3">
             <Input
-              label="Employee code"
+              label="Admin ID or Employee Code"
               type="text"
-              placeholder="e.g. OWN001"
+              placeholder="e.g. ADMIN, email, or mobile number"
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
@@ -202,7 +218,7 @@ export const Login = () => {
           </div>
         </form>
 
-        <p className="text-muted small mt-4 mb-0">Sign in with the employee code issued for your account.</p>
+        <p className="text-muted small mt-4 mb-0">Sign in with your Admin ID, employee code, email, or registered mobile number.</p>
       </div>
 
       {/* Forgot Password Modal */}

@@ -4,7 +4,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
 import { FiShoppingBag, FiChevronDown, FiClock, FiInfo, FiLogOut, FiMapPin } from 'react-icons/fi';
 import { orderService, getCustomerPhone } from '../../services/orderService';
-
 export const Header = () => {
   const { user, isAuthenticated, logout } = useAuth();
   const { cartItems } = useCart();
@@ -39,16 +38,18 @@ export const Header = () => {
   return (
     <nav className="navbar navbar-expand-md navbar-light bg-white sticky-top py-2 border-bottom shadow-sm">
       <div className="container px-3">
-        {/* Left Side: Brand */}
-        <Link to="/customer/home" className="navbar-brand d-flex align-items-center fw-bold text-dark gap-2">
-          <span 
-            className="text-white rounded-3 d-flex align-items-center justify-content-center fw-bold"
-            style={{ width: '38px', height: '38px', fontSize: '20px', backgroundColor: 'var(--primary-color)' }}
-          >
-            F
-          </span>
-          <span className="fw-bold fs-4 text-dark" style={{ letterSpacing: '-0.5px' }}>Foodie</span>
-        </Link>
+        {/* Left Side: Brand & Table Display */}
+        <div className="d-flex align-items-center gap-2">
+          <Link to="/customer/home" className="navbar-brand d-flex align-items-center fw-bold text-dark gap-2 me-0">
+            <span 
+              className="text-white rounded-3 d-flex align-items-center justify-content-center fw-bold"
+              style={{ width: '38px', height: '38px', fontSize: '20px', backgroundColor: 'var(--primary-color)' }}
+            >
+              F
+            </span>
+            <span className="fw-bold fs-4 text-dark" style={{ letterSpacing: '-0.5px' }}>Foodie</span>
+          </Link>
+        </div>
 
         {/* Right Side Items */}
         <div className="d-flex align-items-center gap-3 ms-auto">

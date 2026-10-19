@@ -10,25 +10,27 @@ from apps.accounts.permissions import get_active_employee
 
 
 class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
-    """Staff join their branch group. Owner-level staff join every branch. Customers join only their own group."""
+    """Staff join their branch group and branch-all. Owner-level staff join every branch. Customers join only their own group."""
 
     async def connect(self):
         raw = parse_qs(self.scope.get("query_string", b"")).get(b"token", [b""])[0].decode()
         user = await self._user_from_token(raw)
-        group = await self._group_for(user) if user else None
-        if group is None:
-            # Accept first so the client receives a close code instead of an HTTP 403
-            # handshake. 4401 means the token was missing, expired, or not staff.
+        groups = await self._groups_for(user) if user else []
+        if not groups:
             await self.accept()
             await self.close(code=4401)
             return
-        self.group = group
-        await self.channel_layer.group_add(group, self.channel_name)
+        self.groups = groups
+        for group in groups:
+            await self.channel_layer.group_add(group, self.channel_name)
         await self.accept()
 
     async def disconnect(self, code):
-        if getattr(self, "group", None):
-            await self.channel_layer.group_discard(self.group, self.channel_name)
+        for group in getattr(self, "groups", []):
+            try:
+                await self.channel_layer.group_discard(group, self.channel_name)
+            except Exception:
+                pass
 
     async def order_event(self, event):
         await self.send_json({k: v for k, v in event.items() if k != "type"})
@@ -47,10 +49,15 @@ class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
             return None
 
     @database_sync_to_async
-    def _group_for(self, user):
+    def _groups_for(self, user):
         emp = get_active_employee(user)
         if emp:
-            return "branch-all" if emp.branch_id is None else f"branch-{emp.branch_id}"
-        if user.user_type == User.UserType.CUSTOMER:
-            return f"customer-{user.id}"
-        return None
+            groups = ["branch-all"]
+            if emp.branch_id is not None:
+                groups.append(f"branch-{emp.branch_id}")
+            return groups
+        if user.is_superuser or user.is_staff or getattr(user, "user_type", None) == User.UserType.EMPLOYEE:
+            return ["branch-all"]
+        if getattr(user, "user_type", None) == User.UserType.CUSTOMER:
+            return [f"customer-{user.id}"]
+        return []

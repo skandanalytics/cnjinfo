@@ -49,9 +49,11 @@ export const ServerBillSummary = ({ cart, children }) => {
           </div>
         </>
       )}
-      {(cart?.issues || []).length > 0 && (
+      {((cart?.issues || []).filter(issue => !String(issue.detail || '').toLowerCase().includes("scan the table qr code"))).length > 0 && (
         <div className="alert alert-warning small py-2 mb-3" role="alert">
-          {cart.issues.map((issue, idx) => <div key={idx}>{issue.detail}</div>)}
+          {cart.issues
+            .filter(issue => !String(issue.detail || '').toLowerCase().includes("scan the table qr code"))
+            .map((issue, idx) => <div key={idx}>{issue.detail}</div>)}
         </div>
       )}
       {children}

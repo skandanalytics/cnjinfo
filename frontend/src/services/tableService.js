@@ -193,7 +193,7 @@ const normalizeArea = (rawArea) => {
 };
 
 const getCanonicalTableNumber = (raw) => {
-  if (!raw && raw !== 0) return 'T01';
+  if (!raw && raw !== 0) return '';
   let str = String(raw).trim().toUpperCase();
   str = str.replace(/^TABLE[\s-_]*/i, '').trim();
 

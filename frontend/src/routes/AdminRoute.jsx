@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { Navigate } from 'react-router-dom';
+import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import Loader from '../components/common/Loader';
 
 export const AdminRoute = ({ children, allowEmployee = true }) => {
   const { user, isAuthenticated, loading } = useAuth();
   const [setupRequired, setSetupRequired] = useState(null);
+  const location = useLocation();
 
   useEffect(() => {
     let active = true;
@@ -29,7 +30,8 @@ export const AdminRoute = ({ children, allowEmployee = true }) => {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
+    const from = `${location.pathname}${location.search}${location.hash}`;
+    return <Navigate to="/login" state={{ from }} replace />;
   }
 
   if (user?.role === 'customer') {

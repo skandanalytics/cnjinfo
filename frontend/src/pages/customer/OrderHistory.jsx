@@ -65,16 +65,26 @@ export const OrderHistory = () => {
     );
   }
 
-  const getStatusStepClass = (orderStatus, targetStatus) => {
-    const statusOrder = ['Pending', 'Preparing', 'Ready', 'Serving', 'Completed'];
-    const norm = (s) => (s === 'Served' ? 'Serving' : s);
+  const isStepActive = (orderStatus, targetStatus, isTakeaway = false) => {
+    const statusOrder = isTakeaway
+      ? ['Pending', 'Preparing', 'Ready', 'Completed']
+      : ['Pending', 'Preparing', 'Ready', 'Serving', 'Completed'];
+    const norm = (s) => {
+      const lower = String(s || '').toLowerCase().trim();
+      if (lower === 'placed' || lower === 'pending' || lower === 'confirmed' || lower === 'new' || lower === 'ordered' || lower === 'created') return 'Pending';
+      if (lower === 'preparing' || lower === 'cooking' || lower === 'accepted' || lower === 'in_kitchen') return 'Preparing';
+      if (lower === 'ready' || lower === 'out_for_delivery' || lower === 'prepared' || lower === 'ready_for_pickup') return 'Ready';
+      if (lower === 'served' || lower === 'serving') return isTakeaway ? 'Completed' : 'Serving';
+      if (lower === 'delivered' || lower === 'completed' || lower === 'done' || lower === 'settled') return 'Completed';
+      return s;
+    };
     const currentIdx = statusOrder.indexOf(norm(orderStatus));
     const targetIdx = statusOrder.indexOf(norm(targetStatus));
-    
-    if (currentIdx !== -1 && targetIdx !== -1 && currentIdx >= targetIdx) {
-      return 'text-danger fw-bold';
-    }
-    return 'text-muted';
+    return currentIdx !== -1 && targetIdx !== -1 && currentIdx >= targetIdx;
+  };
+
+  const getStatusStepClass = (orderStatus, targetStatus, isTakeaway = false) => {
+    return isStepActive(orderStatus, targetStatus, isTakeaway) ? 'text-danger fw-bold' : 'text-muted';
   };
 
   const currentPhone = user?.phone || getCustomerPhone();
@@ -156,46 +166,90 @@ export const OrderHistory = () => {
         )}
 
         {/* Modal showing progress tracking states */}
-        {selectedOrder && (
-          <Modal 
-            isOpen={!!selectedOrder} 
-            title={`Track Order #${selectedOrder.id || selectedOrder.order_id || selectedOrder.orderId}`} 
-            onClose={() => setSelectedOrder(null)}
-          >
-            <div className="p-2">
-              <h6 className="fw-bold text-dark mb-3">Order Status Pipeline</h6>
-              
-              <div className="d-flex flex-column gap-4 border-start ps-3 position-relative ms-2">
-                <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Pending')}`}>
-                  <span className="position-absolute bg-danger rounded-circle" style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
-                  <div className="fw-bold">Order Placed</div>
-                  <div className="small text-muted">We received your food ticket</div>
-                </div>
+        {selectedOrder && (() => {
+          const isTakeaway = Boolean(
+            selectedOrder.orderType === 'Takeaway' ||
+            selectedOrder.order_type === 'TAKEAWAY' ||
+            String(selectedOrder.table || '').toLowerCase() === 'takeaway' ||
+            selectedOrder.service_type === 'takeaway' ||
+            selectedOrder.serviceType === 'takeaway'
+          );
+
+          return (
+            <Modal 
+              isOpen={!!selectedOrder} 
+              title={`Track Order #${selectedOrder.id || selectedOrder.order_id || selectedOrder.orderId}`} 
+              onClose={() => setSelectedOrder(null)}
+            >
+              <div className="p-2">
+                <h6 className="fw-bold text-dark mb-3">Order Status Pipeline</h6>
                 
-                <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Preparing')}`}>
-                  <span className="position-absolute bg-secondary rounded-circle" style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
-                  <div className="fw-bold">Cooking in Kitchen</div>
-                  <div className="small text-muted">Our Chef is preparing your dish</div>
+                <div className="d-flex flex-column gap-4 border-start ps-3 position-relative ms-2">
+                  <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Pending', isTakeaway)}`}>
+                    <span className={`position-absolute rounded-circle ${isStepActive(selectedOrder.status, 'Pending', isTakeaway) ? 'bg-danger' : 'bg-secondary'}`} style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
+                    <div className="fw-bold">Order Placed</div>
+                    <div className="small text-muted">We received your food ticket</div>
+                  </div>
+                  
+                  <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Preparing', isTakeaway)}`}>
+                    <span className={`position-absolute rounded-circle ${isStepActive(selectedOrder.status, 'Preparing', isTakeaway) ? 'bg-danger' : 'bg-secondary'}`} style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
+                    <div className="fw-bold">Cooking in Kitchen</div>
+                    <div className="small text-muted">Our Chef is preparing your dish</div>
+                  </div>
+
+                  <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Ready', isTakeaway)}`}>
+                    <span className={`position-absolute rounded-circle ${isStepActive(selectedOrder.status, 'Ready', isTakeaway) ? 'bg-danger' : 'bg-secondary'}`} style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
+                    <div className="fw-bold">{isTakeaway ? 'Ready for Pickup' : 'Ready for Delivery'}</div>
+                    <div className="small text-muted">{isTakeaway ? 'Food packaged at pickup counter' : 'Food packaged at counter'}</div>
+                  </div>
+
+                  {!isTakeaway && (
+                    <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Serving', isTakeaway)}`}>
+                      <span className={`position-absolute rounded-circle ${isStepActive(selectedOrder.status, 'Serving', isTakeaway) ? 'bg-danger' : 'bg-secondary'}`} style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
+                      <div className="fw-bold">Food Served</div>
+                      <div className="small text-muted">Delivered to Table {selectedOrder.table}</div>
+                    </div>
+                  )}
+
+                  <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Completed', isTakeaway)}`}>
+                    <span className={`position-absolute rounded-circle ${isStepActive(selectedOrder.status, 'Completed', isTakeaway) ? 'bg-danger' : 'bg-secondary'}`} style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
+                    <div className="fw-bold">{isTakeaway ? 'Order Completed' : 'Session Completed'}</div>
+                    <div className="small text-muted">{isTakeaway ? 'Order fulfilled successfully' : 'Bill settled successfully'}</div>
+                  </div>
                 </div>
 
-                <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Ready')}`}>
-                  <span className="position-absolute bg-secondary rounded-circle" style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
-                  <div className="fw-bold">Ready for Delivery</div>
-                  <div className="small text-muted">Food packaged at counter</div>
-                </div>
-
-                <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Served')}`}>
-                  <span className="position-absolute bg-secondary rounded-circle" style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
-                  <div className="fw-bold">Food Served</div>
-                  <div className="small text-muted">Delivered to Table {selectedOrder.table}</div>
-                </div>
-
-                <div className={`position-relative ${getStatusStepClass(selectedOrder.status, 'Completed')}`}>
-                  <span className="position-absolute bg-secondary rounded-circle" style={{ width: '10px', height: '10px', left: '-22px', top: '6px' }}></span>
-                  <div className="fw-bold">Session Completed</div>
-                  <div className="small text-muted">Bill settled successfully</div>
-                </div>
-              </div>
+                {/* Items preview with customizations */}
+                {selectedOrder.items && selectedOrder.items.length > 0 && (
+                  <div className="mt-4 pt-3 border-top">
+                    <h6 className="fw-bold text-dark mb-2" style={{ fontSize: '13px' }}>Order Items</h6>
+                    <div className="d-flex flex-column gap-2">
+                      {selectedOrder.items.map((it, idx) => {
+                        const toppings = Array.isArray(it.extraIngredients || it.toppings || it.customizations)
+                          ? (it.extraIngredients || it.toppings || it.customizations).map(t => typeof t === 'string' ? t : (t.name || t.topping_name || t.ingredient_name)).filter(Boolean)
+                          : [];
+                        const instructions = it.instructions || it.special_instructions || it.notes;
+                        return (
+                          <div key={idx} className="small bg-light p-2 rounded">
+                            <div className="d-flex justify-content-between fw-semibold">
+                              <span>{it.name} × {it.quantity}</span>
+                              <span>{formatCurrency(Number(it.price || 0) * (it.quantity || 1))}</span>
+                            </div>
+                            {toppings.length > 0 && (
+                              <div className="text-muted" style={{ fontSize: '11px' }}>
+                                • Extra ingredients: {toppings.join(', ')}
+                              </div>
+                            )}
+                            {instructions && (
+                              <div className="text-muted fst-italic" style={{ fontSize: '11px' }}>
+                                • Instructions: {instructions}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
               <div className="mt-4 pt-3 border-top d-flex justify-content-between align-items-center flex-wrap gap-2">
                 <span className="text-secondary small">Total: <strong className="text-danger">{formatCurrency(selectedOrder.total)}</strong></span>
@@ -228,7 +282,8 @@ export const OrderHistory = () => {
               </div>
             </div>
           </Modal>
-        )}
+          );
+        })()}
         
         {/* E-Bill Modal */}
         <EBillModal 
