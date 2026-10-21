@@ -6,7 +6,7 @@ from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import AccessToken
 
 from apps.accounts.models import User
-from apps.accounts.permissions import get_active_employee
+from apps.accounts.permissions import ADMIN_ROLES, get_active_employee
 
 
 class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
@@ -15,6 +15,7 @@ class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
     async def connect(self):
         raw = parse_qs(self.scope.get("query_string", b"")).get(b"token", [b""])[0].decode()
         user = await self._user_from_token(raw)
+        self.user = user
         groups = await self._groups_for(user) if user else []
         if not groups:
             await self.accept()
@@ -33,6 +34,13 @@ class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
                 pass
 
     async def order_event(self, event):
+        user = getattr(self, "user", None)
+        if user and not getattr(user, "is_superuser", False):
+            emp = await self._get_emp(user)
+            if emp and emp.role not in ADMIN_ROLES:
+                placed_by = event.get("placed_by_id")
+                if placed_by is not None and str(placed_by) != str(user.id):
+                    return
         await self.send_json({k: v for k, v in event.items() if k != "type"})
 
     async def catalog_event(self, event):
@@ -61,3 +69,7 @@ class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
         if getattr(user, "user_type", None) == User.UserType.CUSTOMER:
             return [f"customer-{user.id}"]
         return []
+
+    @database_sync_to_async
+    def _get_emp(self, user):
+        return get_active_employee(user)

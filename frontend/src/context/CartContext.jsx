@@ -129,11 +129,14 @@ export const CartProvider = ({ children }) => {
   const { user } = useContext(AuthContext);
   const deletingIdsRef = useRef(new Set());
   const prevUserIdRef = useRef(user?.id);
+  const fetchIdRef = useRef(0);
 
   const getCartStorageKey = (currentUser, ctx = tableContext) => {
     if (!currentUser) return 'foodie_guest_cart';
-    const id = currentUser.phone ? String(currentUser.phone).replace(/\D/g, '').slice(-10) : (currentUser.id || currentUser.email || 'user');
-    const baseKey = `foodie_cart_${id}`;
+    const id = currentUser.id
+      ? String(currentUser.id)
+      : (currentUser.phone ? String(currentUser.phone).replace(/\D/g, '').slice(-10) : (currentUser.email || 'customer'));
+    const baseKey = `foodie_cart_user_${id}`;
     
     if (currentUser.role === 'admin' || currentUser.role === 'employee') {
       const tId = ctx?.tableId || ctx?.tableNumber || 'default';
@@ -146,21 +149,38 @@ export const CartProvider = ({ children }) => {
   const saveCartToStorage = (items, targetUser = user) => {
     const key = getCartStorageKey(targetUser);
     sessionStorage.setItem(key, JSON.stringify(items));
-    sessionStorage.setItem('foodie_cart', JSON.stringify(items));
     if (!targetUser) {
       sessionStorage.setItem('foodie_guest_cart_temp', JSON.stringify(items));
       sessionStorage.setItem('foodie_guest_cart', JSON.stringify(items));
+    } else {
+      // Ensure guest keys don't linger for an authenticated user
+      sessionStorage.removeItem('foodie_guest_cart');
+      sessionStorage.removeItem('foodie_guest_cart_temp');
+      sessionStorage.removeItem('foodie_guest_cart_unmerged');
+      localStorage.removeItem('foodie_guest_cart');
+      localStorage.removeItem('foodie_guest_cart_temp');
+      localStorage.removeItem('foodie_guest_cart_unmerged');
     }
+    // Scrub legacy shared cart keys
+    try {
+      sessionStorage.removeItem('foodie_cart');
+      localStorage.removeItem('foodie_cart');
+    } catch (e) {}
   };
 
   useEffect(() => {
     const key = getCartStorageKey(user);
-    const savedCart = sessionStorage.getItem(key) || (!user ? (sessionStorage.getItem('foodie_guest_cart_temp') || sessionStorage.getItem('foodie_guest_cart') || sessionStorage.getItem('foodie_cart')) : null);
+    let savedCart = sessionStorage.getItem(key);
+    if (!savedCart && !user) {
+      savedCart = sessionStorage.getItem('foodie_guest_cart_temp') || sessionStorage.getItem('foodie_guest_cart');
+    }
     const savedTable = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
     if (savedCart) {
       try {
         setCartItems(JSON.parse(savedCart));
-      } catch (e) { }
+      } catch (e) {
+        setCartItems([]);
+      }
     } else {
       setCartItems([]);
     }
@@ -175,12 +195,14 @@ export const CartProvider = ({ children }) => {
       setCartItems([]);
       setCoupon(null);
       sessionStorage.removeItem('foodie_cart');
+      sessionStorage.removeItem('foodie_guest_token');
       sessionStorage.removeItem('foodie_guest_cart');
       localStorage.removeItem('foodie_guest_cart');
       sessionStorage.removeItem('foodie_guest_cart_temp');
       localStorage.removeItem('foodie_guest_cart_temp');
       sessionStorage.removeItem('foodie_guest_cart_unmerged');
       localStorage.removeItem('foodie_guest_cart_unmerged');
+      localStorage.removeItem('foodie_cart');
       if (user) {
         sessionStorage.removeItem(getCartStorageKey(user));
       }
@@ -193,130 +215,85 @@ export const CartProvider = ({ children }) => {
 
   // Synchronize cart items with backend database when user logs in / changes
   useEffect(() => {
-    const currentIdentity = user ? (user.phone ? String(user.phone).replace(/\D/g, '').slice(-10) : String(user.id || user.email || 'user')) : 'guest';
-    const isInitialAuthLoad = prevUserIdRef.current === 'guest' && currentIdentity !== 'guest';
-    const isUserSwitch = prevUserIdRef.current !== undefined && prevUserIdRef.current !== currentIdentity && !isInitialAuthLoad;
+    const currentFetchId = ++fetchIdRef.current;
+    const currentIdentity = user ? String(user.id || user.phone || 'customer') : 'guest';
+    const isIdentityChange = prevUserIdRef.current !== undefined && prevUserIdRef.current !== currentIdentity;
     prevUserIdRef.current = currentIdentity;
 
-    let unmergedGuestItems = [];
-    if (!user || user.role === 'customer') {
-      try {
-        const savedUnmerged = sessionStorage.getItem('foodie_guest_cart_unmerged') ||
-          localStorage.getItem('foodie_guest_cart_unmerged') ||
-          sessionStorage.getItem('foodie_guest_cart_temp') ||
-          localStorage.getItem('foodie_guest_cart_temp') ||
-          sessionStorage.getItem('foodie_guest_cart') ||
-          localStorage.getItem('foodie_guest_cart');
-        if (savedUnmerged) {
-          const parsed = JSON.parse(savedUnmerged);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            unmergedGuestItems = parsed;
-          }
-        }
-      } catch (e) { }
-    }
-
-    if (isUserSwitch && unmergedGuestItems.length === 0) {
-      sessionStorage.removeItem('foodie_cart');
-      if (user) {
-        sessionStorage.removeItem(getCartStorageKey(user));
-      }
+    // Immediately clear in-memory cart on identity transition so previous user's cart is never displayed
+    if (isIdentityChange) {
       setCartItems([]);
-    } else if (unmergedGuestItems.length > 0) {
-      setCartItems(unmergedGuestItems);
-      saveCartToStorage(unmergedGuestItems, user);
     }
 
     const loadBackendCart = async () => {
-      // Get unmerged guest cart items if user just logged in from guest checkout
+      const guestToken = sessionStorage.getItem('foodie_guest_token');
+      const savedUnmergedStr = sessionStorage.getItem('foodie_guest_cart_unmerged') || sessionStorage.getItem('foodie_guest_cart_temp');
       let unmergedGuestItems = [];
-      try {
-        const savedUnmerged = sessionStorage.getItem('foodie_guest_cart_unmerged') || sessionStorage.getItem('foodie_guest_cart_temp');
-        if (savedUnmerged) {
-          unmergedGuestItems = JSON.parse(savedUnmerged);
-        }
-      } catch (e) { }
+      if (user && user.role === 'customer' && savedUnmergedStr) {
+        try {
+          unmergedGuestItems = JSON.parse(savedUnmergedStr);
+        } catch (e) { }
+      }
 
-      let cachedCartItems = [];
-      try {
-        const key = getCartStorageKey(user);
-        const savedCart = sessionStorage.getItem(key) || (!isUserSwitch ? sessionStorage.getItem('foodie_cart') : null);
-        if (savedCart) {
-          cachedCartItems = JSON.parse(savedCart);
+      // If customer just logged in and had an active guest token, merge it via server endpoint
+      if (user && user.role === 'customer' && guestToken) {
+        try {
+          await cartService.mergeGuestCart(guestToken);
+        } catch (e) {
+          console.warn('[CART SYNC] Failed to merge server guest cart:', e);
+        } finally {
+          sessionStorage.removeItem('foodie_guest_token');
         }
-      } catch (e) { }
+      }
+
+      // Skip backend cart sync immediately after order placement
+      const skipFlag = sessionStorage.getItem('foodie_checkout_in_progress');
+      if (skipFlag) {
+        sessionStorage.removeItem('foodie_checkout_in_progress');
+        return;
+      }
 
       if (usesServerCart(user) || (!user && !isStaffOrdering())) {
-        // Skip backend cart sync immediately after order placement to prevent
-        // creating a new cart right after the old one was cleared/abandoned.
-        const skipFlag = sessionStorage.getItem('foodie_checkout_in_progress');
-        if (skipFlag) {
-          sessionStorage.removeItem('foodie_checkout_in_progress');
-          return;
-        }
         try {
           if (!user && !isStaffOrdering()) {
             try { await ensureGuestToken(); } catch (e) { /* local cart still works */ }
           }
-          const ownerId = cartOwnerId(user);
-          const activeCart = (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0)
-            ? await cartService.getOrCreateCart(ownerId, tableContext?.tableId || null).catch(() => null)
-            : await cartService.getExistingCart(ownerId, tableContext?.tableId || null).catch(() => null);
+          if (currentFetchId !== fetchIdRef.current) return;
 
-          if (!activeCart) {
-            if (sessionStorage.getItem('foodie_staff_ordering') === '1') {
-              setCartItems([]);
-              saveCartToStorage([], user);
-            } else if (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
-              setCartItems(unmergedGuestItems);
-              saveCartToStorage(unmergedGuestItems, user);
-            } else if (cachedCartItems.length > 0) {
-              setCartItems(cachedCartItems);
-              saveCartToStorage(cachedCartItems, user);
-            } else {
-              setCartItems([]);
-              saveCartToStorage([], user);
-            }
-            if (user && user.role === 'customer') {
+          const ownerId = cartOwnerId(user);
+          let activeCart = await cartService.getExistingCart(ownerId, tableContext?.tableId || null).catch(() => null);
+          if (currentFetchId !== fetchIdRef.current) return;
+
+          // If customer just logged in with unmerged guest items and has no active server cart yet, restore them
+          if (user && user.role === 'customer' && Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
+            try {
+              await cartService.restoreGuestCartAfterLogin(unmergedGuestItems);
+              activeCart = await cartService.getExistingCart(ownerId, tableContext?.tableId || null).catch(() => null);
+            } catch (err) {
+              console.warn('[CART SYNC] Failed to restore local guest items:', err);
+            } finally {
               sessionStorage.removeItem('foodie_guest_cart_unmerged');
-              localStorage.removeItem('foodie_guest_cart_unmerged');
               sessionStorage.removeItem('foodie_guest_cart_temp');
-              localStorage.removeItem('foodie_guest_cart_temp');
               sessionStorage.removeItem('foodie_guest_cart');
+              localStorage.removeItem('foodie_guest_cart_unmerged');
+              localStorage.removeItem('foodie_guest_cart_temp');
               localStorage.removeItem('foodie_guest_cart');
             }
+          }
+
+          if (currentFetchId !== fetchIdRef.current) return;
+
+          if (!activeCart) {
+            setCartItems([]);
+            saveCartToStorage([], user);
             return;
           }
 
-          // Merge guest cart items into backend cart ONLY if unmerged guest cart exists
-          if (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
-            const existingBackendItems = await cartService.getCartItems(activeCart?.id).catch(() => []);
-            const existingKeys = new Set((existingBackendItems || []).map(lineIdentity));
-
-            for (const item of unmergedGuestItems) {
-              try {
-                const key = lineIdentity(item);
-                if (!existingKeys.has(key)) {
-                  await cartService.addItemToCart(activeCart?.id, item.id, item.quantity, getProductSellingPrice(item), {
-                    instructions: item.instructions || '',
-                    optionIds: (item.extraIngredients || []).map((extra) => extra.id).filter(Boolean),
-                  });
-                  existingKeys.add(key);
-                }
-              } catch (err) {
-                console.error("Error adding local item to backend cart:", err);
-              }
-            }
-            sessionStorage.removeItem('foodie_guest_cart_unmerged');
-            localStorage.removeItem('foodie_guest_cart_unmerged');
-            sessionStorage.removeItem('foodie_guest_cart_temp');
-            localStorage.removeItem('foodie_guest_cart_temp');
-            sessionStorage.removeItem('foodie_guest_cart');
-            localStorage.removeItem('foodie_guest_cart');
-          }
-
           const backendItems = await cartService.getCartItems(activeCart.id);
+          if (currentFetchId !== fetchIdRef.current) return;
+
           const allProducts = await productService.getProducts();
+          if (currentFetchId !== fetchIdRef.current) return;
 
           const mappedItems = (backendItems || []).map(bi => {
             const prod = allProducts.find(p => Number(p.id) === Number(bi.food || bi.food_item || bi.food_id));
@@ -342,40 +319,29 @@ export const CartProvider = ({ children }) => {
             };
           }).filter(Boolean);
 
-          if (mappedItems.length > 0) {
-            setCartItems(mappedItems);
-            saveCartToStorage(mappedItems, user);
-          } else if (sessionStorage.getItem('foodie_staff_ordering') === '1') {
-            setCartItems([]);
-            saveCartToStorage([], user);
-          } else if (Array.isArray(unmergedGuestItems) && unmergedGuestItems.length > 0) {
-            setCartItems(unmergedGuestItems);
-            saveCartToStorage(unmergedGuestItems, user);
-          } else if (cachedCartItems.length > 0) {
-            setCartItems(cachedCartItems);
-            saveCartToStorage(cachedCartItems, user);
-          } else {
-            setCartItems([]);
-            saveCartToStorage([], user);
-          }
+          if (currentFetchId !== fetchIdRef.current) return;
+
+          setCartItems(mappedItems);
+          saveCartToStorage(mappedItems, user);
         } catch (e) {
           console.error("Error loading cart from database:", e);
-          if (cachedCartItems.length > 0) {
-            setCartItems(cachedCartItems);
-            saveCartToStorage(cachedCartItems, user);
-          } else {
-            setCartItems([]);
-            saveCartToStorage([], user);
+          if (currentFetchId === fetchIdRef.current) {
+            // Load only this specific user's scoped cart if exists, never a generic or foreign cart
+            const key = getCartStorageKey(user);
+            const userSpecificSaved = sessionStorage.getItem(key);
+            if (userSpecificSaved) {
+              try { setCartItems(JSON.parse(userSpecificSaved)); } catch (err) { setCartItems([]); }
+            } else {
+              setCartItems([]);
+            }
           }
         }
       } else {
         const key = getCartStorageKey(user, tableContext);
         let savedCart = sessionStorage.getItem(key);
-        
-        if (!savedCart && (!user || user.role === 'customer')) {
-          savedCart = sessionStorage.getItem('foodie_guest_cart') || sessionStorage.getItem('foodie_cart');
+        if (!savedCart && !user) {
+          savedCart = sessionStorage.getItem('foodie_guest_cart_temp') || sessionStorage.getItem('foodie_guest_cart');
         }
-        
         if (savedCart) {
           try {
             setCartItems(JSON.parse(savedCart));
@@ -387,6 +353,7 @@ export const CartProvider = ({ children }) => {
         }
       }
     };
+
     loadBackendCart();
   }, [user, tableContext?.tableId]);
 
@@ -863,7 +830,7 @@ export const CartProvider = ({ children }) => {
     const id = user?.phone
       ? String(user.phone).replace(/\D/g, '').slice(-10)
       : (user?.id || user?.email || '');
-    const prefix = id ? `foodie_cart_${id}` : null;
+    const prefix = id ? `foodie_cart_user_${id}` : null;
     const shouldWipe = (key) => key === 'foodie_cart' || (prefix && key && key.startsWith(prefix));
     const sessionKeys = [];
     for (let i = 0; i < sessionStorage.length; i += 1) sessionKeys.push(sessionStorage.key(i));
@@ -929,9 +896,10 @@ export const CartProvider = ({ children }) => {
   const getEffectiveItems = () => {
     if (cartItems && cartItems.length > 0) return cartItems;
     try {
-      let saved = sessionStorage.getItem(getCartStorageKey(user, tableContext));
-      if (!saved && (!user || user.role === 'customer')) {
-        saved = sessionStorage.getItem('foodie_cart');
+      const key = getCartStorageKey(user, tableContext);
+      let saved = sessionStorage.getItem(key);
+      if (!saved && !user) {
+        saved = sessionStorage.getItem('foodie_guest_cart_temp') || sessionStorage.getItem('foodie_guest_cart');
       }
       if (saved) {
         const parsed = JSON.parse(saved);

@@ -22,6 +22,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
 
   useEffect(() => {
     if (!notifications || notifications.length === 0) return;
+    if (user?.role === 'employee') return;
 
     if (knownNotifIdsRef.current === null) {
       knownNotifIdsRef.current = new Set(notifications.map(n => String(n.id)));

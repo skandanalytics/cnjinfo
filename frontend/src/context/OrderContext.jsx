@@ -40,8 +40,20 @@ export const OrderProvider = ({ children }) => {
     if (showLoading) setLoading(true);
     try {
       const { listOrdersForUi } = await import('../services/adminApi');
-      const data = await listOrdersForUi();
-      if (Array.isArray(data)) setOrders(uniqueById(data));
+      const isEmployee = user?.role === 'employee';
+      const data = await listOrdersForUi(isEmployee ? { mine: true } : {});
+      let list = Array.isArray(data) ? data : [];
+      if (isEmployee && user?.id) {
+        list = list.filter(o => {
+          const placedId = String(o.placedById || o.placed_by_id || o.placedBy?.id || o.placed_by?.id || o.employeeId || '');
+          const placedName = String(o.placedByName || o.placed_by_name || '').toLowerCase();
+          const uName = String(user.name || user.username || '').toLowerCase();
+          if (placedId && placedId === String(user.id)) return true;
+          if (placedName && uName && placedName === uName) return true;
+          return placedId === String(user.id);
+        });
+      }
+      setOrders(uniqueById(list));
     } catch (e) {
       console.error('fetchOrders error:', e);
     } finally {

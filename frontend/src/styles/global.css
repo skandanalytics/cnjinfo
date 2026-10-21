@@ -226,13 +226,20 @@ html, body {
   font-weight: 600;
   cursor: pointer;
   user-select: none;
-  transition: background-color 0.15s ease-in-out;
+  transition: transform 180ms ease, background-color 180ms ease-in-out, border-color 180ms ease, box-shadow 180ms ease !important;
   margin-bottom: 0;
   box-sizing: border-box;
+  will-change: transform;
 }
 
 .food-type-control:hover {
   background-color: #f8fafc;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06) !important;
+}
+
+.food-type-control:active {
+  transform: translateY(0) scale(0.985) !important;
 }
 
 .food-type-control:focus-within {
@@ -314,6 +321,42 @@ html, body {
   background-image: none !important;
 }
 
+/* Button transitions, hover elevation and pressed states */
+.btn,
+.btn-primary-custom,
+.btn-secondary-custom,
+.food-card-add-btn,
+.table-card-btn {
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease !important;
+  will-change: transform;
+}
+
+.btn:hover:not(:disabled):not(.disabled),
+.btn-primary-custom:hover:not(:disabled):not(.disabled),
+.btn-secondary-custom:hover:not(:disabled):not(.disabled),
+.food-card-add-btn:hover:not(:disabled):not(.disabled),
+.table-card-btn:hover:not(:disabled):not(.disabled) {
+  transform: translateY(-1px) !important;
+}
+
+.btn:active:not(:disabled):not(.disabled),
+.btn.active:not(:disabled):not(.disabled),
+.btn-primary-custom:active:not(:disabled):not(.disabled),
+.btn-secondary-custom:active:not(:disabled):not(.disabled),
+.food-card-add-btn:active:not(:disabled):not(.disabled),
+.table-card-btn:active:not(:disabled):not(.disabled) {
+  transform: translateY(0) scale(0.985) !important;
+}
+
+.btn:disabled,
+.btn.disabled,
+.btn-primary-custom:disabled,
+.btn-secondary-custom:disabled {
+  transform: none !important;
+  box-shadow: none !important;
+  cursor: not-allowed;
+}
+
 /* Card Food-Type Badge Overlay Container */
 .food-type-badge-container {
   display: inline-flex !important;
@@ -342,18 +385,103 @@ html, body {
   line-height: 1;
 }
 
-/* Common Card Styles */
+/* Common Card Styles — Subtle Elevation and Smooth Hover */
 .foodie-card {
-  background-color: var(--surface-color);
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius-md);
-  box-shadow: var(--shadow-sm);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  background-color: var(--surface-color, #ffffff) !important;
+  border: 1.5px solid #f1f5f9 !important;
+  border-radius: var(--border-radius-md, 12px) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 220ms ease !important;
   overflow: hidden;
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 .foodie-card:hover {
-  box-shadow: var(--shadow-md);
+  transform: translateY(-2.5px) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1), 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  border-color: rgba(220, 53, 69, 0.35) !important;
+}
+
+/* Lightweight Dish Card Entrance Animation */
+@keyframes foodieCardFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.foodie-card-animate {
+  animation: foodieCardFadeIn 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Lightweight Modal & Dialog Entrance Animation */
+@keyframes foodieModalIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.modal.show .modal-content,
+.modal.d-block .modal-content,
+.modal-content.animate-fade-in {
+  animation: foodieModalIn 220ms cubic-bezier(0.16, 1, 0.3, 1) both !important;
+}
+
+/* Lightweight Dropdown Menu Appearance */
+@keyframes foodieDropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dropdown-menu.show {
+  animation: foodieDropdownIn 180ms cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+}
+
+/* Reduced Motion Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .foodie-card-animate,
+  .modal.show .modal-content,
+  .modal.d-block .modal-content,
+  .modal-content.animate-fade-in,
+  .dropdown-menu.show {
+    animation: none !important;
+  }
+  .foodie-card,
+  .pos-dish-card,
+  .table-card,
+  .stat-card,
+  .stat-card-hover,
+  .hover-lift,
+  .inventory-card,
+  .inventory-summary-card,
+  .btn,
+  .btn-primary-custom,
+  .btn-secondary-custom,
+  .food-card-add-btn,
+  .table-card-btn,
+  .food-type-control {
+    transition-duration: 0.01ms !important;
+    transform: none !important;
+  }
 }
 
 /* Sub-step Padding Utilities */

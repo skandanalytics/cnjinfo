@@ -279,9 +279,33 @@ let cachedFoodImages = null;
 let cachedFoodImagesTime = 0;
 let cachedMappedProducts = null;
 let cachedMappedProductsTime = 0;
+let cachedCustomerCategories = null;
 const STATIC_CACHE_TTL = 1500; // 1.5 seconds for instant cross-device updates
 const PRODUCTS_CACHE_TTL = 1500; // 1.5 seconds for instant cross-device updates
 const INVENTORY_CACHE_TTL = 1500; // 1.5 seconds for instant inventory sync
+
+export const getCustomerCategories = async (forceRefresh = false) => {
+  if (!forceRefresh && cachedCustomerCategories && cachedCustomerCategories.length > 0) {
+    return cachedCustomerCategories;
+  }
+  const branchId = await resolveCustomerBranchId();
+  if (branchId) {
+    try {
+      const menuRes = await api.get(`/public/branches/${branchId}/menu/`);
+      const categories = (menuRes.data?.categories || []).map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        dish_count: c.dish_count || 0
+      }));
+      cachedCustomerCategories = categories;
+      return categories;
+    } catch (e) {
+      console.warn("Could not fetch customer categories:", e);
+    }
+  }
+  return cachedCustomerCategories || [];
+};
 
 export const getCachedCategories = async (forceRefresh = false) => {
   const now = Date.now();
@@ -289,7 +313,9 @@ export const getCachedCategories = async (forceRefresh = false) => {
     return cachedCategories;
   }
   const { isStaffScreen } = await import('./adminApi');
-  if (!isStaffScreen()) return [];
+  if (!isStaffScreen()) {
+    return await getCustomerCategories(forceRefresh);
+  }
   let remoteCats = [];
   try {
     const res = await api.get('/restaurant/categories/');
@@ -426,7 +452,13 @@ export const productService = {
     const branchId = await resolveCustomerBranchId();
     if (branchId) {
       const menuRes = await api.get(`/public/branches/${branchId}/menu/`);
-      const categories = (menuRes.data?.categories || []).map(c => ({ id: c.id, name: c.name }));
+      const categories = (menuRes.data?.categories || []).map(c => ({
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        dish_count: c.dish_count || 0
+      }));
+      cachedCustomerCategories = categories;
       const mapped = (menuRes.data?.foods || []).map(food => mapProductToFrontend({
         ...food,
         price: food.original_price,
@@ -1109,6 +1141,7 @@ export const productService = {
 
   editProduct: async (id, data) => productService.updateProduct(id, data),
   getCachedCategories: (forceRefresh = false) => getCachedCategories(forceRefresh),
+  getCustomerCategories: (forceRefresh = false) => getCustomerCategories(forceRefresh),
   getCachedInventory: (forceRefresh = false) => getCachedInventory(forceRefresh),
   getCachedFoodImages: (forceRefresh = false) => getCachedFoodImages(forceRefresh),
   clearStaticProductCache: () => clearStaticProductCache()

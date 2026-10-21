@@ -93,12 +93,15 @@ def serialize_order(order):
     } for i in order.items.all()]
     history = [{"from": h.from_status, "to": h.to_status, "note": h.note, "at": h.created_at}
                for h in order.status_history.all()]
+    diner_count = order.number_of_diners or (order.table.capacity if order.table else None)
     return {
         "id": order.id, "order_number": order.order_number, "branch_id": order.branch_id,
         "branch_name": order.branch_name,
         "order_type": order.order_type, "status": order.status, "payment_status": order.payment_status,
-        "table": ({"id": order.table_id, "label": order.table_label}
+        "table": ({"id": order.table_id, "label": order.table_label, "capacity": order.table.capacity if order.table else None}
                   if order.table_id or order.table_label else None),
+        "number_of_diners": diner_count,
+        "diners": diner_count,
         "customer_phone": order.customer_phone,
         "placed_by": order.placed_by_id,
         "placed_by_name": order.placed_by_name or (order.placed_by.name if order.placed_by_id else None),
@@ -267,6 +270,8 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
             raise OrderError("Table not found or unauthorized.", "not_found", 404)
         if not table.is_active:
             raise OrderError("This table is not available for a new order.", "table_unavailable", 409)
+        if table.status == DiningTable.Status.OCCUPIED:
+            raise OrderError("Table is occupied.", "table_occupied", 409)
         branch = table.branch
     else:
         order_type = Order.Type.TAKEAWAY

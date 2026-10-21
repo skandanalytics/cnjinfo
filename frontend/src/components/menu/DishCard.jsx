@@ -38,8 +38,21 @@ export const DishCard = ({
 
   const discountLabel = calculatedPct > 0 ? `${calculatedPct}% OFF` : `OFFER AVAILABLE`;
 
-  const stockLabel = classifyStock(dish.stock);
-  const isOutOfStock = stockLabel === 'Out of Stock';
+  const isConfirmedOutOfStock =
+    dish.is_sold_out === true ||
+    dish.is_orderable === false ||
+    dish.status === 'Out of Stock' ||
+    dish.status === 'OUT_OF_STOCK' ||
+    (dish.stock !== undefined && dish.stock !== null && dish.stock !== '' && Number.isFinite(Number(dish.stock)) && Number(dish.stock) <= 0);
+
+  const isOutOfStock = isConfirmedOutOfStock;
+
+  const stockLabel = isOutOfStock
+    ? 'Out of Stock'
+    : (dish.stock !== undefined && dish.stock !== null && dish.stock !== '' && Number(dish.stock) > 0 && Number(dish.stock) < 6
+        ? 'Low Stock'
+        : 'In Stock');
+
   const stockBadge = isOutOfStock
     ? 'bg-dark text-white'
     : stockLabel === 'Low Stock'
@@ -47,7 +60,7 @@ export const DishCard = ({
       : 'bg-success-subtle text-success';
 
   return (
-    <div className="card rounded-3 border-0 shadow-sm overflow-hidden bg-white foodie-card h-100 d-flex flex-column">
+    <div className="card rounded-3 shadow-sm overflow-hidden bg-white foodie-card foodie-card-animate h-100 d-flex flex-column">
       <div className="flex-grow-1 d-flex flex-column">
         <div className="position-relative flex-shrink-0" style={{ height: '168px' }}>
           <img 

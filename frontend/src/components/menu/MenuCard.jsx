@@ -10,7 +10,7 @@ export const MenuCard = ({
   isAdmin = false
 }) => {
   return (
-    <div className="card rounded-3 border-0 shadow-sm p-4 bg-white foodie-card">
+    <div className="card rounded-3 shadow-sm p-4 bg-white foodie-card">
       <div className="d-flex align-items-start justify-content-between mb-3">
         <div>
           <h5 className="fw-bold text-dark mb-1">{menu.name}</h5>

@@ -74,10 +74,12 @@ export const Home = () => {
     const isOutOfStock = (food) => {
       if (!food) return false;
       return (
-        (food.stock !== undefined && Number(food.stock) <= 0) ||
+        food.is_sold_out === true ||
+        food.is_orderable === false ||
+        food.is_available === false ||
         food.status === 'Out of Stock' ||
         food.status === 'OUT_OF_STOCK' ||
-        food.is_available === false
+        (food.stock !== undefined && food.stock !== null && food.stock !== '' && Number(food.stock) <= 0)
       );
     };
 

@@ -181,11 +181,15 @@ export const OrderDetailsModal = ({
         <div className="col-12 col-md-5 border-start border-light-subtle">
           <h6 className="fw-bold text-dark mb-3">Order Details</h6>
           <div className="p-3 border rounded-3 bg-light mb-4 small">
-            <div className="mb-2">Order Type: <strong className="text-danger">{order.orderType || (order.table === 'Takeaway' ? 'Takeaway' : 'Dining')}</strong></div>
-            {order.table !== 'Takeaway' && (
-              <div className="mb-2">Table No: <strong>{order.table}</strong></div>
+            <div className="mb-2">Order Type: <strong className="text-danger">{order.orderType === 'Takeaway' || String(order.table).toLowerCase() === 'takeaway' ? 'Takeaway' : 'Table Dine-In'}</strong></div>
+            {order.orderType !== 'Takeaway' && String(order.table).toLowerCase() !== 'takeaway' && (
+              <>
+                <div className="mb-2">Table No: <strong>{order.table}</strong></div>
+                {(order.diners || order.number_of_diners) && (
+                  <div className="mb-2">Diners: <strong>{order.diners || order.number_of_diners} {Number(order.diners || order.number_of_diners) === 1 ? 'Diner' : 'Diners'}</strong></div>
+                )}
+              </>
             )}
-            <div className="mb-2">Diners: <strong>{order.diners}</strong></div>
             <div className="mb-2">Source: <strong>{order.source}</strong></div>
             <div className="mb-2">Payment Method: <strong>{order.paymentMethod}</strong></div>
             <div>Date/Time: <strong>{order.date} at {order.time}</strong></div>

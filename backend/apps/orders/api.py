@@ -15,6 +15,8 @@ class PlaceOrderSerializer(serializers.Serializer):
     branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.filter(is_active=True))
     idempotency_key = serializers.CharField(max_length=64)
     payment_method = serializers.ChoiceField(choices=["UPI", "CARD", "NETBANKING", "WALLET", "COUNTER"])
+    cart_id = serializers.IntegerField(required=False, allow_null=True)
+    cart = serializers.IntegerField(required=False, allow_null=True)
 
 
 def _error(exc):
@@ -23,6 +25,10 @@ def _error(exc):
 
 def _sees_every_order(user):
     """Admins and branch managers see every order in their branch. Other staff see orders they placed."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
     employee = get_active_employee(user)
     return employee is not None and employee.role in ADMIN_ROLES
 
@@ -36,6 +42,13 @@ class OrderListCreateView(APIView):
     def post(self, request):
         ser = PlaceOrderSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
+        raw_cart_id = ser.validated_data.get("cart_id") or ser.validated_data.get("cart")
+        if raw_cart_id:
+            from apps.carts.models import Cart
+            target_cart = Cart.objects.filter(pk=raw_cart_id).first()
+            if target_cart and target_cart.user_id != request.user.id:
+                return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                status=status.HTTP_403_FORBIDDEN)
         try:
             order, created = create_from_cart(request.user, ser.validated_data["branch"],
                                               ser.validated_data["idempotency_key"],
@@ -52,17 +65,17 @@ class OrderListCreateView(APIView):
             qs = Order.objects.filter(customer=user)
         else:
             emp = get_active_employee(user)
-            if emp is None:
+            if emp is None and not getattr(user, "is_superuser", False):
                 return Response({"detail": "No active staff profile."}, status=403)
             qs = Order.objects.all()
-            if emp.branch_id is not None:
+            if emp and emp.branch_id is not None:
                 qs = qs.filter(branch_id=emp.branch_id)
-            if request.query_params.get("mine") == "1":
+            if not _sees_every_order(user) or request.query_params.get("mine") == "1":
                 qs = qs.filter(placed_by=user)
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
-        return Response([serialize_order(o) for o in qs.select_related("placed_by").prefetch_related("items", "status_history")])
+        return Response([serialize_order(o) for o in qs.select_related("placed_by", "table").prefetch_related("items", "status_history")])
 
     def _ip(self, request):
         return request.META.get("REMOTE_ADDR")
@@ -156,6 +169,8 @@ class OrderDetailView(APIView):
             return order if order.customer_id == user.id else None
         if not can_access_branch(user, order.branch_id):
             return None
+        if not _sees_every_order(user) and order.placed_by_id != user.id:
+            return None
         return order
 
 
@@ -169,6 +184,8 @@ class OrderTransitionView(APIView):
             order = Order.objects.filter(order_number=str(pk)).first()
         if order is None or not can_access_branch(request.user, order.branch_id):
             return Response({"detail": "Not found."}, status=404)
+        if not _sees_every_order(request.user) and order.placed_by_id != request.user.id:
+            return Response({"detail": "You can only update your own orders."}, status=403)
         new_status = request.data.get("status", "")
         if new_status not in Order.Status.values:
             return Response({"detail": "Unknown status."}, status=400)
@@ -188,12 +205,14 @@ class KitchenQueueView(APIView):
         emp = get_active_employee(request.user)
         qs = Order.objects.filter(status__in=[Order.Status.PENDING, Order.Status.PREPARING, Order.Status.READY,
                                               Order.Status.SERVED, Order.Status.COMPLETED])
-        if emp.branch_id is not None:
+        if emp and emp.branch_id is not None:
             qs = qs.filter(branch_id=emp.branch_id)
+        if not _sees_every_order(request.user) or request.query_params.get("mine") == "1":
+            qs = qs.filter(placed_by=request.user)
         wanted = request.query_params.get("status")
         if wanted:
             qs = qs.filter(status=wanted)
         branch = request.query_params.get("branch")
-        if branch and emp.branch_id is None:
+        if branch and emp and emp.branch_id is None:
             qs = qs.filter(branch_id=branch)
         return Response([serialize_order(o) for o in qs.order_by("created_at").prefetch_related("items", "status_history")])

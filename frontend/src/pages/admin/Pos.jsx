@@ -70,6 +70,7 @@ export const Pos = () => {
   const [orderError, setOrderError] = useState('');
   const [placedOrder, setPlacedOrder] = useState(null);
   const [viewingEBill, setViewingEBill] = useState(null);
+  const [mobilePosTab, setMobilePosTab] = useState('menu'); // 'menu' | 'order'
 
   // Initialize and load branches
   useEffect(() => {
@@ -190,9 +191,14 @@ export const Pos = () => {
       window.alert('This table is inactive.');
       return;
     }
+    if (table.status === 'Occupied' || table.is_occupied) {
+      window.alert('Table is occupied.');
+      return;
+    }
     setSelectedTable(table);
     setOrderType('DINE_IN');
     setShowTablePicker(false);
+    setOrderError('');
     setSearchParams({ table: table.id }, { replace: true });
   };
 
@@ -499,12 +505,14 @@ export const Pos = () => {
     setCouponError('');
   };
 
+  const canSubmitOrder = !submittingOrder && cartItems.length > 0 && (orderType === 'TAKEAWAY' || Boolean(selectedTable));
+
   return (
-    <AdminLayout contentClassName="p-0">
-      <div className="pos-container d-flex flex-column" style={{ minHeight: 'calc(100vh - 65px)', backgroundColor: '#f8f9fa' }}>
+    <AdminLayout fullHeight={true} contentClassName="p-0 d-flex flex-column flex-grow-1 overflow-hidden">
+      <div className="pos-container d-flex flex-column w-100 h-100 overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
         
         {/* Top POS Header Toolbar */}
-        <header className="pos-topbar bg-white border-bottom px-4 py-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
+        <header className="pos-topbar bg-white border-bottom px-4 py-3 d-flex align-items-center justify-content-between flex-wrap gap-3 flex-shrink-0">
           <div className="d-flex align-items-center gap-3">
             <h5 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
               <span className="badge bg-danger rounded-circle p-1.5" style={{ fontSize: '13px' }}>🍔</span>
@@ -532,12 +540,13 @@ export const Pos = () => {
           </div>
 
           {/* Search Input */}
-          <div className="d-flex align-items-center gap-2 flex-grow-1" style={{ maxWidth: '420px' }}>
+          <div className="d-flex align-items-center gap-2 flex-grow-1" style={{ maxWidth: '440px' }}>
             <div className="position-relative w-100">
-              <FiSearch className="position-absolute text-muted" style={{ left: '14px', top: '10px' }} />
+              <FiSearch className="position-absolute text-muted" style={{ left: '16px', top: '12px' }} />
               <input
                 type="text"
-                className="form-control form-control-sm rounded-pill ps-5 pe-4 py-2 border-light-subtle shadow-xs"
+                className="form-control rounded-pill ps-5 pe-4 py-2 border-light-subtle shadow-xs"
+                style={{ height: '38px', fontSize: '13px' }}
                 placeholder="Search dishes by name (e.g. pizza, pasta)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -546,7 +555,7 @@ export const Pos = () => {
                 <button
                   type="button"
                   className="btn btn-link position-absolute p-0 text-muted border-0"
-                  style={{ right: '12px', top: '7px' }}
+                  style={{ right: '14px', top: '9px' }}
                   onClick={() => setSearchQuery('')}
                 >
                   <FiX size={16} />
@@ -556,14 +565,43 @@ export const Pos = () => {
           </div>
         </header>
 
-        {/* Main POS Content Grid */}
-        <div className="row g-0 flex-grow-1">
+        {/* Mobile Tab Switcher (Visible on screens < 992px) */}
+        <div className="d-flex d-lg-none bg-white border-bottom px-3 py-2 gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setMobilePosTab('menu')}
+            className={`btn btn-sm flex-grow-1 rounded-pill fw-bold py-2 ${
+              mobilePosTab === 'menu' ? 'btn-danger text-white shadow-xs' : 'btn-light text-muted'
+            }`}
+            style={{ fontSize: '13px' }}
+          >
+            🍽️ Dishes ({filteredDishes.length})
+          </button>
+          <button
+            type="button"
+            onClick={() => setMobilePosTab('order')}
+            className={`btn btn-sm flex-grow-1 rounded-pill fw-bold py-2 position-relative ${
+              mobilePosTab === 'order' ? 'btn-danger text-white shadow-xs' : 'btn-light text-muted'
+            }`}
+            style={{ fontSize: '13px' }}
+          >
+            🛒 Order Ticket ({cartItems.length})
+            {cartItems.length > 0 && (
+              <span className="ms-1.5 badge bg-white text-danger rounded-pill px-2 py-0.5" style={{ fontSize: '11px' }}>
+                {formatCurrency(billSummary.grandTotal)}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Main POS Content Area with Independent Scroll Columns */}
+        <div className="pos-layout-wrapper">
           
-          {/* CENTER: Menu & Catalog Grid */}
-          <main className="col-12 col-lg-8 col-xl-8 p-3 d-flex flex-column border-end bg-white">
+          {/* CENTER: Menu & Catalog Grid (Independent Scroll Area) */}
+          <main className={`pos-menu-panel border-end ${mobilePosTab !== 'menu' ? 'd-none d-lg-flex' : ''}`}>
             
-            {/* Category Pills & Food-Type Filters Toolbar */}
-            <div className="d-flex flex-column gap-2.5 pb-3 border-bottom">
+            {/* Category Pills & Food-Type Filters Toolbar (Fixed top) */}
+            <div className="pos-menu-toolbar">
               
               {/* Category Bar */}
               <div className="d-flex align-items-center gap-2 overflow-auto py-1 scrollbar-hidden">
@@ -585,13 +623,13 @@ export const Pos = () => {
               </div>
 
               {/* Food Type Checkbox Filter Bar */}
-              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 pt-1">
+              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
                 <div className="d-flex align-items-center gap-2">
                   <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
                     Food Type:
                   </span>
                   
-                  {/* Veg Checkbox (NO tick mark, background color only) */}
+                  {/* Veg Checkbox */}
                   <label 
                     onClick={() => toggleFoodType('veg')}
                     className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
@@ -605,7 +643,7 @@ export const Pos = () => {
                     <span>Veg</span>
                   </label>
 
-                  {/* Non-Veg Checkbox (NO tick mark, background color only) */}
+                  {/* Non-Veg Checkbox */}
                   <label 
                     onClick={() => toggleFoodType('non-veg')}
                     className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
@@ -619,7 +657,7 @@ export const Pos = () => {
                     <span>Non-Veg</span>
                   </label>
 
-                  {/* Vegan Checkbox (NO tick mark, background color only) */}
+                  {/* Vegan Checkbox */}
                   <label 
                     onClick={() => toggleFoodType('vegan')}
                     className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
@@ -640,8 +678,8 @@ export const Pos = () => {
               </div>
             </div>
 
-            {/* Dish Cards Grid */}
-            <div className="flex-grow-1 pt-3 overflow-auto" style={{ maxHeight: 'calc(100vh - 195px)' }}>
+            {/* Dish Cards Grid (Independently scrollable) */}
+            <div className="pos-menu-content">
               {loading ? (
                 <div className="min-vh-50 d-flex align-items-center justify-content-center py-5">
                   <Loader />
@@ -653,7 +691,7 @@ export const Pos = () => {
                   icon="bi-search"
                 />
               ) : (
-                <div className="row row-cols-1 row-cols-sm-2 row-cols-md-2 row-cols-xl-3 g-3">
+                <div className="pos-dish-grid">
                   {filteredDishes.map((dish) => {
                     const isOutOfStock = dish.status === 'Out of Stock' || Number(dish.stock) <= 0;
                     const ft = normalizeFoodType(dish.foodType || dish.type);
@@ -662,137 +700,133 @@ export const Pos = () => {
                     const hasToppings = Array.isArray(dish.customizations) && dish.customizations.length > 0;
 
                     return (
-                      <div key={dish.id} className="col">
-                        <div 
-                          className={`card h-100 rounded-3 border transition-all ${
-                            isOutOfStock ? 'opacity-50 border-secondary-subtle bg-light' : 'border-light-subtle bg-white shadow-xs'
-                          }`}
-                          style={{ overflow: 'hidden' }}
-                        >
-                          {/* Dish Image */}
-                          <div className="position-relative" style={{ height: '140px', backgroundColor: '#eaeaea' }}>
-                            {dish.image ? (
-                              <img
-                                src={dish.image}
-                                alt={dish.name}
-                                className="w-100 h-100 object-fit-cover"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                            ) : (
-                              <div className="w-100 h-100 d-flex align-items-center justify-content-center text-secondary">
-                                <span className="fs-1">🍲</span>
-                              </div>
-                            )}
-
-                            {/* Food Type Icon Badge (Top-Right) */}
-                            <div className="position-absolute top-0 end-0 m-2 bg-white bg-opacity-90 rounded-circle p-1 shadow-xs d-flex align-items-center justify-content-center">
-                              <span 
-                                className={ft === 'veg' ? 'veg-badge' : ft === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}
-                                style={{ transform: 'scale(0.8)' }}
-                              ></span>
+                      <div 
+                        key={dish.id} 
+                        className={`pos-dish-card ${isOutOfStock ? 'opacity-50' : ''}`}
+                      >
+                        {/* Dish Image */}
+                        <div className="position-relative" style={{ height: '140px', backgroundColor: '#f1f3f5' }}>
+                          {dish.image ? (
+                            <img
+                              src={dish.image}
+                              alt={dish.name}
+                              className="w-100 h-100 object-fit-cover"
+                              onError={(e) => { e.target.style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="w-100 h-100 d-flex align-items-center justify-content-center text-secondary">
+                              <span className="fs-1">🍲</span>
                             </div>
+                          )}
 
-                            {/* Discount Badge (Top-Left) */}
-                            {dish.hasDiscount && dish.discountPercent > 0 && (
-                              <div className="position-absolute top-0 start-0 m-2">
-                                <span className="badge bg-danger rounded-pill px-2 py-1 shadow-xs fw-bold" style={{ fontSize: '10.5px' }}>
-                                  {dish.discountPercent}% OFF
-                                </span>
-                              </div>
-                            )}
-
-                            {/* Stock Badge (Bottom-Left) */}
-                            <div className="position-absolute bottom-0 start-0 m-2">
-                              {isOutOfStock ? (
-                                <span className="badge bg-dark text-white rounded-pill px-2 py-0.5" style={{ fontSize: '10px' }}>
-                                  Out of Stock
-                                </span>
-                              ) : Number(dish.stock) <= 5 ? (
-                                <span className="badge bg-warning text-dark rounded-pill px-2 py-0.5 shadow-xs" style={{ fontSize: '10px' }}>
-                                  Low: {dish.stock} left
-                                </span>
-                              ) : null}
-                            </div>
+                          {/* Food Type Icon Badge (Top-Right) */}
+                          <div className="position-absolute top-0 end-0 m-2 bg-white bg-opacity-90 rounded-circle p-1 shadow-xs d-flex align-items-center justify-content-center">
+                            <span 
+                              className={ft === 'veg' ? 'veg-badge' : ft === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}
+                              style={{ transform: 'scale(0.8)' }}
+                            ></span>
                           </div>
 
-                          {/* Dish Card Body */}
-                          <div className="p-3 d-flex flex-column flex-grow-1">
-                            <h6 className="fw-bold text-dark mb-1 text-truncate" title={dish.name}>
-                              {dish.name}
-                            </h6>
-                            <p className="text-muted small text-truncate-2 mb-2" style={{ fontSize: '11px', minHeight: '28px' }}>
-                              {dish.description || 'Delicious culinary preparation freshly made to order.'}
-                            </p>
+                          {/* Discount Badge (Top-Left) */}
+                          {dish.hasDiscount && dish.discountPercent > 0 && (
+                            <div className="position-absolute top-0 start-0 m-2">
+                              <span className="badge bg-danger rounded-pill px-2 py-1 shadow-xs fw-bold" style={{ fontSize: '10.5px' }}>
+                                {dish.discountPercent}% OFF
+                              </span>
+                            </div>
+                          )}
 
-                            <div className="mt-auto pt-2 border-top border-light d-flex align-items-center justify-content-between">
-                              {/* Price */}
-                              <div>
-                                {dish.hasDiscount && dish.price > dish.sellingPrice && (
-                                  <span className="text-muted text-decoration-line-through me-1 small" style={{ fontSize: '11.5px' }}>
-                                    {formatCurrency(dish.price)}
-                                  </span>
-                                )}
-                                <span className="fw-bold text-dark fs-6">
-                                  {formatCurrency(dish.sellingPrice || dish.price)}
+                          {/* Stock Badge (Bottom-Left) */}
+                          <div className="position-absolute bottom-0 start-0 m-2">
+                            {isOutOfStock ? (
+                              <span className="badge bg-dark text-white rounded-pill px-2 py-0.5" style={{ fontSize: '10px' }}>
+                                Out of Stock
+                              </span>
+                            ) : Number(dish.stock) <= 5 ? (
+                              <span className="badge bg-warning text-dark rounded-pill px-2 py-0.5 shadow-xs" style={{ fontSize: '10px' }}>
+                                Low: {dish.stock} left
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {/* Dish Card Body */}
+                        <div className="pos-dish-card-body">
+                          <h6 className="fw-bold text-dark mb-1 text-truncate" title={dish.name} style={{ fontSize: '14px' }}>
+                            {dish.name}
+                          </h6>
+                          <p className="text-muted small mb-2" style={{ fontSize: '11.5px', height: '32px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '1.4' }}>
+                            {dish.description || 'Delicious culinary preparation freshly made to order.'}
+                          </p>
+
+                          {/* Toppings / Instructions Link (Consistent 28px slot across all cards) */}
+                          <div className="d-flex align-items-center" style={{ height: '28px', marginBottom: '8px' }}>
+                            {hasToppings && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenCustomize(dish)}
+                                className="btn btn-xs btn-outline-secondary rounded-pill px-2.5 py-1 d-inline-flex align-items-center justify-content-center gap-1 w-100"
+                                style={{ fontSize: '11px', height: '26px' }}
+                              >
+                                <span>Instructions</span>
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="mt-auto pt-2 border-top border-light-subtle d-flex align-items-center justify-content-between">
+                            {/* Price */}
+                            <div>
+                              {dish.hasDiscount && dish.price > dish.sellingPrice && (
+                                <span className="text-muted text-decoration-line-through me-1 small" style={{ fontSize: '11.5px' }}>
+                                  {formatCurrency(dish.price)}
                                 </span>
-                              </div>
-
-                              {/* Action: Add or Stepper */}
-                              <div>
-                                {isOutOfStock ? (
-                                  <button disabled className="btn btn-sm btn-secondary opacity-50 rounded-pill px-3 py-1" style={{ fontSize: '11px' }}>
-                                    Unavailable
-                                  </button>
-                                ) : cartQty > 0 ? (
-                                  <div className="d-flex align-items-center gap-1 bg-light border rounded-pill px-2 py-0.5 shadow-xs">
-                                    <button
-                                      type="button"
-                                      className="btn btn-xs btn-link text-danger p-0 border-0"
-                                      onClick={() => {
-                                        const idx = cartItems.findIndex(i => String(i.dish.id) === String(dish.id));
-                                        if (idx >= 0) handleUpdateQuantity(idx, -1);
-                                      }}
-                                    >
-                                      <FiMinus size={13} />
-                                    </button>
-                                    <span className="px-2 fw-bold text-dark small" style={{ fontSize: '12px' }}>
-                                      {cartQty}
-                                    </span>
-                                    <button
-                                      type="button"
-                                      className="btn btn-xs btn-link text-danger p-0 border-0"
-                                      onClick={() => handleAddDish(dish)}
-                                    >
-                                      <FiPlus size={13} />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddDish(dish)}
-                                    className="btn btn-sm btn-danger text-white rounded-pill px-3 py-1 fw-bold shadow-xs d-flex align-items-center gap-1"
-                                    style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '12px' }}
-                                  >
-                                    <FiPlus size={14} />
-                                    <span>Add</span>
-                                  </button>
-                                )}
-                              </div>
+                              )}
+                              <span className="fw-bold text-dark fs-6">
+                                {formatCurrency(dish.sellingPrice || dish.price)}
+                              </span>
                             </div>
 
-                            {/* Toppings / Instructions Link */}
-                            {hasToppings && (
-                              <div className="pt-2 text-end">
+                            {/* Action: Add or Stepper */}
+                            <div>
+                              {isOutOfStock ? (
+                                <button disabled className="btn btn-sm btn-secondary opacity-50 rounded-pill px-3 py-1" style={{ fontSize: '11.5px', height: '32px' }}>
+                                  Unavailable
+                                </button>
+                              ) : cartQty > 0 ? (
+                                <div className="d-flex align-items-center gap-1 bg-light border rounded-pill px-2 shadow-xs" style={{ height: '32px' }}>
+                                  <button
+                                    type="button"
+                                    className="btn btn-xs btn-link text-danger p-0 border-0"
+                                    onClick={() => {
+                                      const idx = cartItems.findIndex(i => String(i.dish.id) === String(dish.id));
+                                      if (idx >= 0) handleUpdateQuantity(idx, -1);
+                                    }}
+                                  >
+                                    <FiMinus size={13} />
+                                  </button>
+                                  <span className="px-2 fw-bold text-dark small" style={{ fontSize: '12px' }}>
+                                    {cartQty}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="btn btn-xs btn-link text-danger p-0 border-0"
+                                    onClick={() => handleAddDish(dish)}
+                                  >
+                                    <FiPlus size={13} />
+                                  </button>
+                                </div>
+                              ) : (
                                 <button
                                   type="button"
-                                  onClick={() => handleOpenCustomize(dish)}
-                                  className="btn btn-link p-0 text-danger small text-decoration-none fw-semibold"
-                                  style={{ fontSize: '11px' }}
+                                  onClick={() => handleAddDish(dish)}
+                                  className="btn btn-sm btn-danger text-white rounded-pill px-3 py-1 fw-bold shadow-xs d-flex align-items-center gap-1"
+                                  style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '12px', height: '32px' }}
                                 >
-                                  + Options & Instructions
+                                  <FiPlus size={14} />
+                                  <span>Add</span>
                                 </button>
-                              </div>
-                            )}
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -801,106 +835,128 @@ export const Pos = () => {
                 </div>
               )}
             </div>
+
+            {/* Mobile Bottom Floating Checkout Bar (Visible on < 992px when viewing menu) */}
+            {mobilePosTab === 'menu' && cartItems.length > 0 && (
+              <div className="d-lg-none p-3 bg-white border-top shadow-lg position-sticky bottom-0 z-3">
+                <button
+                  type="button"
+                  onClick={() => setMobilePosTab('order')}
+                  className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold d-flex align-items-center justify-content-between px-4 shadow-sm"
+                  style={{ fontSize: '13px' }}
+                >
+                  <span>🛒 {cartItems.length} item{cartItems.length === 1 ? '' : 's'} in Ticket</span>
+                  <span>{formatCurrency(billSummary.grandTotal)} • View Ticket →</span>
+                </button>
+              </div>
+            )}
           </main>
 
-          {/* RIGHT: Order Panel & Checkout Actions */}
-          <aside className="col-12 col-lg-4 col-xl-4 p-3 bg-white d-flex flex-column" style={{ minHeight: 'calc(100vh - 65px)' }}>
+          {/* RIGHT: Order Panel & Checkout Actions (Independent Scroll Area) */}
+          <aside className={`pos-order-panel ${mobilePosTab !== 'order' ? 'd-none d-lg-flex' : ''}`}>
             
-            {/* Dining Mode Toggle (Dine-In vs Takeaway) */}
-            <div className="bg-light p-1.5 rounded-pill d-flex align-items-center mb-3">
-              <button
-                type="button"
-                onClick={() => handleToggleOrderType('DINE_IN')}
-                className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-1.5 transition-all ${
-                  orderType === 'DINE_IN'
-                    ? 'btn-danger text-white shadow-xs'
-                    : 'btn-light text-muted'
-                }`}
-                style={{ fontSize: '12.5px', padding: '6px 12px' }}
-              >
-                <FiLayers size={14} />
-                <span>Table Dine-In</span>
-              </button>
+            {/* 1. Dining Mode Toggle (Dine-In vs Takeaway) */}
+            <div className="pos-order-section p-2 bg-light">
+              <div className="d-flex align-items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => handleToggleOrderType('DINE_IN')}
+                  className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-1.5 transition-all ${
+                    orderType === 'DINE_IN'
+                      ? 'btn-danger text-white shadow-xs'
+                      : 'btn-white text-muted border-0 bg-white'
+                  }`}
+                  style={{ fontSize: '12px', height: '34px' }}
+                >
+                  <FiLayers size={13} />
+                  <span>Table Dine-In</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => handleToggleOrderType('TAKEAWAY')}
-                className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-1.5 transition-all ${
-                  orderType === 'TAKEAWAY'
-                    ? 'btn-danger text-white shadow-xs'
-                    : 'btn-light text-muted'
-                }`}
-                style={{ fontSize: '12.5px', padding: '6px 12px' }}
-              >
-                <FiShoppingBag size={14} />
-                <span>Takeaway</span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => handleToggleOrderType('TAKEAWAY')}
+                  className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-1.5 transition-all ${
+                    orderType === 'TAKEAWAY'
+                      ? 'btn-danger text-white shadow-xs'
+                      : 'btn-white text-muted border-0 bg-white'
+                  }`}
+                  style={{ fontSize: '12px', height: '34px' }}
+                >
+                  <FiShoppingBag size={13} />
+                  <span>Takeaway</span>
+                </button>
+              </div>
             </div>
 
-            {/* Table / Takeaway Identification Card */}
-            <div className="p-3 rounded-3 mb-3 border bg-light-subtle d-flex align-items-center justify-content-between">
+            {/* 2. Table / Takeaway Identification Card */}
+            <div className="pos-order-section">
               {orderType === 'DINE_IN' ? (
-                <div>
-                  <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '11px' }}>Dine-In Table</span>
-                  <div className="d-flex align-items-center gap-2 mt-0.5">
-                    {selectedTable ? (
-                      <span className="fw-bold text-dark fs-6">
-                        Table {tableService.getCanonicalTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id)}
-                      </span>
-                    ) : (
-                      <span className="text-danger fw-semibold small">No Table Selected</span>
-                    )}
-                    {selectedTable && (
-                      <Badge status={selectedTable.status} className="px-2 py-0.5" style={{ fontSize: '10px' }} />
-                    )}
+                <div className="d-flex align-items-center justify-content-between">
+                  <div>
+                    <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>Dine-In Table</span>
+                    <div className="d-flex align-items-center gap-2 mt-0.5">
+                      {selectedTable ? (
+                        <span className="fw-bold text-dark fs-6">
+                          Table {tableService.getCanonicalTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id)}
+                        </span>
+                      ) : (
+                        <span className="text-danger fw-semibold small">No Table Selected</span>
+                      )}
+                      {selectedTable && (
+                        <span
+                          className="rounded-circle d-inline-block flex-shrink-0"
+                          style={{
+                            width: '8px',
+                            height: '8px',
+                            backgroundColor: selectedTable.status === 'Occupied' ? '#ef4444' : selectedTable.status === 'Reserved' ? '#f59e0b' : '#22c55e'
+                          }}
+                          title={selectedTable.status}
+                        />
+                      )}
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowTablePicker(true)}
+                    className="btn btn-sm btn-outline-dark rounded-pill px-3 fw-bold"
+                    style={{ fontSize: '11.5px', height: '30px' }}
+                  >
+                    {selectedTable ? 'Change' : 'Choose Table'}
+                  </button>
                 </div>
               ) : (
                 <div>
-                  <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '11px' }}>Service Mode</span>
-                  <div className="fw-bold text-dark fs-6 mt-0.5 d-flex align-items-center gap-1">
+                  <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>Service Mode</span>
+                  <div className="fw-bold text-dark fs-6 mt-0.5 d-flex align-items-center gap-1.5">
                     <FiShoppingBag className="text-danger" />
                     <span>Takeaway Counter</span>
                   </div>
-                  <div className="text-secondary small" style={{ fontSize: '10.5px' }}>
-                    Packing charge: ₹10/item applies
-                  </div>
                 </div>
-              )}
-
-              {orderType === 'DINE_IN' && (
-                <button
-                  type="button"
-                  onClick={() => setShowTablePicker(true)}
-                  className="btn btn-sm btn-outline-dark rounded-pill px-3 py-1 fw-bold"
-                  style={{ fontSize: '11.5px' }}
-                >
-                  {selectedTable ? 'Change' : 'Choose Table'}
-                </button>
               )}
             </div>
 
-            {/* Customer Information (Optional) */}
-            <div className="mb-3 p-2.5 rounded-3 border bg-white">
+            {/* 3. Customer Information (Optional) */}
+            <div className="pos-order-section">
+              <span className="small text-muted fw-bold text-uppercase mb-1" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>Customer Info (Optional)</span>
               <div className="row g-2">
                 <div className="col-7">
                   <div className="input-group input-group-sm">
-                    <span className="input-group-text bg-light text-muted border-light-subtle">
+                    <span className="input-group-text bg-light text-muted border-light-subtle px-2" style={{ height: '32px' }}>
                       <FiPhone size={12} />
                     </span>
                     <input
                       type="tel"
                       className="form-control border-light-subtle"
-                      placeholder="Customer Mobile (Optional)"
+                      placeholder="Mobile (Optional)"
                       value={customerPhone}
                       onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                      style={{ fontSize: '11.5px' }}
+                      style={{ fontSize: '11.5px', height: '32px' }}
                     />
                   </div>
                 </div>
                 <div className="col-5">
                   <div className="input-group input-group-sm">
-                    <span className="input-group-text bg-light text-muted border-light-subtle">
+                    <span className="input-group-text bg-light text-muted border-light-subtle px-2" style={{ height: '32px' }}>
                       <FiUser size={12} />
                     </span>
                     <input
@@ -909,25 +965,30 @@ export const Pos = () => {
                       placeholder="Name"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      style={{ fontSize: '11.5px' }}
+                      style={{ fontSize: '11.5px', height: '32px' }}
                     />
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Order Items List (Scrollable) */}
-            <div className="flex-grow-1 overflow-auto pe-1 mb-3" style={{ maxHeight: '280px' }}>
+            {/* 4 & 5. Order Items */}
+            <div className="pos-order-section">
               <div className="d-flex align-items-center justify-content-between mb-2">
-                <span className="fw-bold text-dark small" style={{ fontSize: '12px' }}>
-                  ORDER ITEMS ({cartItems.length})
-                </span>
+                <div className="d-flex align-items-center gap-2">
+                  <span className="fw-bold text-dark text-uppercase" style={{ fontSize: '12px', letterSpacing: '0.6px' }}>
+                    ORDER ITEMS
+                  </span>
+                  <span className="badge bg-secondary-subtle text-secondary-emphasis rounded-pill px-2 py-0.5 fw-bold" style={{ fontSize: '11px' }}>
+                    {cartItems.length}
+                  </span>
+                </div>
                 {cartItems.length > 0 && (
                   <button
                     type="button"
                     onClick={handleResetOrder}
-                    className="btn btn-link p-0 text-muted small text-decoration-none"
-                    style={{ fontSize: '11px' }}
+                    className="btn btn-link p-0 text-danger small text-decoration-none fw-semibold"
+                    style={{ fontSize: '11.5px' }}
                   >
                     Clear All
                   </button>
@@ -935,10 +996,10 @@ export const Pos = () => {
               </div>
 
               {cartItems.length === 0 ? (
-                <div className="p-4 text-center rounded-3 bg-light text-muted my-2">
-                  <FiShoppingBag size={28} className="mb-2 opacity-50" />
-                  <p className="small mb-0">No dishes in order ticket.</p>
-                  <p className="text-secondary small mb-0" style={{ fontSize: '10.5px' }}>Click dishes from the center menu to add items.</p>
+                <div className="p-4 text-center rounded-3 bg-light text-muted border border-dashed my-1">
+                  <FiShoppingBag size={28} className="mb-2 text-secondary opacity-50" />
+                  <p className="small mb-0 fw-bold text-dark" style={{ fontSize: '12.5px' }}>No dishes in order ticket.</p>
+                  <p className="text-secondary small mb-0 mt-1" style={{ fontSize: '11px' }}>Click dishes from the menu to add items.</p>
                 </div>
               ) : (
                 <div className="d-flex flex-column gap-2">
@@ -950,7 +1011,7 @@ export const Pos = () => {
                     const ft = normalizeFoodType(item.dish.foodType || item.dish.type);
 
                     return (
-                      <div key={idx} className="p-2.5 rounded-3 border bg-white shadow-xs">
+                      <div key={idx} className="p-2.5 rounded-3 border bg-light-subtle">
                         <div className="d-flex align-items-start justify-content-between gap-2">
                           <div className="flex-grow-1 text-truncate">
                             <div className="d-flex align-items-center gap-1.5">
@@ -958,20 +1019,20 @@ export const Pos = () => {
                                 className={ft === 'veg' ? 'veg-badge' : ft === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}
                                 style={{ transform: 'scale(0.7)' }}
                               ></span>
-                              <strong className="text-dark small text-truncate">{item.dish.name}</strong>
+                              <strong className="text-dark small text-truncate" style={{ fontSize: '13px' }}>{item.dish.name}</strong>
                             </div>
-                            <div className="text-muted small" style={{ fontSize: '11px' }}>
+                            <div className="text-muted small mt-0.5" style={{ fontSize: '11.5px' }}>
                               {formatCurrency(itemUnitPrice)} × {item.quantity}
                             </div>
                           </div>
 
                           <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                            <span className="fw-bold text-dark small">
+                            <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>
                               {formatCurrency(lineTotal)}
                             </span>
                             
                             {/* Stepper */}
-                            <div className="d-flex align-items-center gap-1 bg-light border rounded-pill px-1.5 py-0.5">
+                            <div className="d-flex align-items-center gap-1 bg-white border rounded-pill px-2 py-0.5" style={{ height: '28px' }}>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateQuantity(idx, -1)}
@@ -979,7 +1040,7 @@ export const Pos = () => {
                               >
                                 <FiMinus size={11} />
                               </button>
-                              <span className="fw-bold px-1.5 small" style={{ fontSize: '11px' }}>{item.quantity}</span>
+                              <span className="fw-bold px-1.5 small" style={{ fontSize: '11.5px' }}>{item.quantity}</span>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateQuantity(idx, 1)}
@@ -992,19 +1053,19 @@ export const Pos = () => {
                             <button
                               type="button"
                               onClick={() => handleRemoveItem(idx)}
-                              className="btn btn-xs btn-link text-danger p-0 border-0"
+                              className="btn btn-xs btn-link text-danger p-0 border-0 ms-1"
                               title="Remove item"
                             >
-                              <FiTrash2 size={13} />
+                              <FiTrash2 size={14} />
                             </button>
                           </div>
                         </div>
 
                         {/* Extra Ingredients / Instructions Display */}
                         {((item.options && item.options.length > 0) || item.specialInstructions) && (
-                          <div className="mt-1.5 pt-1.5 border-top border-light text-muted" style={{ fontSize: '11px' }}>
+                          <div className="mt-2 pt-2 border-top border-light-subtle text-muted" style={{ fontSize: '11px' }}>
                             {item.options && item.options.length > 0 && (
-                              <div>
+                              <div className="mb-0.5">
                                 • Extra ingredients: {item.options.map(o => `${o.name} (+₹${Number(o.extra_price ?? o.price ?? 0)})`).join(', ')}
                               </div>
                             )}
@@ -1016,10 +1077,10 @@ export const Pos = () => {
                             <button
                               type="button"
                               onClick={() => handleOpenCustomize(item.dish, idx)}
-                              className="btn btn-link p-0 text-primary small text-decoration-none"
-                              style={{ fontSize: '10.5px' }}
+                              className="btn btn-link p-0 text-primary small text-decoration-none mt-1 fw-semibold"
+                              style={{ fontSize: '11px' }}
                             >
-                              Edit options
+                              Instructions
                             </button>
                           </div>
                         )}
@@ -1030,25 +1091,25 @@ export const Pos = () => {
               )}
             </div>
 
-            {/* Coupons Section */}
-            <div className="mb-3 pt-2 border-top">
-              <div className="d-flex align-items-center justify-content-between mb-1.5">
-                <span className="small text-muted fw-bold" style={{ fontSize: '11px' }}>COUPON / PROMO CODE</span>
+            {/* 6. Coupons Section */}
+            <div className="pos-order-section">
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <span className="small text-muted fw-bold" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>COUPON / PROMO CODE</span>
                 <button
                   type="button"
                   onClick={() => setShowCouponModal(true)}
                   className="btn btn-link p-0 text-danger small text-decoration-none fw-semibold"
-                  style={{ fontSize: '11px' }}
+                  style={{ fontSize: '11.5px' }}
                 >
                   View Offers
                 </button>
               </div>
 
               {appliedCoupon ? (
-                <div className="p-2 rounded-3 bg-success-subtle border border-success-subtle d-flex align-items-center justify-content-between">
-                  <div className="d-flex align-items-center gap-1.5 text-success">
-                    <FiTag size={13} />
-                    <strong style={{ fontSize: '11.5px' }}>{appliedCoupon.code}</strong>
+                <div className="p-2.5 rounded-3 bg-success-subtle border border-success-subtle d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center gap-2 text-success">
+                    <FiTag size={14} />
+                    <strong style={{ fontSize: '12px' }}>{appliedCoupon.code}</strong>
                     <span className="small ms-1">(-{formatCurrency(billSummary.couponDiscount)})</span>
                   </div>
                   <button
@@ -1057,24 +1118,24 @@ export const Pos = () => {
                     className="btn btn-link p-0 text-danger border-0"
                     title="Remove coupon"
                   >
-                    <FiX size={14} />
+                    <FiX size={15} />
                   </button>
                 </div>
               ) : (
-                <div className="input-group input-group-sm">
+                <div className="input-group">
                   <input
                     type="text"
-                    className="form-control rounded-start-pill border-light-subtle"
+                    className="form-control rounded-start-pill border-light-subtle ps-3"
                     placeholder="Enter coupon code..."
                     value={couponCodeInput}
                     onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
-                    style={{ fontSize: '11.5px' }}
+                    style={{ fontSize: '12px', height: '38px' }}
                   />
                   <button
                     type="button"
                     onClick={() => handleApplyCoupon(couponCodeInput)}
-                    className="btn btn-outline-danger rounded-end-pill px-3 fw-bold"
-                    style={{ fontSize: '11.5px' }}
+                    className="btn btn-outline-danger rounded-end-pill px-3.5 fw-bold"
+                    style={{ fontSize: '12px', height: '38px' }}
                   >
                     Apply
                   </button>
@@ -1082,111 +1143,118 @@ export const Pos = () => {
               )}
 
               {couponError && (
-                <div className="text-danger small mt-1" style={{ fontSize: '10.5px' }}>
+                <div className="text-danger small mt-1.5" style={{ fontSize: '11px' }}>
                   {couponError}
                 </div>
               )}
             </div>
 
-            {/* Bill Summary Breakdown */}
-            <div className="p-3 rounded-3 bg-light mb-3">
-              <h6 className="fw-bold text-dark mb-2" style={{ fontSize: '12px' }}>Order Bill Summary</h6>
+            {/* 7 & 8. Bill Summary & Checkout Actions */}
+            <div className="pos-order-section">
+              <h6 className="fw-bold text-dark mb-2.5" style={{ fontSize: '12.5px' }}>Order Bill Summary</h6>
               
-              <div className="d-flex justify-content-between text-secondary mb-1 small" style={{ fontSize: '11.5px' }}>
+              <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
                 <span>Items Subtotal</span>
-                <span>{formatCurrency(billSummary.itemsSubtotal)}</span>
+                <span className="fw-semibold text-dark">{formatCurrency(billSummary.itemsSubtotal)}</span>
               </div>
 
               {billSummary.addOnsTotal > 0 && (
-                <div className="d-flex justify-content-between text-secondary mb-1 small" style={{ fontSize: '11.5px' }}>
+                <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
                   <span>Add-ons / Toppings</span>
-                  <span>+{formatCurrency(billSummary.addOnsTotal)}</span>
+                  <span className="fw-semibold text-dark">+{formatCurrency(billSummary.addOnsTotal)}</span>
                 </div>
               )}
 
               {billSummary.dishDiscountsTotal > 0 && (
-                <div className="d-flex justify-content-between text-success mb-1 small" style={{ fontSize: '11.5px' }}>
+                <div className="d-flex justify-content-between text-success mb-1.5 small" style={{ fontSize: '12px' }}>
                   <span>Menu Discounts</span>
-                  <span>-{formatCurrency(billSummary.dishDiscountsTotal)}</span>
+                  <span className="fw-semibold">-{formatCurrency(billSummary.dishDiscountsTotal)}</span>
                 </div>
               )}
 
               {billSummary.couponDiscount > 0 && (
-                <div className="d-flex justify-content-between text-success mb-1 small" style={{ fontSize: '11.5px' }}>
+                <div className="d-flex justify-content-between text-success mb-1.5 small" style={{ fontSize: '12px' }}>
                   <span>Coupon Savings</span>
-                  <span>-{formatCurrency(billSummary.couponDiscount)}</span>
+                  <span className="fw-semibold">-{formatCurrency(billSummary.couponDiscount)}</span>
                 </div>
               )}
 
-              {orderType === 'TAKEAWAY' && (
-                <div className="d-flex justify-content-between text-secondary mb-1 small" style={{ fontSize: '11.5px' }}>
+              {orderType === 'TAKEAWAY' && billSummary.packingCharge > 0 && (
+                <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
                   <span>Takeaway Packing Charge ({billSummary.totalQuantity} items × ₹10)</span>
-                  <span>+{formatCurrency(billSummary.packingCharge)}</span>
+                  <span className="fw-semibold text-dark">+{formatCurrency(billSummary.packingCharge)}</span>
                 </div>
               )}
 
-              <div className="d-flex justify-content-between text-secondary mb-1 small" style={{ fontSize: '11.5px' }}>
+              <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
                 <span>Taxable Amount</span>
-                <span>{formatCurrency(billSummary.taxableAmount)}</span>
+                <span className="fw-semibold text-dark">{formatCurrency(billSummary.taxableAmount)}</span>
               </div>
 
-              <div className="d-flex justify-content-between text-secondary mb-1 small" style={{ fontSize: '11.5px' }}>
+              <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
                 <span>GST (5%)</span>
-                <span>{formatCurrency(billSummary.gstAmount)}</span>
+                <span className="fw-semibold text-dark">{formatCurrency(billSummary.gstAmount)}</span>
               </div>
 
               {billSummary.roundOff !== 0 && (
-                <div className="d-flex justify-content-between text-secondary mb-1 small" style={{ fontSize: '11.5px' }}>
+                <div className="d-flex justify-content-between text-secondary small" style={{ fontSize: '12px' }}>
                   <span>Round Off</span>
-                  <span>{billSummary.roundOff > 0 ? `+${formatCurrency(billSummary.roundOff)}` : formatCurrency(billSummary.roundOff)}</span>
+                  <span className="fw-semibold text-dark">{billSummary.roundOff > 0 ? `+${formatCurrency(billSummary.roundOff)}` : formatCurrency(billSummary.roundOff)}</span>
                 </div>
               )}
 
-              <div className="pt-2 border-top d-flex justify-content-between align-items-center mt-2">
+              {/* Grand Total - Non-sticky, normal document flow */}
+              <div className="d-flex justify-content-between align-items-center pt-2.5 mt-2.5 border-top border-2 border-secondary-subtle">
                 <span className="fw-bold text-dark fs-6">Grand Total</span>
-                <span className="fw-bold text-danger fs-5">
+                <span className="fw-bold text-danger fs-4">
                   {formatCurrency(billSummary.grandTotal)}
                 </span>
               </div>
-            </div>
 
-            {/* Error Message */}
-            {orderError && (
-              <div className="alert alert-danger p-2 rounded-3 small mb-3 d-flex align-items-center gap-1.5" style={{ fontSize: '11.5px' }}>
-                <FiAlertCircle className="flex-shrink-0" />
-                <span>{orderError}</span>
+              {/* Error Message */}
+              {orderError && (
+                <div className="alert alert-danger p-2.5 rounded-3 small my-2 d-flex align-items-center gap-2" style={{ fontSize: '12px' }}>
+                  <FiAlertCircle className="flex-shrink-0" />
+                  <span>{orderError}</span>
+                </div>
+              )}
+
+              {/* Order Action Buttons */}
+              <div className="d-flex flex-column gap-2 pt-2">
+                <button
+                  type="button"
+                  disabled={!canSubmitOrder}
+                  onClick={() => handleSubmitOrder(false)}
+                  className={`btn btn-danger text-white fw-bold rounded-pill py-2.5 shadow-sm d-flex align-items-center justify-content-center gap-2 ${
+                    !canSubmitOrder ? 'opacity-50' : ''
+                  }`}
+                  style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '13.5px', height: '44px' }}
+                  title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
+                >
+                  {submittingOrder ? (
+                    <span>Placing Order...</span>
+                  ) : (
+                    <>
+                      <FiCheck size={18} />
+                      <span>Send to Kitchen (Unpaid)</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={!canSubmitOrder}
+                  onClick={() => handleSubmitOrder(true)}
+                  className={`btn btn-outline-success fw-bold rounded-pill py-2 d-flex align-items-center justify-content-center gap-2 ${
+                    !canSubmitOrder ? 'opacity-50' : ''
+                  }`}
+                  style={{ fontSize: '13px', height: '40px' }}
+                  title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
+                >
+                  <FiDollarSign size={17} />
+                  <span>Pay Cash / Counter Pay (Paid)</span>
+                </button>
               </div>
-            )}
-
-            {/* Order Action Buttons */}
-            <div className="d-flex flex-column gap-2 mt-auto">
-              <button
-                type="button"
-                disabled={submittingOrder || cartItems.length === 0}
-                onClick={() => handleSubmitOrder(false)}
-                className="btn btn-danger text-white fw-bold rounded-pill py-2.5 shadow-sm d-flex align-items-center justify-content-center gap-2"
-                style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '13px' }}
-              >
-                {submittingOrder ? (
-                  <span>Placing Order...</span>
-                ) : (
-                  <>
-                    <FiCheck size={16} />
-                    <span>Send to Kitchen (Unpaid)</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                disabled={submittingOrder || cartItems.length === 0}
-                onClick={() => handleSubmitOrder(true)}
-                className="btn btn-outline-success fw-bold rounded-pill py-2 d-flex align-items-center justify-content-center gap-2"
-                style={{ fontSize: '13px' }}
-              >
-                <FiDollarSign size={16} />
-                <span>Pay Cash / Counter Pay (Paid)</span>
-              </button>
             </div>
           </aside>
         </div>
@@ -1346,19 +1414,29 @@ export const Pos = () => {
                   .map((table) => {
                     const isSelected = selectedTable && String(selectedTable.id) === String(table.id);
                     const tableNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
+                    const isOccupied = table.status === 'Occupied' || Boolean(table.is_occupied);
 
                     return (
                       <div key={table.id} className="col">
                         <div
-                          onClick={() => handleSelectTable(table)}
-                          className={`p-3 rounded-3 border text-center cursor-pointer transition-all ${
-                            isSelected 
-                              ? 'border-danger bg-danger-subtle shadow-xs' 
+                          onClick={() => {
+                            if (isOccupied) {
+                              window.alert('Table is occupied.');
+                              return;
+                            }
+                            handleSelectTable(table);
+                          }}
+                          className={`p-3 rounded-3 border text-center transition-all ${
+                            isOccupied 
+                              ? 'border-secondary-subtle bg-light opacity-60'
+                              : isSelected 
+                              ? 'border-danger bg-danger-subtle shadow-xs cursor-pointer' 
                               : table.status === 'Available'
-                              ? 'border-success-subtle bg-white hover-shadow'
-                              : 'border-warning-subtle bg-light-subtle'
+                              ? 'border-success-subtle bg-white hover-shadow cursor-pointer'
+                              : 'border-warning-subtle bg-light-subtle cursor-pointer'
                           }`}
-                          style={{ cursor: 'pointer' }}
+                          style={{ cursor: isOccupied ? 'not-allowed' : 'pointer' }}
+                          title={isOccupied ? 'Table is occupied.' : `Select Table ${tableNum}`}
                         >
                           <div className="fw-bold fs-6 text-dark mb-0.5">
                             Table {tableNum}

@@ -1,17 +1,25 @@
 import React, { useState } from 'react';
 import Badge from '../common/Badge';
 import formatCurrency from '../../utils/formatCurrency';
-import { FiClock, FiLayers, FiEye } from 'react-icons/fi';
+import { FiClock, FiLayers, FiEye, FiShoppingBag } from 'react-icons/fi';
 
 export const OrderCard = ({
   order,
   onViewDetails,
   onViewEBill
 }) => {
-  const itemsSummary = order.items.map((i) => `${i.name} x${i.quantity}`).join(', ');
+  const itemsSummary = (order.items || []).map((i) => `${i.name} x${i.quantity}`).join(', ');
+
+  const isTakeaway = String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('TAKEAWAY') || 
+    String(order.table || '').toLowerCase() === 'takeaway';
+  
+  const rawTable = order.table ? String(order.table).replace(/^(table\s*|t-?)/i, '').trim() : '';
+  const displayTable = rawTable ? `T${rawTable.padStart(2, '0')}` : (order.table || '');
+  const dinerCount = order.diners ?? order.number_of_diners ?? null;
+  const dinerLabel = dinerCount ? `${dinerCount} ${Number(dinerCount) === 1 ? 'Diner' : 'Diners'}` : null;
 
   return (
-    <div className="card rounded-3 border-0 shadow-sm p-4 bg-white foodie-card mb-3">
+    <div className="card rounded-3 shadow-sm p-4 bg-white foodie-card mb-3">
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center border-bottom pb-3 mb-3 gap-2">
         <div>
           <span className="fw-bold text-dark fs-5">Order #{order.id}</span>
@@ -24,14 +32,30 @@ export const OrderCard = ({
 
       <div className="row align-items-center">
         <div className="col-12 col-md-8 mb-3 mb-md-0">
-          <div className="text-secondary small fw-semibold d-flex align-items-center gap-1">
-            <FiLayers /> TABLE: <strong>{order.table}</strong> ({order.diners} Diners)
-          </div>
+          {isTakeaway ? (
+            <div className="text-secondary small fw-semibold d-flex align-items-center gap-1.5">
+              <FiShoppingBag className="text-danger" size={15} />
+              <span className="badge bg-danger-subtle text-danger fw-bold px-2 py-0.5" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
+                TAKEAWAY
+              </span>
+            </div>
+          ) : (
+            <div className="text-secondary small fw-semibold d-flex align-items-center gap-1">
+              <FiLayers size={14} className="text-secondary" />
+              <span>TABLE: <strong className="text-dark">{displayTable}</strong></span>
+              {dinerLabel && (
+                <>
+                  <span className="text-muted mx-1">·</span>
+                  <span className="text-secondary">{dinerLabel}</span>
+                </>
+              )}
+            </div>
+          )}
           <div className="fw-bold text-dark text-truncate mt-2" style={{ maxWidth: '400px' }}>
             {itemsSummary}
           </div>
           <div className="text-muted small mt-1">
-            Source: <strong>{order.source}</strong> | Payment: <strong>{order.paymentMethod}</strong>
+            Source: <strong>{isTakeaway ? 'Takeaway' : (order.source || 'Dine-In')}</strong> | Payment: <strong>{order.paymentMethod}</strong>
           </div>
         </div>
 

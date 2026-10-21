@@ -325,6 +325,21 @@ function mapFood(f, stockByFood) {
   const discount = f.current_discount;
   const original = Number(f.original_price ?? f.price);
   const paid = Number(f.discounted_price ?? f.price);
+
+  let resolvedStock = null;
+  if (stockRow && stockRow.quantity !== undefined && stockRow.quantity !== null) {
+    resolvedStock = Number(stockRow.quantity);
+  } else if (f.stock !== undefined && f.stock !== null && f.stock !== '') {
+    resolvedStock = Number(f.stock);
+  }
+
+  let status = 'Active';
+  if (f.is_sold_out || f.is_orderable === false || f.stock_status === 'OUT_OF_STOCK' || (resolvedStock !== null && resolvedStock <= 0)) {
+    status = 'Out of Stock';
+  } else if (f.stock_status === 'LOW_STOCK' || (resolvedStock !== null && resolvedStock > 0 && resolvedStock < 6)) {
+    status = 'Low Stock';
+  }
+
   return {
     id: f.id,
     name: f.name,
@@ -338,15 +353,16 @@ function mapFood(f, stockByFood) {
     categoryId: f.category,
     foodType: dietToUi(f.diet_type),
     type: dietToUi(f.diet_type),
-    stock: stockRow ? Number(stockRow.quantity) : null,
+    stock: resolvedStock,
     lowStockThreshold: stockRow ? Number(stockRow.low_stock_threshold) : null,
     inventoryId: stockRow ? stockRow.id : null,
-    status: f.is_orderable === false ? 'Out of Stock' : 'Active',
+    status,
     image: f.primary_image || '',
     imageUrl: f.image_url || '',
     currentDiscount: discount || null,
     calories: f.calories,
     is_orderable: f.is_orderable,
+    is_sold_out: f.is_sold_out,
     branch: f.branch,
     customizations: (Array.isArray(f.customizations) ? f.customizations : [])
       .filter((option) => option && option.is_active !== false && option.id && option.name)
@@ -437,10 +453,12 @@ async function syncStock(foodId, quantity, inventoryId) {
   }
   const rows = listOf(await staffJson(`/inventory/?food=${foodId}`));
   if (rows[0]) {
-    await staffJson(`/inventory/${rows[0].id}/adjust/`, {
-      method: 'POST',
-      body: JSON.stringify({ new_quantity: qty, note: 'Updated from the admin menu' }),
-    });
+    if (Number(rows[0].quantity) !== qty) {
+      await staffJson(`/inventory/${rows[0].id}/adjust/`, {
+        method: 'POST',
+        body: JSON.stringify({ new_quantity: qty, note: 'Updated from the admin menu' }),
+      });
+    }
     return;
   }
   await staffJson('/inventory/', {
@@ -489,6 +507,7 @@ async function syncCustomizations(foodId, toppings) {
 export async function createFood(data) {
   const branch = await currentBranchId();
   const category = await categoryIdByName(data.category, branch);
+  const initialStock = data.stock !== undefined && data.stock !== null && data.stock !== '' ? Number(data.stock) : 20;
   const body = {
     branch,
     category,
@@ -499,6 +518,8 @@ export async function createFood(data) {
     calories: data.calories,
     image_url: data.imageFile ? '' : (data.imageUrl || ''),
     is_active: true,
+    initial_stock: initialStock,
+    stock: initialStock,
   };
   const created = await staffJson('/foods/', {
     method: 'POST',
@@ -777,7 +798,9 @@ export function mapOrder(o) {
     rawCreatedAt: created.getTime(),
     placedAt: created.getTime(),
     table: tableLabel,
-    diners: '',
+    diners: o.number_of_diners ?? o.diners ?? o.table?.capacity ?? null,
+    number_of_diners: o.number_of_diners ?? o.diners ?? o.table?.capacity ?? null,
+    table_capacity: o.table?.capacity || null,
     source: o.order_type === 'TAKEAWAY' ? 'Takeaway' : 'Dine-In',
     orderType: o.order_type === 'TAKEAWAY' ? 'Takeaway' : 'Dine-In',
     paymentMethod: o.payment_status,

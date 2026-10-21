@@ -100,7 +100,7 @@ export const FoodCard = ({ dish }) => {
   return (
     <div 
       onClick={handleCardClick}
-      className={`card h-100 rounded-4 border-0 shadow-sm overflow-hidden bg-white foodie-card position-relative d-flex flex-column cursor-pointer ${isOutOfStock ? 'opacity-90' : ''}`}
+      className={`card h-100 rounded-4 shadow-sm overflow-hidden bg-white foodie-card foodie-card-animate position-relative d-flex flex-column cursor-pointer ${isOutOfStock ? 'opacity-90' : ''}`}
       style={{ cursor: 'pointer' }}
     >
       {/* Top Image area with overlays */}

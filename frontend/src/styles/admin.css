@@ -81,17 +81,32 @@
   padding: 12px 0;
 }
 
-/* StatCard layout */
-.stat-card {
+/* StatCard layout & subtle hover elevation */
+.stat-card,
+.stat-card-hover,
+.hover-lift {
   padding: 20px;
   border-radius: var(--border-radius-md);
-  border: 1px solid var(--border-color);
-  background-color: var(--surface-color);
-  box-shadow: var(--shadow-sm);
+  border: 1.5px solid var(--border-color, #e2e8f0) !important;
+  background-color: var(--surface-color, #ffffff);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 220ms ease !important;
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
 }
+
+.stat-card:hover,
+.stat-card-hover:hover,
+.hover-lift:hover {
+  transform: translateY(-2.5px) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.09) !important;
+}
+
 .stat-icon {
   width: 48px;
   height: 48px;
@@ -128,28 +143,22 @@
   background-color: #fcfdfd;
 }
 
-/* Full-Height Admin Page Container (e.g. Kitchen Queue Monitor) */
-@media (min-width: 1200px) {
-  .admin-main-fullheight {
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden;
-  }
-
-  .admin-main-content-fullheight {
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-    padding-bottom: 1.25rem !important;
-  }
+/* Full-Height Admin Page Container (e.g. POS & Kitchen Queue Monitor) */
+.admin-main-fullheight {
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
-@media (max-width: 1199.98px) {
-  .admin-main-fullheight {
-    min-height: 100vh;
-  }
+.admin-main-content-fullheight {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 !important;
 }
 
 /* Kitchen Queue Independent Scrolling Layout */
@@ -287,3 +296,261 @@
   border-color: rgba(242, 178, 51, 0.5);
   background-color: rgba(242, 178, 51, 0.03);
 }
+
+/* ==========================================================================
+   Foodie Spacing System — Manage Tables & POS Overhaul
+   ========================================================================== */
+
+/* Manage Tables Layout */
+.tables-page-container {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: 28px 32px;
+  width: 100%;
+}
+
+@media (max-width: 767.98px) {
+  .tables-page-container {
+    padding: 16px;
+  }
+}
+
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+@media (max-width: 575.98px) {
+  .tables-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* Enhanced Table Card */
+.table-card {
+  border-radius: 12px;
+  padding: 20px;
+  background-color: #ffffff;
+  border: 1.5px solid #e5e7eb;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 100%;
+  min-height: 200px;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 220ms ease !important;
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
+}
+
+.table-card:hover {
+  transform: translateY(-2.5px) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.09) !important;
+}
+
+.table-card.table-available {
+  border-color: rgba(34, 197, 94, 0.35);
+  background-color: #fafffc;
+}
+
+.table-card.table-available:hover {
+  border-color: rgba(34, 197, 94, 0.7) !important;
+}
+
+.table-card.table-occupied {
+  border-color: rgba(239, 68, 68, 0.35);
+  background-color: #fffbfb;
+}
+
+.table-card.table-occupied:hover {
+  border-color: rgba(239, 68, 68, 0.7) !important;
+}
+
+.table-card.table-reserved {
+  border-color: rgba(245, 158, 11, 0.45);
+  background-color: #fffdf7;
+}
+
+.table-card.table-reserved:hover {
+  border-color: rgba(245, 158, 11, 0.8) !important;
+}
+
+.table-card-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 14px;
+  font-size: 11.5px;
+  font-weight: 600;
+  border-radius: 20px;
+  white-space: nowrap;
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease !important;
+  will-change: transform;
+}
+
+.table-card-btn:hover:not(:disabled):not(.disabled) {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08) !important;
+}
+
+.table-card-btn:active:not(:disabled):not(.disabled) {
+  transform: translateY(0) scale(0.985) !important;
+}
+
+/* POS Two-Panel Layout */
+.pos-layout-wrapper {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background-color: #f8f9fa;
+}
+
+.pos-menu-panel {
+  flex: 1 1 67%;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+.pos-menu-toolbar {
+  padding: 16px 24px;
+  border-bottom: 1px solid #eaecf0;
+  flex-shrink: 0;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.pos-menu-content {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.pos-dish-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 18px;
+}
+
+.pos-dish-card {
+  border-radius: 14px;
+  border: 1.5px solid #eaecf0;
+  background: #ffffff;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04) !important;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 220ms ease !important;
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
+}
+
+.pos-dish-card:hover {
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.1) !important;
+  transform: translateY(-2.5px) !important;
+  border-color: rgba(220, 53, 69, 0.4) !important;
+}
+
+/* Inventory Cards & Toggle Cards Subtle Elevation */
+.inventory-card,
+.inventory-summary-card {
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 220ms cubic-bezier(0.16, 1, 0.3, 1), 
+              border-color 220ms ease !important;
+  will-change: transform, box-shadow;
+  backface-visibility: hidden;
+}
+
+.inventory-card:hover,
+.inventory-summary-card:hover {
+  transform: translateY(-2.5px) !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12) !important;
+}
+
+.pos-dish-card-body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.pos-order-panel {
+  flex: 0 0 33%;
+  min-width: 380px;
+  max-width: 450px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-left: 1px solid #eaecf0;
+  background-color: #f8f9fa;
+  padding: 18px 20px;
+  gap: 16px;
+}
+
+.pos-order-section {
+  background-color: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #eaecf0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Tablet & Mobile Breakpoints for POS */
+@media (max-width: 991.98px) {
+  .pos-layout-wrapper {
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .pos-menu-panel {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    border-right: none;
+    overflow: hidden;
+  }
+  .pos-order-panel {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    min-width: 100%;
+    max-width: 100%;
+    border-left: none;
+    height: 100%;
+    padding: 16px;
+    gap: 14px;
+  }
+  .pos-menu-toolbar {
+    padding: 12px 16px;
+  }
+  .pos-menu-content {
+    padding: 16px;
+  }
+  .pos-dish-grid {
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+    gap: 14px;
+  }
+}
+

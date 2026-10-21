@@ -36,9 +36,18 @@ export const AddDishModal = ({
   const [toppingName, setToppingName] = useState('');
   const [toppingPrice, setToppingPrice] = useState('');
 
+  // Validation: name must be non-empty after trimming, price must be valid non-negative number (0 is accepted)
+  const isToppingNameValid = toppingName.trim().length > 0;
+  const isToppingPriceValid = toppingPrice.trim() !== '' && !isNaN(Number(toppingPrice.trim())) && Number(toppingPrice.trim()) >= 0;
+  const isToppingValid = isToppingNameValid && isToppingPriceValid;
+
   const handleAddTopping = () => {
-    if (!toppingName.trim()) return;
-    setToppings(prev => [...prev, { name: toppingName.trim(), extra_price: toppingPrice ? parseFloat(toppingPrice) : 0 }]);
+    const trimmedName = toppingName.trim();
+    const trimmedPrice = toppingPrice.trim();
+    if (!trimmedName || trimmedPrice === '' || isNaN(Number(trimmedPrice)) || Number(trimmedPrice) < 0) {
+      return;
+    }
+    setToppings(prev => [...prev, { name: trimmedName, extra_price: parseFloat(trimmedPrice) }]);
     setToppingName('');
     setToppingPrice('');
   };
@@ -475,7 +484,7 @@ export const AddDishModal = ({
             <button
               type="button"
               onClick={handleAddTopping}
-              disabled={!toppingName.trim()}
+              disabled={!isToppingValid}
               className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 rounded-pill px-3 fw-bold"
             >
               <FiPlus size={14} /> Add

@@ -27,14 +27,14 @@ export function customerBranchId() {
 
 // Puts the chosen order type (and, for Dine-In, the scanned table) on the server cart and returns the
 // re-priced cart view. Throws with the server's reason when the context is not acceptable.
-export async function applyOrderContext(orderType) {
+export async function applyOrderContext(orderType, explicitTableId = null) {
   const type = normalizeOrderType(orderType) || getOrderType();
   if (!type) throw new Error('Choose Dine-In or Takeaway first.');
   const branch = customerBranchId();
   if (!branch) throw new Error('Choose a restaurant before checkout.');
   const body = { branch, order_type: type };
   if (type === DINE_IN) {
-    const tableId = getSelectedTableId();
+    const tableId = explicitTableId || getSelectedTableId();
     const qr = getScannedTableQr();
     const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
     if (staffOrdering && tableId) {

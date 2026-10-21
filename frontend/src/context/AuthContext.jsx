@@ -86,29 +86,26 @@ export const AuthProvider = ({ children }) => {
   }, [loading]);
 
   const saveSession = (userObj, token, refresh) => {
-    // Save unauthenticated guest cart temporarily for seamless login cart merging ONLY for customers
+    // Save unauthenticated guest cart temporarily for seamless login cart merging ONLY for genuine guest browsing
     if (!authState.isAuthenticated && userObj.role !== 'admin' && userObj.role !== 'employee') {
       try {
         const guestCart = sessionStorage.getItem('foodie_guest_cart_temp') ||
-          sessionStorage.getItem('foodie_guest_cart') ||
-          sessionStorage.getItem('foodie_cart') ||
-          localStorage.getItem('foodie_guest_cart_temp') ||
-          localStorage.getItem('foodie_guest_cart') ||
-          localStorage.getItem('foodie_cart');
+          sessionStorage.getItem('foodie_guest_cart');
         if (guestCart && guestCart !== '[]') {
           sessionStorage.setItem('foodie_guest_cart_unmerged', guestCart);
-          localStorage.setItem('foodie_guest_cart_unmerged', guestCart);
-          sessionStorage.setItem('foodie_guest_cart_temp', guestCart);
-          localStorage.setItem('foodie_guest_cart_temp', guestCart);
         }
       } catch (e) {}
-    } else if (userObj.role === 'admin' || userObj.role === 'employee') {
+    } else {
       try {
         sessionStorage.removeItem('foodie_guest_cart_unmerged');
         localStorage.removeItem('foodie_guest_cart_unmerged');
-        sessionStorage.removeItem('foodie_cart');
       } catch (e) {}
     }
+    // Clean up any legacy shared cart key
+    try {
+      sessionStorage.removeItem('foodie_cart');
+      localStorage.removeItem('foodie_cart');
+    } catch (e) {}
 
     const roleKey = (userObj.role === 'admin' || userObj.role === 'employee') ? 'admin' : 'customer';
     const payload = JSON.stringify({ user: userObj, isAuthenticated: true });
@@ -196,9 +193,13 @@ export const AuthProvider = ({ children }) => {
         const digits = phone ? String(phone).replace(/\D/g, '').slice(-10) : '';
         if (digits) {
           sessionStorage.removeItem(`foodie_cart_${digits}`);
+          localStorage.removeItem(`foodie_cart_${digits}`);
           localStorage.removeItem(`foodie_customer_order_ids_${digits}`);
         }
-        if (user?.id) sessionStorage.removeItem(`foodie_cart_${user.id}`);
+        if (user?.id) {
+          sessionStorage.removeItem(`foodie_cart_${user.id}`);
+          localStorage.removeItem(`foodie_cart_${user.id}`);
+        }
       } catch (e) {}
       sessionStorage.removeItem('foodie_token_customer');
       sessionStorage.removeItem('foodie_auth_customer');
@@ -207,6 +208,11 @@ export const AuthProvider = ({ children }) => {
       sessionStorage.removeItem('foodie_last_placed_order');
       sessionStorage.removeItem('foodie_last_order_items');
       sessionStorage.removeItem('foodie_all_placed_orders');
+      sessionStorage.removeItem('foodie_guest_token');
+      sessionStorage.removeItem('foodie_guest_cart');
+      sessionStorage.removeItem('foodie_guest_cart_temp');
+      sessionStorage.removeItem('foodie_guest_cart_unmerged');
+      sessionStorage.removeItem('foodie_cart');
       localStorage.removeItem('foodie_token_customer');
       localStorage.removeItem('foodie_auth_customer');
       localStorage.removeItem('foodie_customer_phone');
@@ -214,6 +220,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('foodie_last_order_items');
       localStorage.removeItem('foodie_customer_order_ids');
       localStorage.removeItem('foodie_all_placed_orders');
+      localStorage.removeItem('foodie_guest_cart');
+      localStorage.removeItem('foodie_guest_cart_temp');
+      localStorage.removeItem('foodie_guest_cart_unmerged');
+      localStorage.removeItem('foodie_cart');
     }
 
     if (clearStaff) {
@@ -229,8 +239,16 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.removeItem('foodie_token');
     sessionStorage.removeItem('foodie_auth');
     sessionStorage.removeItem('foodie_cart');
+    sessionStorage.removeItem('foodie_guest_token');
+    sessionStorage.removeItem('foodie_guest_cart');
+    sessionStorage.removeItem('foodie_guest_cart_temp');
+    sessionStorage.removeItem('foodie_guest_cart_unmerged');
     localStorage.removeItem('foodie_token');
     localStorage.removeItem('foodie_auth');
+    localStorage.removeItem('foodie_cart');
+    localStorage.removeItem('foodie_guest_cart');
+    localStorage.removeItem('foodie_guest_cart_temp');
+    localStorage.removeItem('foodie_guest_cart_unmerged');
     setAuthState({ user: null, isAuthenticated: false });
     try {
       window.dispatchEvent(new CustomEvent('foodie_logout'));

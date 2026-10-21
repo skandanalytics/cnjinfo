@@ -27,14 +27,25 @@ export const useCategories = (passedProducts = null) => {
         savedDesc = JSON.parse(localStorage.getItem('foodie_category_descriptions') || '{}');
       } catch (e) {}
 
+      let menusList = Array.isArray(menusData) && menusData.length > 0 ? menusData : [];
+      if (menusList.length === 0) {
+        try {
+          const custCats = await productService.getCustomerCategories();
+          if (Array.isArray(custCats) && custCats.length > 0) menusList = custCats;
+        } catch (e) {}
+      }
+
       // 1. Add categories configured in restaurant menus
-      (menusData || []).forEach(m => {
+      (menusList || []).forEach(m => {
         if (!m || !m.name) return;
         const feName = getFrontendCategoryName(m.name);
         const norm = normalizeCategoryName(feName);
         const desc = m.description || savedDesc[m.id] || savedDesc[String(m.id)] || savedDesc[normalizeCategoryName(m.name)] || savedDesc[norm] || '';
         if (!map.has(norm)) {
           map.set(norm, { id: m.id, name: feName, originalName: m.name, description: desc });
+        } else {
+          const item = map.get(norm);
+          if (!item.description && desc) item.description = desc;
         }
       });
 

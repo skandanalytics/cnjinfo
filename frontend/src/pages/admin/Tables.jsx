@@ -204,6 +204,10 @@ export const Tables = () => {
       window.alert('This table is inactive and cannot take a new order.');
       return;
     }
+    if (table.status === 'Occupied' || table.is_occupied) {
+      window.alert('Table is occupied.');
+      return;
+    }
     const targetUrl = isAdmin ? '/admin/pos' : '/employee/pos';
     navigate(`${targetUrl}?table=${table.id}`);
   };
@@ -227,17 +231,21 @@ export const Tables = () => {
 
   if ((loading || branchesLoading) && (!tables || tables.length === 0)) {
     return (
-      <AdminLayout>
-        <Loader />
+      <AdminLayout contentClassName="p-0">
+        <div className="tables-page-container">
+          <Loader />
+        </div>
       </AdminLayout>
     );
   }
 
   if (!hasBranches) {
     return (
-      <AdminLayout>
-        <PageHeader title="Manage Tables" showBackButton />
-        <BranchRequiredState />
+      <AdminLayout contentClassName="p-0">
+        <div className="tables-page-container">
+          <PageHeader title="Manage Tables" showBackButton />
+          <BranchRequiredState />
+        </div>
       </AdminLayout>
     );
   }
@@ -256,20 +264,72 @@ export const Tables = () => {
 
   if (!loading && tablesLoadError) {
     return (
-      <AdminLayout>
-        <PageHeader title="Manage Tables" showBackButton />
-        <EmptyState
-          title="Tables could not be loaded"
-          description={tablesLoadError}
-          icon="bi-exclamation-triangle"
-        />
+      <AdminLayout contentClassName="p-0">
+        <div className="tables-page-container">
+          <PageHeader title="Manage Tables" showBackButton />
+          <EmptyState
+            title="Tables could not be loaded"
+            description={tablesLoadError}
+            icon="bi-exclamation-triangle"
+          />
+        </div>
       </AdminLayout>
     );
   }
 
   if (!loading && (!tables || tables.length === 0)) {
     return (
-      <AdminLayout>
+      <AdminLayout contentClassName="p-0">
+        <div className="tables-page-container">
+          <PageHeader 
+            title="Manage Tables" 
+            showBackButton
+            actions={
+              <div className="d-flex align-items-center gap-2">
+                <Button 
+                  onClick={handleTakeawayOrder} 
+                  variant="outline" 
+                  disabled={!hasDishes}
+                  title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable because no dishes are currently available.'}
+                  className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs"
+                >
+                  <FiShoppingCart /> Takeaway Order
+                </Button>
+                {isAdmin && hasBranches && (
+                  <Button 
+                    onClick={() => setIsAddOpen(true)} 
+                    variant="primary" 
+                    className="d-flex align-items-center gap-2 py-2 px-3"
+                  >
+                    <FiPlus /> Add Table
+                  </Button>
+                )}
+              </div>
+            }
+          />
+          <EmptyState
+            title="No Tables Found"
+            description="There are currently no tables added yet."
+            icon="bi-border-all"
+          />
+
+          {/* Add Table Modal */}
+          {isAdmin && isAddOpen && (
+            <AddTableModal
+              isOpen={isAddOpen}
+              existingTables={tables}
+              onClose={() => setIsAddOpen(false)}
+              onAdd={handleAddTable}
+            />
+          )}
+        </div>
+      </AdminLayout>
+    );
+  }
+
+  return (
+    <AdminLayout contentClassName="p-0">
+      <div className="tables-page-container">
         <PageHeader 
           title="Manage Tables" 
           showBackButton
@@ -296,134 +356,86 @@ export const Tables = () => {
             </div>
           }
         />
-        <EmptyState
-          title="No Tables Found"
-          description="There are currently no tables added yet."
-          icon="bi-border-all"
-        />
 
-        {/* Add Table Modal */}
-        {isAdmin && isAddOpen && (
-          <AddTableModal
-            isOpen={isAddOpen}
-            existingTables={tables}
-            onClose={() => setIsAddOpen(false)}
-            onAdd={handleAddTable}
-          />
-        )}
-      </AdminLayout>
-    );
-  }
-
-  return (
-    <AdminLayout>
-      <PageHeader 
-        title="Manage Tables" 
-        showBackButton
-        actions={
-          <div className="d-flex align-items-center gap-2">
-            <Button 
-              onClick={handleTakeawayOrder} 
-              variant="outline" 
-              disabled={!hasDishes}
-              title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable because no dishes are currently available.'}
-              className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs"
-            >
-              <FiShoppingCart /> Takeaway Order
-            </Button>
-            {isAdmin && hasBranches && (
-              <Button 
-                onClick={() => setIsAddOpen(true)} 
-                variant="primary" 
-                className="d-flex align-items-center gap-2 py-2 px-3"
-              >
-                <FiPlus /> Add Table
-              </Button>
-            )}
+        {!hasDishes && (
+          <div className="alert alert-warning rounded-3 py-2 px-3 mb-4 small">
+            Takeaway ordering is unavailable because no dishes are currently available.
           </div>
-        }
-      />
+        )}
 
-      {!hasDishes && (
-        <div className="alert alert-warning rounded-3 py-2 px-3 mb-3 small">
-          Takeaway ordering is unavailable because no dishes are currently available.
-        </div>
-      )}
+        {isAvailableOnly && (
+          <div className="alert alert-info rounded-3 py-2 px-3 d-flex align-items-center justify-content-between mb-4 small shadow-xs">
+            <span>Showing <strong>Available Tables Only</strong> ({filteredTables.length} available table{filteredTables.length === 1 ? '' : 's'})</span>
+            <button
+              onClick={() => {
+                searchParams.delete('status');
+                searchParams.delete('filter');
+                setSearchParams(searchParams);
+              }}
+              className="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-bold"
+              style={{ fontSize: '11px' }}
+            >
+              Show All Tables
+            </button>
+          </div>
+        )}
 
-      {isAvailableOnly && (
-        <div className="alert alert-info rounded-3 py-2 px-3 d-flex align-items-center justify-content-between mb-3 small shadow-xs">
-          <span>Showing <strong>Available Tables Only</strong> ({filteredTables.length} available table{filteredTables.length === 1 ? '' : 's'})</span>
-          <button
-            onClick={() => {
-              searchParams.delete('status');
-              searchParams.delete('filter');
-              setSearchParams(searchParams);
-            }}
-            className="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-bold"
-            style={{ fontSize: '11px' }}
-          >
-            Show All Tables
-          </button>
-        </div>
-      )}
+        {/* Grid */}
+        {loading ? (
+          <Loader />
+        ) : tablesLoadError ? (
+          <EmptyState
+            title="Tables could not be loaded"
+            description={tablesLoadError}
+            icon="bi-exclamation-triangle"
+          />
+        ) : filteredTables.length === 0 ? (
+          <EmptyState
+            title="No Tables Found"
+            description="There are no available tables right now."
+            icon="bi-border-all"
+          />
+        ) : (
+          Array.from(branchGroups.entries()).map(([branchKey, group]) => (
+            <div key={branchKey} className="mb-4">
+              {showBranchHeadings && <h6 className="fw-bold text-dark mb-3">{group.name}</h6>}
+              <div className="tables-grid">
+                {group.tables.map((table) => {
+                  const canonNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
+                  const tableIdStr = String(table.id || '').trim();
+                  const activeOrderForTable = (orders || []).find(o => {
+                    if (!o) return false;
+                    const INACTIVE_STATUSES = ['completed', 'cancelled', 'canceled', 'cancel', 'done', 'settled', 'delivered', 'rejected', 'void', 'voided'];
+                    const isActive = !INACTIVE_STATUSES.includes(String(o.status || '').toLowerCase().trim());
+                    if (!isActive) return false;
 
-      {/* Grid */}
-      {loading ? (
-        <Loader />
-      ) : tablesLoadError ? (
-        <EmptyState
-          title="Tables could not be loaded"
-          description={tablesLoadError}
-          icon="bi-exclamation-triangle"
-        />
-      ) : filteredTables.length === 0 ? (
-        <EmptyState
-          title="No Tables Found"
-          description="There are no available tables right now."
-          icon="bi-border-all"
-        />
-      ) : (
-        Array.from(branchGroups.entries()).map(([branchKey, group]) => (
-        <div key={branchKey} className="mb-4">
-          {showBranchHeadings && <h6 className="fw-bold text-dark mb-3">{group.name}</h6>}
-        <div className="row g-3">
-          {group.tables.map((table) => {
-            const canonNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
-            const tableIdStr = String(table.id || '').trim();
-            const activeOrderForTable = (orders || []).find(o => {
-              if (!o) return false;
-              const INACTIVE_STATUSES = ['completed', 'cancelled', 'canceled', 'cancel', 'done', 'settled', 'delivered', 'rejected', 'void', 'voided'];
-              const isActive = !INACTIVE_STATUSES.includes(String(o.status || '').toLowerCase().trim());
-              if (!isActive) return false;
+                    const rawVal = o.tableNumber || o.table_number || o.table_no || (typeof o.table === 'object' ? (o.table?.number || o.table?.table_number || o.table?.id) : o.table);
+                    const oCanon = tableService.getCanonicalTableNumber(rawVal || '');
+                    const oTableId = String(o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : (typeof o.table === 'number' ? o.table : ''))).trim();
 
-              const rawVal = o.tableNumber || o.table_number || o.table_no || (typeof o.table === 'object' ? (o.table?.number || o.table?.table_number || o.table?.id) : o.table);
-              const oCanon = tableService.getCanonicalTableNumber(rawVal || '');
-              const oTableId = String(o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : (typeof o.table === 'number' ? o.table : ''))).trim();
-
-              return (oCanon && oCanon === canonNum) || (tableIdStr && oTableId && tableIdStr === oTableId);
-            });
-            const isTableOccupiedWithOrder = table.status === 'Occupied' || !!activeOrderForTable;
-            return (
-              <div key={table.id} className="col-12 col-sm-6 col-md-4 col-lg-3">
-                <TableCard
-                  table={table}
-                  onSelect={handleTakeOrder}
-                  onStatusChange={handleStatusChange}
-                  onEdit={(t) => setEditingTable(t)}
-                  onDelete={(t) => { setDeleteError(''); setDeletingTable(t); }}
-                  onViewQR={qrEnabled ? (t) => setQrModalTable(t) : undefined}
-                  isAdmin={isAdmin}
-                  showActions
-                  hasDishes={hasDishes}
-                  hasActiveOrder={isTableOccupiedWithOrder}
-                />
+                    return (oCanon && oCanon === canonNum) || (tableIdStr && oTableId && tableIdStr === oTableId);
+                  });
+                  const isTableOccupiedWithOrder = table.status === 'Occupied' || !!activeOrderForTable;
+                  return (
+                    <TableCard
+                      key={table.id}
+                      table={table}
+                      onSelect={handleTakeOrder}
+                      onStatusChange={handleStatusChange}
+                      onEdit={(t) => setEditingTable(t)}
+                      onDelete={(t) => { setDeleteError(''); setDeletingTable(t); }}
+                      onViewQR={qrEnabled ? (t) => setQrModalTable(t) : undefined}
+                      isAdmin={isAdmin}
+                      showActions
+                      hasDishes={hasDishes}
+                      hasActiveOrder={isTableOccupiedWithOrder}
+                    />
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-        </div>
-        ))
-      )}
+            </div>
+          ))
+        )}
 
       {/* Modals */}
       {isAdmin && isAddOpen && (
@@ -502,6 +514,7 @@ export const Tables = () => {
           )}
         </div>
       </Modal>
+      </div>
     </AdminLayout>
   );
 };

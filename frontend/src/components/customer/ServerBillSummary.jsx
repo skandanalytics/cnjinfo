@@ -10,7 +10,9 @@ const Row = ({ label, value, className = '' }) => (
 
 // Renders the pricing block of a server cart view (GET/PUT /cart/..., POST /checkout/validate/).
 export const ServerBillSummary = ({ cart, children }) => {
+  const isTakeaway = String(cart?.order_type || '').toUpperCase() === 'TAKEAWAY';
   const pricing = cart?.pricing;
+  const takeawayCharge = isTakeaway ? Number(pricing?.takeaway_charge || 0) : 0;
   return (
     <div className="card rounded-3 border-0 shadow-sm p-3 p-sm-4 bg-white mb-4 text-start" data-testid="server-bill">
       <h5 className="fw-bold text-dark mb-3 border-bottom pb-2">Order Bill Summary</h5>
@@ -28,8 +30,8 @@ export const ServerBillSummary = ({ cart, children }) => {
           {(pricing.coupons || []).map((c) => (
             <Row key={c.code} label={`Coupon ${c.code}`} value={`-${formatCurrency(Number(c.discount))}`} className="text-success" />
           ))}
-          {Number(pricing.takeaway_charge) > 0 && (
-            <Row label="Packing Charge (Takeaway)" value={`+${formatCurrency(Number(pricing.takeaway_charge))}`} className="text-dark" />
+          {isTakeaway && takeawayCharge > 0 && (
+            <Row label="Packing Charge (Takeaway)" value={`+${formatCurrency(takeawayCharge)}`} className="text-dark" />
           )}
           {pricing.taxable_amount != null && (
             <Row label="Taxable Amount" value={formatCurrency(Number(pricing.taxable_amount))} className="text-dark" />

@@ -1,5 +1,7 @@
+from django.http import Http404
 from django.shortcuts import get_object_or_404
-from rest_framework import serializers, status
+from rest_framework import exceptions, serializers, status
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -39,6 +41,14 @@ class CartBase(APIView):
 
     permission_classes = [AllowAny]
 
+    def verify_cart_ownership(self, cart, ident):
+        """Ensure the target cart strictly belongs to the current authenticated user or guest token."""
+        if cart is None:
+            return True
+        if ident.user:
+            return cart.user_id == ident.user.id
+        return cart.guest_token == ident.guest_hash
+
     def identity(self, request):
         user = request.user
         if user.is_authenticated:
@@ -74,6 +84,15 @@ class CartView(CartBase):
         ident, err = self.identity(request)
         if err:
             return err
+        raw_cart_id = request.query_params.get("cart") or request.query_params.get("cart_id")
+        if raw_cart_id:
+            try:
+                target = Cart.objects.filter(pk=int(raw_cart_id)).first()
+                if target and not self.verify_cart_ownership(target, ident):
+                    return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                    status=status.HTTP_403_FORBIDDEN)
+            except (ValueError, TypeError):
+                pass
         branch = self.branch_from(request.query_params)
         cart = services.get_cart(ident, branch)
         return self.render(request, cart) if cart else Response(services.empty_cart_view(branch))
@@ -82,6 +101,15 @@ class CartView(CartBase):
         ident, err = self.identity(request)
         if err:
             return err
+        raw_cart_id = request.query_params.get("cart") or request.query_params.get("cart_id")
+        if raw_cart_id:
+            try:
+                target = Cart.objects.filter(pk=int(raw_cart_id)).first()
+                if target and not self.verify_cart_ownership(target, ident):
+                    return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                    status=status.HTTP_403_FORBIDDEN)
+            except (ValueError, TypeError):
+                pass
         branch = self.branch_from(request.query_params)
         cart = services.get_cart(ident, branch)
         if cart:
@@ -98,6 +126,8 @@ class ContextSerializer(serializers.Serializer):
     order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY"])
     qr = serializers.UUIDField(required=False)
     table = serializers.IntegerField(required=False, min_value=1)
+    cart = serializers.IntegerField(required=False, allow_null=True)
+    cart_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class CartContextView(CartBase):
@@ -107,6 +137,12 @@ class CartContextView(CartBase):
             return err
         s = ContextSerializer(data=request.data)
         s.is_valid(raise_exception=True)
+        raw_cart_id = s.validated_data.get("cart") or s.validated_data.get("cart_id")
+        if raw_cart_id:
+            target = Cart.objects.filter(pk=raw_cart_id).first()
+            if target and not self.verify_cart_ownership(target, ident):
+                return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                status=status.HTTP_403_FORBIDDEN)
         branch = self.branch_from(s.validated_data)
         cart = services.get_or_create_cart(ident, branch)
         try:
@@ -123,6 +159,8 @@ class AddItemSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, max_value=99)
     options = serializers.ListField(child=serializers.IntegerField(), required=False, default=list, max_length=20)
     special_instructions = serializers.CharField(max_length=500, required=False, allow_blank=True, default="")
+    cart = serializers.IntegerField(required=False, allow_null=True)
+    cart_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class CartItemsView(CartBase):
@@ -133,6 +171,12 @@ class CartItemsView(CartBase):
         s = AddItemSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         d = s.validated_data
+        raw_cart_id = d.get("cart") or d.get("cart_id")
+        if raw_cart_id:
+            target = Cart.objects.filter(pk=raw_cart_id).first()
+            if target and not self.verify_cart_ownership(target, ident):
+                return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                status=status.HTTP_403_FORBIDDEN)
         branch = self.branch_from(d)
         cart = services.get_or_create_cart(ident, branch)
         try:
@@ -150,9 +194,12 @@ class QuantitySerializer(serializers.Serializer):
 
 class CartItemView(CartBase):
     def _item(self, ident, pk):
-        qs = CartItem.objects.select_related("cart", "food").filter(pk=pk, cart__status=Cart.Status.ACTIVE)
-        qs = qs.filter(cart__user=ident.user) if ident.user else qs.filter(cart__guest_token=ident.guest_hash)
-        return get_object_or_404(qs)
+        item = CartItem.objects.select_related("cart", "food").filter(pk=pk).first()
+        if not item or item.cart.status != Cart.Status.ACTIVE:
+            raise Http404("Cart item not found.")
+        if not self.verify_cart_ownership(item.cart, ident):
+            raise PermissionDenied("You do not have permission to modify this cart item.")
+        return item
 
     def patch(self, request, pk):
         ident, err = self.identity(request)
@@ -192,6 +239,8 @@ class CartItemView(CartBase):
 class CouponSerializer(serializers.Serializer):
     branch = serializers.IntegerField()
     code = serializers.CharField(max_length=50)
+    cart = serializers.IntegerField(required=False, allow_null=True)
+    cart_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class CartCouponView(CartBase):
@@ -201,6 +250,12 @@ class CartCouponView(CartBase):
             return err
         s = CouponSerializer(data=request.data)
         s.is_valid(raise_exception=True)
+        raw_cart_id = s.validated_data.get("cart") or s.validated_data.get("cart_id")
+        if raw_cart_id:
+            target = Cart.objects.filter(pk=raw_cart_id).first()
+            if target and not self.verify_cart_ownership(target, ident):
+                return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                status=status.HTTP_403_FORBIDDEN)
         branch = self.branch_from(s.validated_data)
         cart = services.get_cart(ident, branch)
         if cart is None:
@@ -215,6 +270,15 @@ class CartCouponView(CartBase):
         ident, err = self.identity(request)
         if err:
             return err
+        raw_cart_id = request.query_params.get("cart") or request.query_params.get("cart_id")
+        if raw_cart_id:
+            try:
+                target = Cart.objects.filter(pk=int(raw_cart_id)).first()
+                if target and not self.verify_cart_ownership(target, ident):
+                    return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                    status=status.HTTP_403_FORBIDDEN)
+            except (ValueError, TypeError):
+                pass
         branch = self.branch_from(request.query_params)
         cart = services.get_cart(ident, branch)
         if cart is None:
@@ -250,6 +314,15 @@ class CheckoutValidateView(CartBase):
         ident, err = self.identity(request)
         if err:
             return err
+        raw_cart_id = request.data.get("cart") or request.data.get("cart_id")
+        if raw_cart_id:
+            try:
+                target = Cart.objects.filter(pk=int(raw_cart_id)).first()
+                if target and not self.verify_cart_ownership(target, ident):
+                    return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                    status=status.HTTP_403_FORBIDDEN)
+            except (ValueError, TypeError):
+                pass
         branch = self.branch_from(request.data)
         cart = services.get_cart(ident, branch)
         if cart is None or not cart.items.exists():

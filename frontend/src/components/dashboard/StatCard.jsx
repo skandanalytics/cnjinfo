@@ -27,9 +27,9 @@ export const StatCard = ({
 
   return (
     <div 
-      className={`card rounded-3 border-0 shadow-sm p-4 bg-white h-100 ${onClick ? 'cursor-pointer hover-lift' : ''}`}
+      className={`card rounded-3 shadow-sm p-4 bg-white h-100 stat-card-hover ${onClick ? 'cursor-pointer hover-lift' : ''}`}
       onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default', transition: 'transform 0.15s ease, box-shadow 0.15s ease' }}
+      style={{ cursor: onClick ? 'pointer' : 'default' }}
     >
       <div className="d-flex align-items-center justify-content-between">
         <div>

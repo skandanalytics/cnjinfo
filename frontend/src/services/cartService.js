@@ -123,6 +123,17 @@ async function fetchCartView() {
 }
 
 export const cartService = {
+  mergeGuestCart: async (guestToken) => {
+    if (!guestToken) return [];
+    try {
+      const res = await api.post('/cart/merge/', { guest_token: guestToken });
+      return res.data?.merged_branches || [];
+    } catch (e) {
+      console.warn('[CART SERVICE] mergeGuestCart error:', e?.response?.data || e.message);
+      return [];
+    }
+  },
+
   getExistingCart: async (userId, tableInput = null) => {
     try {
       const view = await fetchCartView();

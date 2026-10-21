@@ -42,10 +42,14 @@ export const Checkout = () => {
   const [error, setError] = useState('');
   const firstLoad = useRef(true);
 
-  const chooseType = async (type, tableId = getSelectedTableId()) => {
+  const chooseType = async (type, tableId = null) => {
     setError('');
     setNotice('');
-    if (type === DINE_IN && !hasScannedTable() && !tableId) {
+
+    // Resolve target table ID for Dine-In (prefer passed tableId, then saved table ID, then current table from cartView)
+    const effectiveTableId = tableId || getSelectedTableId() || cartView?.table?.id;
+
+    if (type === DINE_IN && !hasScannedTable() && !effectiveTableId) {
       setBusy(true);
       try {
         const branchId = await resolvePublicBranchId();
@@ -64,7 +68,7 @@ export const Checkout = () => {
           return;
         }
         setSelectedTableId(open[0].id);
-        tableId = open[0].id;
+        return chooseType(DINE_IN, open[0].id);
       } catch (err) {
         setError(err.message || 'Could not check table availability.');
         return;
@@ -72,12 +76,56 @@ export const Checkout = () => {
         setBusy(false);
       }
     }
-    if (type === TAKEAWAY) setSelectedTableId(null);
+
+    // Preserve selected table across Takeaway toggles: DO NOT clear selectedTableId when switching to Takeaway
+    if (type === DINE_IN && effectiveTableId) {
+      setSelectedTableId(effectiveTableId);
+    }
+
+    setOrderType(type);
+    setType(type);
+
+    // Optimistically and immediately update UI without waiting for network roundtrip
+    if (cartView?.pricing) {
+      setCartView(prev => {
+        if (!prev?.pricing) return prev;
+        const currentPricing = prev.pricing;
+        const totalQty = (prev.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+        const takeawayCharge = type === TAKEAWAY ? totalQty * 10 : 0;
+
+        const itemsSubtotal = Number(currentPricing.items_subtotal || 0);
+        const addOns = Number(currentPricing.customization_total || 0);
+        const dishDiscount = Number(currentPricing.dish_discount_total || 0);
+        const couponDiscount = (currentPricing.coupons || []).reduce((s, c) => s + Number(c.discount || 0), 0);
+        const netFood = Math.max(0, itemsSubtotal + addOns - dishDiscount - couponDiscount);
+        const taxable = netFood + takeawayCharge;
+        const gstRate = Number(currentPricing.gst_rate || 5) / 100;
+        const rawGst = taxable * gstRate;
+        const gstAmount = (rawGst - Math.floor(rawGst)) >= 0.5 ? Math.ceil(rawGst) : Math.floor(rawGst);
+        const serviceCharge = Number(currentPricing.service_charge_amount || 0);
+        const unroundedTotal = taxable + gstAmount + serviceCharge;
+        const finalTotal = Math.round(unroundedTotal);
+        const roundOff = Math.round((finalTotal - unroundedTotal) * 100) / 100;
+
+        return {
+          ...prev,
+          order_type: type,
+          table: type === DINE_IN ? (prev.table || (effectiveTableId ? { id: effectiveTableId, table_number: String(effectiveTableId) } : null)) : null,
+          pricing: {
+            ...currentPricing,
+            takeaway_charge: takeawayCharge.toFixed(2),
+            taxable_amount: taxable.toFixed(2),
+            gst_amount: gstAmount.toFixed(2),
+            round_off: roundOff.toFixed(2),
+            total_amount: finalTotal.toFixed(2)
+          }
+        };
+      });
+    }
+
     setBusy(true);
     try {
-      const view = await applyOrderContext(type);
-      setOrderType(type);
-      setType(type);
+      const view = await applyOrderContext(type, effectiveTableId);
       setCartView(view);
       if (type === TAKEAWAY) {
         setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });

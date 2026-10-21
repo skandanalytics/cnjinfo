@@ -42,7 +42,14 @@ export const FoodDetails = () => {
 
   const foodType = foodItem.foodType || foodItem.type || 'veg';
   const badgeClass = foodType === 'veg' ? 'veg-badge' : foodType === 'vegan' ? 'vegan-badge' : 'non-veg-badge';
-  const isOutOfStock = foodItem ? (foodItem.stock <= 0 || foodItem.status === 'Out of Stock' || foodItem.status === 'OUT_OF_STOCK' || foodItem.is_available === false) : false;
+  const isOutOfStock = foodItem ? (
+    foodItem.is_sold_out === true ||
+    foodItem.is_orderable === false ||
+    foodItem.is_available === false ||
+    foodItem.status === 'Out of Stock' ||
+    foodItem.status === 'OUT_OF_STOCK' ||
+    (foodItem.stock !== null && foodItem.stock !== undefined && foodItem.stock !== '' && Number(foodItem.stock) <= 0)
+  ) : false;
 
   const handleAddToCart = () => {
     addToCart(foodItem, quantity);

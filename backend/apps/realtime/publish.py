@@ -41,11 +41,16 @@ def publish_order_event(order):
         "order_number": order.order_number,
         "status": order.status,
         "payment_status": order.payment_status,
+        "placed_by_id": order.placed_by_id,
         "resource": "order",
         "action": "updated",
     }
-    extra_groups = [f"customer-{order.customer_id}"] if order.customer_id else None
-    publish_branch_event(order.branch_id, "order.event", extra, extra_groups)
+    extra_groups = []
+    if order.customer_id:
+        extra_groups.append(f"customer-{order.customer_id}")
+    if order.placed_by_id:
+        extra_groups.append(f"employee-{order.placed_by_id}")
+    publish_branch_event(order.branch_id, "order.event", extra, extra_groups if extra_groups else None)
 
 
 def publish_catalog_event(branch_id, resource, action="updated"):

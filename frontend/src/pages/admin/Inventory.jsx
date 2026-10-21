@@ -306,12 +306,12 @@ export const Inventory = () => {
             <div className="col-12 col-sm-6 col-xl-3">
               <div 
                 onClick={() => handleToggleStatus('ALL')}
-                className={`card rounded-4 border-0 p-3 h-100 transition-all cursor-pointer ${
+                className={`card rounded-4 p-3 h-100 cursor-pointer inventory-summary-card ${
                   stockStatusFilter === 'ALL' 
                     ? 'shadow border border-2 border-dark bg-white' 
                     : 'shadow-sm bg-white'
                 }`}
-                style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+                style={{ cursor: 'pointer' }}
               >
                 <div className="d-flex align-items-center justify-content-between">
                   <div>
@@ -332,14 +332,14 @@ export const Inventory = () => {
             <div className="col-12 col-sm-6 col-xl-3">
               <div 
                 onClick={() => handleToggleStatus('OUT_OF_STOCK')}
-                className={`card rounded-4 border-0 p-3 h-100 transition-all cursor-pointer ${
+                className={`card rounded-4 p-3 h-100 cursor-pointer inventory-summary-card ${
                   stockStatusFilter === 'OUT_OF_STOCK' 
                     ? 'shadow-lg border border-2 border-danger bg-danger text-white' 
                     : outOfStockItems.length > 0
                       ? 'shadow-sm bg-white border border-danger-subtle'
                       : 'shadow-sm bg-white'
                 }`}
-                style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+                style={{ cursor: 'pointer' }}
               >
                 <div className="d-flex align-items-center justify-content-between">
                   <div>
@@ -363,14 +363,14 @@ export const Inventory = () => {
             <div className="col-12 col-sm-6 col-xl-3">
               <div
                 onClick={() => handleToggleStatus('LOW_STOCK')}
-                className={`card rounded-4 border-0 p-3 h-100 transition-all cursor-pointer ${
+                className={`card rounded-4 p-3 h-100 cursor-pointer inventory-summary-card ${
                   stockStatusFilter === 'LOW_STOCK'
                     ? 'shadow-lg border border-2 border-warning bg-warning text-dark'
                     : lowStockItems.length > 0
                       ? 'shadow-sm bg-white border border-warning-subtle'
                       : 'shadow-sm bg-white'
                 }`}
-                style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+                style={{ cursor: 'pointer' }}
               >
                 <div className="d-flex align-items-center justify-content-between">
                   <div>
@@ -395,12 +395,12 @@ export const Inventory = () => {
             <div className="col-12 col-sm-6 col-xl-3">
               <div 
                 onClick={() => handleToggleStatus('IN_STOCK')}
-                className={`card rounded-4 border-0 p-3 h-100 transition-all cursor-pointer ${
+                className={`card rounded-4 p-3 h-100 cursor-pointer inventory-summary-card ${
                   stockStatusFilter === 'IN_STOCK' 
                     ? 'shadow border border-2 border-success bg-success text-white' 
                     : 'shadow-sm bg-white'
                 }`}
-                style={{ cursor: 'pointer', transition: 'all 0.2s ease' }}
+                style={{ cursor: 'pointer' }}
               >
                 <div className="d-flex align-items-center justify-content-between">
                   <div>

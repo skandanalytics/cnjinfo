@@ -146,16 +146,47 @@ class FoodSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
     discounted_price = serializers.SerializerMethodField()
     current_discount = serializers.SerializerMethodField()
     stock_status = serializers.SerializerMethodField()
+    stock = serializers.SerializerMethodField()
     is_orderable = serializers.SerializerMethodField()
+    initial_stock = serializers.IntegerField(required=False, write_only=True, min_value=0)
 
     class Meta:
         model = Food
         fields = ["id", "branch", "category", "category_name", "name", "description", "ingredients", "diet_type",
                   "price", "original_price", "discounted_price", "current_discount", "calories",
-                  "is_active", "is_sold_out", "stock_status", "is_orderable", "image_url", "images",
+                  "is_active", "is_sold_out", "stock_status", "stock", "is_orderable", "initial_stock", "image_url", "images",
                   "primary_image", "customizations", "created_at", "updated_at"]
         read_only_fields = ["id", "created_at", "updated_at"]
         validators = []
+
+    def get_stock(self, obj):
+        inv = getattr(obj, "inventory", None)
+        return inv.quantity if inv else None
+
+    def create(self, validated_data):
+        initial_stock = validated_data.pop("initial_stock", None)
+        if initial_stock is None and "stock" in self.initial_data:
+            try:
+                raw_stock = self.initial_data.get("stock")
+                if raw_stock is not None and str(raw_stock).strip() != "":
+                    initial_stock = int(raw_stock)
+            except (TypeError, ValueError):
+                pass
+        food = super().create(validated_data)
+        if initial_stock is not None and initial_stock >= 0:
+            from apps.inventory.models import InventoryItem
+            from apps.inventory import services
+            user = None
+            if self.context.get("request"):
+                user = self.context["request"].user
+            inv, created = InventoryItem.objects.get_or_create(
+                food=food,
+                defaults={"branch": food.branch, "quantity": initial_stock}
+            )
+            if created and user:
+                services.set_initial_stock(inv, user)
+            food.inventory = inv
+        return food
 
     def get_discounted_price(self, obj):
         _, amount = current_discount(obj)
