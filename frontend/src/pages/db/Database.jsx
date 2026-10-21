@@ -2,11 +2,12 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { staffJson, clearStaffSession } from '../../services/staffClient';
 import { staffLogin } from '../../services/adminApi';
+import { getApiUrl } from '../../config/apiConfig';
 
 const PHRASE = 'DELETE ALL APPLICATION DATA';
 
 async function publicJson(path, options = {}) {
-  const res = await fetch(`/api/db${path}`, {
+  const res = await fetch(getApiUrl(`/db${path}`), {
     method: options.method || 'GET',
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: options.body ? JSON.stringify(options.body) : undefined,

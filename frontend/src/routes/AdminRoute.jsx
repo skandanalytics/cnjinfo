@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import Loader from '../components/common/Loader';
+import { getApiUrl } from '../config/apiConfig';
 
 export const AdminRoute = ({ children, allowEmployee = true }) => {
   const { user, isAuthenticated, loading } = useAuth();
@@ -10,7 +11,7 @@ export const AdminRoute = ({ children, allowEmployee = true }) => {
 
   useEffect(() => {
     let active = true;
-    fetch('/api/db/status/', { headers: { Accept: 'application/json' } })
+    fetch(getApiUrl('/db/status/'), { headers: { Accept: 'application/json' } })
       .then((res) => res.ok ? res.json() : Promise.reject())
       .then((data) => { if (active) setSetupRequired(Boolean(data.setup_required)); })
       .catch(() => { if (active) setSetupRequired(false); });

@@ -1,3 +1,5 @@
+import { getApiUrl } from '../config/apiConfig';
+
 const ACCESS = 'foodie_staff_access';
 const REFRESH = 'foodie_staff_refresh';
 
@@ -26,7 +28,7 @@ export async function refreshStaffSession() {
   const refresh = sessionStorage.getItem(REFRESH);
   if (!refresh) throw new Error('No refresh token');
   if (!refreshPromise) {
-    refreshPromise = fetch('/api/auth/refresh/', {
+    refreshPromise = fetch(getApiUrl('/auth/refresh/'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ refresh }),
@@ -57,12 +59,12 @@ export async function staffFetch(path, options = {}) {
   const access = getStaffAccess();
   if (access) headers.Authorization = `Bearer ${access}`;
 
-  let res = await fetch(`/api${path}`, { method: options.method || 'GET', headers, body });
+  let res = await fetch(getApiUrl(path), { method: options.method || 'GET', headers, body });
   if (res.status === 401 && !options._retried) {
     try {
       const next = await refreshStaffSession();
       headers.Authorization = `Bearer ${next}`;
-      res = await fetch(`/api${path}`, { method: options.method || 'GET', headers, body });
+      res = await fetch(getApiUrl(path), { method: options.method || 'GET', headers, body });
     } catch {
       goToLogin();
       const err = new Error('Session expired. Please log in again.');

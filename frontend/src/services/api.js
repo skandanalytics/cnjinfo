@@ -1,13 +1,11 @@
 import axios from 'axios';
+import { API_BASE_URL, getApiUrl } from '../config/apiConfig';
 
 /*
  * Foodie API Configuration
  * Primary and Backup Servers stored separately
  */
-export const PRIMARY_API_URL =
-  import.meta.env.VITE_MAIN_API_URL ||
-  import.meta.env.VITE_API_BASE_URL ||
-  '/api';
+export const PRIMARY_API_URL = API_BASE_URL;
 
 export const BACKUP_API_URL =
   import.meta.env.VITE_BACKUP_API_URL ||
@@ -153,7 +151,7 @@ api.interceptors.response.use(
             if (refresh) {
               return import('axios').then(async ({ default: axios }) => {
                 try {
-                  const res = await axios.post('/api/auth/refresh/', { refresh });
+                  const res = await axios.post(getApiUrl('/auth/refresh/'), { refresh });
                   const access = res.data.access;
                   sessionStorage.setItem('foodie_token_customer', access);
                   localStorage.setItem('foodie_token_customer', access);

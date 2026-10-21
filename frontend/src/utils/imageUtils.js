@@ -1,4 +1,9 @@
+import { SERVER_ORIGIN } from '../config/apiConfig';
+
 const getBackendBaseUrl = () => {
+  if (SERVER_ORIGIN) {
+    return SERVER_ORIGIN;
+  }
   const envBase = import.meta.env.VITE_API_BASE_URL;
   if (envBase && envBase.startsWith('http')) {
     return envBase.replace(/\/api\/?$/, '');

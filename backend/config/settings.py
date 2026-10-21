@@ -30,7 +30,13 @@ if not SECRET_KEY:
     else:
         raise RuntimeError("SECRET_KEY environment variable is required when DEBUG is off.")
 
-ALLOWED_HOSTS = env_list("ALLOWED_HOSTS", "127.0.0.1,localhost,testserver")
+allowed_hosts_raw = os.getenv("DJANGO_ALLOWED_HOSTS") or os.getenv("ALLOWED_HOSTS", "")
+if allowed_hosts_raw:
+    ALLOWED_HOSTS = [x.strip() for x in allowed_hosts_raw.split(",") if x.strip()]
+    if "*" not in ALLOWED_HOSTS and DEBUG:
+        ALLOWED_HOSTS.append("*")
+else:
+    ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
     "daphne",
@@ -87,24 +93,33 @@ TEMPLATES = [{
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-# MySQL 8 is the only operational database.
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": os.getenv("DB_NAME", "foodie_db"),
-        "USER": os.getenv("DB_USER", "foodie_user"),
-        "PASSWORD": os.getenv("DB_PASSWORD", ""),
-        "HOST": os.getenv("DB_HOST", "127.0.0.1"),
-        "PORT": os.getenv("DB_PORT", "3306"),
-        "OPTIONS": {"charset": "utf8mb4", "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
-        # Daphne/ASGI serves each request on a thread-pool worker. Persistent
-        # connections (CONN_MAX_AGE > 0) are pinned to those threads and are not
-        # returned the way they are under sync WSGI, so they accumulate until
-        # MySQL hits max_connections. Close after every request.
-        "CONN_MAX_AGE": 0,
-        "TEST": {"NAME": os.getenv("DB_TEST_NAME", "test_foodie_db")},
+# MySQL 8 is the primary operational database, with sqlite3 supported for portable testing.
+DB_ENGINE = os.getenv("DB_ENGINE", "django.db.backends.mysql")
+if "sqlite" in DB_ENGINE:
+    DATABASES = {
+        "default": {
+            "ENGINE": "django.db.backends.sqlite3",
+            "NAME": BASE_DIR / (os.getenv("DB_NAME", "db.sqlite3")),
+        }
     }
-}
+else:
+    DATABASES = {
+        "default": {
+            "ENGINE": DB_ENGINE,
+            "NAME": os.getenv("DB_NAME", "foodie_db"),
+            "USER": os.getenv("DB_USER", "foodie_user"),
+            "PASSWORD": os.getenv("DB_PASSWORD", ""),
+            "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+            "PORT": os.getenv("DB_PORT", "3306"),
+            "OPTIONS": {"charset": "utf8mb4", "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
+            # Daphne/ASGI serves each request on a thread-pool worker. Persistent
+            # connections (CONN_MAX_AGE > 0) are pinned to those threads and are not
+            # returned the way they are under sync WSGI, so they accumulate until
+            # MySQL hits max_connections. Close after every request.
+            "CONN_MAX_AGE": 0,
+            "TEST": {"NAME": os.getenv("DB_TEST_NAME", "test_foodie_db")},
+        }
+    }
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -127,8 +142,56 @@ MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
-CORS_ALLOWED_ORIGINS = env_list("CORS_ALLOWED_ORIGINS")
-CORS_ALLOW_CREDENTIALS = False
+# CORS & CSRF Configuration
+CORS_ALLOW_ALL_ORIGINS = env_bool("CORS_ALLOW_ALL_ORIGINS", default=True)
+CORS_ORIGIN_ALLOW_ALL = CORS_ALLOW_ALL_ORIGINS
+CORS_ALLOW_CREDENTIALS = True
+
+# Allow any LAN / Wi-Fi IP on port 5173 or other dev ports (e.g. 192.168.x.x, 10.x.x.x)
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^http://127\.0\.0\.1:\d+$",
+    r"^http://localhost:\d+$",
+    r"^http://192\.168\.\d+\.\d+(:\d+)?$",
+    r"^http://10\.\d+\.\d+\.\d+(:\d+)?$",
+    r"^http://172\.(1[6-9]|2\d|3[01])\.\d+\.\d+(:\d+)?$",
+]
+
+cors_origins_env = env_list("CORS_ALLOWED_ORIGINS")
+if cors_origins_env:
+    CORS_ALLOWED_ORIGINS = cors_origins_env
+else:
+    CORS_ALLOWED_ORIGINS = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://192.168.150.171:5173",
+        "http://192.168.68.102:5173",
+    ]
+
+CORS_ALLOW_HEADERS = [
+    "accept",
+    "accept-encoding",
+    "authorization",
+    "content-type",
+    "dnt",
+    "origin",
+    "user-agent",
+    "x-csrftoken",
+    "x-requested-with",
+    "x-guest-token",
+    "x-branch-id",
+]
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://192.168.150.171:5173",
+    "http://192.168.68.102:5173",
+]
+csrf_trusted_env = env_list("CSRF_TRUSTED_ORIGINS")
+if csrf_trusted_env:
+    for o in csrf_trusted_env:
+        if o not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(o)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",),
@@ -160,11 +223,28 @@ REST_FRAMEWORK = {
 
 ALLOW_UNRESTRICTED_ADMIN_CREATION = env_bool("ALLOW_UNRESTRICTED_ADMIN_CREATION", default=True)
 
-# Counters for throttling and login lockout. LocMem is per-process: use a shared cache (Redis) in production.
-CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
-
-# Live order events. In-memory is one process only; more than one server process needs Redis.
-CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
+# Cache & Live Events
+# Single-process development can use InMemoryChannelLayer and LocMemCache.
+# Multi-worker or production deployments use Redis (specify REDIS_URL in .env).
+REDIS_URL = os.getenv("REDIS_URL", "").strip()
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.redis.RedisCache",
+            "LOCATION": REDIS_URL,
+        }
+    }
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            "CONFIG": {
+                "hosts": [REDIS_URL],
+            },
+        }
+    }
+else:
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 STAFF_LOGIN_MAX_FAILURES = 5
 STAFF_LOGIN_LOCK_SECONDS = 900
@@ -197,12 +277,15 @@ FRONTEND_BASE_URL = os.getenv("FRONTEND_BASE_URL", "http://localhost:5173").rstr
 MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 31536000
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-    SECURE_HSTS_PRELOAD = True
+    # Set SECURE_SSL_REDIRECT=True in .env only when production TLS/HTTPS termination is enabled.
+    # When deployed to an internal LAN IP or behind an HTTP reverse proxy, leave it as False.
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", False)
+    SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", SECURE_SSL_REDIRECT)
+    CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", SECURE_SSL_REDIRECT)
+    if SECURE_SSL_REDIRECT:
+        SECURE_HSTS_SECONDS = 31536000
+        SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+        SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
     SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
     X_FRAME_OPTIONS = "DENY"

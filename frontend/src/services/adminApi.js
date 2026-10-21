@@ -7,6 +7,7 @@ import {
   staffJson,
 } from './staffClient';
 import { classifyStock } from '../utils/stockStatus';
+import { getApiUrl } from '../config/apiConfig';
 
 export { isStaffScreen };
 
@@ -85,7 +86,7 @@ export async function currentBranchId() {
 }
 
 export async function staffLogin(code, password) {
-  const res = await fetch('/api/auth/staff/login/', {
+  const res = await fetch(getApiUrl('/auth/staff/login/'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     body: JSON.stringify({ employee_code: String(code || '').trim(), password }),

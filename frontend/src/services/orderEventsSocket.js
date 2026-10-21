@@ -1,4 +1,5 @@
 import { getStaffAccess, refreshStaffSession } from './staffClient';
+import { getWsUrl } from '../config/apiConfig';
 
 const MAX_DELAY_MS = 30000;
 const MAX_NETWORK_RETRIES = 8;
@@ -114,8 +115,8 @@ async function connect() {
     return;
   }
 
-  const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
-  const ws = new WebSocket(`${proto}://${window.location.host}/ws/orders/?token=${encodeURIComponent(token)}`);
+  const wsUrl = getWsUrl('/orders/', { token });
+  const ws = new WebSocket(wsUrl);
   socket = ws;
   opened = false;
 
