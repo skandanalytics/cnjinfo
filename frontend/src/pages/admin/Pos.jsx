@@ -524,8 +524,8 @@ export const Pos = () => {
               <div className="d-flex align-items-center gap-2 ps-3 border-start">
                 <span className="small text-muted fw-semibold">Branch:</span>
                 <select 
-                  className="form-select form-select-sm rounded-pill px-3 py-1 fw-semibold border-light-subtle shadow-xs"
-                  style={{ width: 'auto', minWidth: '150px' }}
+                  className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs"
+                  style={{ width: 'auto', minWidth: '150px', paddingTop: '4px', paddingBottom: '4px', paddingLeft: '12px' }}
                   value={selectedBranchId || ''}
                   onChange={(e) => setSelectedBranchId(Number(e.target.value))}
                 >

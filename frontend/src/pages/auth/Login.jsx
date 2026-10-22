@@ -157,7 +157,8 @@ export const Login = () => {
   };
 
   return (
-    <div className="mobile-wrapper min-vh-100 bg-white px-4 py-5 d-flex flex-column justify-content-center mx-auto">
+    <div className="min-vh-100 px-3 py-5 d-flex flex-column justify-content-center" style={{ background: 'linear-gradient(135deg, #fff5f5 0%, #ffffff 60%)' }}>
+      <div style={{ width: '100%', maxWidth: '480px', margin: '0 auto' }}>
       <div className="text-center mb-4">
         <h2 className="fw-bold text-danger mb-1">Foodie</h2>
         <p className="text-muted small">Admin & Employee Portal</p>
@@ -369,6 +370,7 @@ export const Login = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

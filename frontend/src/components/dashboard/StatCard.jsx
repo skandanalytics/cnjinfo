@@ -27,25 +27,24 @@ export const StatCard = ({
 
   return (
     <div 
-      className={`card rounded-3 shadow-sm p-4 bg-white h-100 stat-card-hover ${onClick ? 'cursor-pointer hover-lift' : ''}`}
+      className={`card rounded-3 shadow-sm bg-white h-100 stat-card-hover ${onClick ? 'hover-lift' : ''}`}
       onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default' }}
+      style={{ cursor: onClick ? 'pointer' : 'default', padding: '20px 22px' }}
     >
-      <div className="d-flex align-items-center justify-content-between">
-        <div>
-          <div className="text-secondary small fw-semibold d-block mb-1" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
-            {typeof title === 'string' ? <span className="text-uppercase">{title}</span> : title}
+      <div className="d-flex align-items-center justify-content-between gap-3">
+        <div style={{ minWidth: 0 }}>
+          <div className="text-secondary fw-semibold d-block mb-1" style={{ fontSize: '11px', letterSpacing: '0.5px', textTransform: 'uppercase' }}>
+            {title}
           </div>
-          <h3 className="fw-bold text-dark mt-2 mb-0">{value}</h3>
-          {subtext && (
-            <p className="text-secondary small mb-0 mt-1" style={{ fontSize: '10px' }}>
-              {subtext}
-            </p>
-          )}
+          <h3 className="fw-bold text-dark mb-0" style={{ marginTop: '6px', lineHeight: 1.2 }}>{value}</h3>
+          {/* Always reserve one line of space so cards with/without subtext stay equal height */}
+          <p className="text-secondary mb-0" style={{ fontSize: '10px', marginTop: '4px', minHeight: '15px' }}>
+            {subtext || ''}
+          </p>
         </div>
         <div 
-          className="rounded-circle d-flex align-items-center justify-content-center"
-          style={{ width: '54px', height: '54px', backgroundColor: colors.bg, color: colors.text }}
+          className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+          style={{ width: '54px', height: '54px', minWidth: '54px', backgroundColor: colors.bg, color: colors.text }}
         >
           <Icon size={24} />
         </div>

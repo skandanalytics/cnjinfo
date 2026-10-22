@@ -335,15 +335,20 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
         except CouponError as exc:
             raise OrderError(str(exc), "coupon_invalid", 409)
     if mark_paid:
-        Payment.objects.create(
-            order=order,
-            branch=branch,
-            amount=order.total_amount,
-            method=Payment.Method.COUNTER,
-            status=Payment.Status.SUCCESS,
-            recorded_by=staff_user,
-            paid_at=timezone.now(),
-        )
+        try:
+            with transaction.atomic():
+                Payment.objects.create(
+                    order=order,
+                    amount=order.total_amount,
+                    method=Payment.Method.COUNTER,
+                    status=Payment.Status.SUCCESS,
+                    recorded_by=staff_user,
+                    paid_at=timezone.now(),
+                )
+        except IntegrityError:
+            # success_slot unique constraint: order already has a SUCCESS payment (e.g. duplicate retry).
+            # The order is already paid; no action needed — proceed normally.
+            pass
     OrderStatusHistory.objects.create(
         order=order,
         from_status="",

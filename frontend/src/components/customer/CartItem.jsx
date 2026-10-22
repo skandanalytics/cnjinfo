@@ -23,7 +23,7 @@ export const CartItem = ({
   const [fetchedAddons, setFetchedAddons] = useState(null);
   const [addonError, setAddonError] = useState('');
   const [addonLoading, setAddonLoading] = useState(!Array.isArray(item.customizations));
-  
+
   const debounceTimerRef = useRef(null);
 
   useEffect(() => {
@@ -194,17 +194,17 @@ export const CartItem = ({
 
   return (
     <div className="card rounded-3 border-0 shadow-sm p-3 mb-3 bg-white d-flex flex-row align-items-center gap-3">
-      <img 
-        src={getImageUrl(item.image)} 
-        alt={item.name} 
-        className="rounded-3" 
+      <img
+        src={getImageUrl(item.image)}
+        alt={item.name}
+        className="rounded-3"
         style={{ width: '70px', height: '70px', objectFit: 'cover', flexShrink: 0 }}
         onError={(event) => {
           console.error('Failed to load food image:', event.currentTarget.src);
           event.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
         }}
       />
-      
+
       <div className="flex-grow-1 min-width-0 d-flex flex-column gap-2">
         {/* Name and Trash Icon Row */}
         <div className="d-flex align-items-start justify-content-between gap-2">
@@ -212,7 +212,7 @@ export const CartItem = ({
             <span className={foodType === 'veg' ? 'veg-badge' : foodType === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}></span>
             {item.name}
           </h6>
-          <button 
+          <button
             onClick={handleRemove}
             disabled={isRemoving}
             className="btn btn-sm btn-outline-light border-0 text-danger p-1 d-flex align-items-center justify-content-center"
@@ -221,7 +221,7 @@ export const CartItem = ({
             <FiTrash2 size={16} />
           </button>
         </div>
-        
+
         {/* Price and Quantity Control Row */}
         <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
           <div className="d-flex align-items-center gap-1.5 flex-wrap">
@@ -240,7 +240,7 @@ export const CartItem = ({
               </span>
             )}
           </div>
-          <QuantityControl 
+          <QuantityControl
             quantity={item.quantity}
             max={item.stock}
             onIncrease={onIncrease}
@@ -264,27 +264,27 @@ export const CartItem = ({
                 </span>
               )}
               <div className="d-flex gap-2 mt-0.5">
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => {
                     setInstructionText(item.instructions || '');
                     setSelectedExtras(item.extraIngredients || []);
                     setShowEdit(true);
-                  }} 
-                  className="btn btn-sm btn-link text-danger p-0 fw-semibold text-decoration-none" 
+                  }}
+                  className="btn btn-sm btn-link text-danger p-0 fw-semibold text-decoration-none"
                   style={{ fontSize: '11px' }}
                 >
                   Edit
                 </button>
                 <span className="text-muted" style={{ fontSize: '11px' }}>|</span>
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   onClick={() => {
                     onUpdateInstructions(item.lineId || item.cartItemId || item.id, "", []);
                     setInstructionText("");
                     setSelectedExtras([]);
-                  }} 
-                  className="btn btn-sm btn-link text-secondary p-0 fw-semibold text-decoration-none" 
+                  }}
+                  className="btn btn-sm btn-link text-secondary p-0 fw-semibold text-decoration-none"
                   style={{ fontSize: '11px' }}
                 >
                   Clear
@@ -293,13 +293,13 @@ export const CartItem = ({
             </div>
           ) : (
             !showEdit && (
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => {
                   setInstructionText("");
                   setSelectedExtras([]);
                   setShowEdit(true);
-                }} 
+                }}
                 className="btn btn-sm btn-link text-danger p-0 fw-semibold text-decoration-none d-flex align-items-center gap-1"
                 style={{ fontSize: '11px' }}
               >
@@ -335,11 +335,10 @@ export const CartItem = ({
                     key={inst}
                     type="button"
                     onClick={() => handleSelectPrepPill(inst)}
-                    className={`btn btn-sm rounded-pill py-0.5 px-2.5 transition-all text-nowrap hover-bg-light-red ${
-                      new RegExp(`(^|,\\s*)${inst}(,\\s*|$)`, 'i').test(instructionText)
+                    className={`btn btn-sm rounded-pill py-0.5 px-2.5 transition-all text-nowrap hover-bg-light-red ${new RegExp(`(^|,\\s*)${inst}(,\\s*|$)`, 'i').test(instructionText)
                         ? 'btn-danger text-white border-danger'
                         : 'btn-outline-secondary'
-                    }`}
+                      }`}
                     style={{ fontSize: '9px', fontWeight: '500' }}
                   >
                     {inst}
@@ -351,7 +350,7 @@ export const CartItem = ({
               <input
                 type="text"
                 className="form-control form-control-sm mb-3"
-                placeholder="Or enter custom instructions..."
+                placeholder="Others"
                 value={instructionText}
                 onChange={handleCustomInstructionsChange}
                 onBlur={handleCustomInstructionsBlur}
@@ -449,10 +448,10 @@ export const CartItem = ({
                     <span className="text-success fw-medium">✓ Saved</span>
                   )}
                 </div>
-                <button 
-                  type="button" 
-                  onClick={handleCloseEdit} 
-                  className="btn btn-sm btn-light border py-1 px-3 fw-bold rounded-pill shadow-xs" 
+                <button
+                  type="button"
+                  onClick={handleCloseEdit}
+                  className="btn btn-sm btn-light border py-1 px-3 fw-bold rounded-pill shadow-xs"
                   style={{ fontSize: '11px' }}
                 >
                   Done

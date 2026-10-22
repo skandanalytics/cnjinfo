@@ -264,30 +264,9 @@ html, body {
   background-color: #d1fae5 !important; /* Soft emerald tint */
 }
 
-/* Functional Checkbox - Absolutely NO Tick Mark */
+/* Functional Checkbox - Hidden, label handles all visual state */
 .food-type-checkbox {
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  -moz-appearance: none !important;
-  width: 15px !important;
-  height: 15px !important;
-  min-width: 15px !important;
-  min-height: 15px !important;
-  border: 1.5px solid #cbd5e1 !important;
-  border-radius: 3.5px !important;
-  background-color: #ffffff !important;
-  background-image: none !important; /* STRICTLY NO TICK MARK */
-  outline: none !important;
-  cursor: pointer !important;
-  display: inline-flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  margin: 0 !important;
-  padding: 0 !important;
-  flex-shrink: 0 !important;
-  vertical-align: middle !important;
-  box-sizing: border-box !important;
-  transition: all 0.15s ease-in-out !important;
+  display: none !important;
 }
 
 .food-type-checkbox:hover {

@@ -401,7 +401,6 @@ export const Kitchen = () => {
                   title="Refresh Kitchen Queue from Backend"
                 >
                   <i className="bi bi-arrow-clockwise"></i>
-                  <span>Refresh</span>
                 </button>
               </div>
             }
