@@ -12,6 +12,7 @@ import { useBranches } from '../../hooks/useBranches';
 import SearchBar from '../../components/common/SearchBar';
 import EditDishModal from '../../components/menu/EditDishModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
+import Toast from '../../components/common/Toast';
 import { FiPlus, FiTrash2, FiEdit2, FiTag, FiGift } from 'react-icons/fi';
 import couponService from '../../services/couponService';
 import { productService } from '../../services/productService';
@@ -45,6 +46,7 @@ export const Offers = () => {
   // Deleting coupon confirmation modal
   const [deletingCoupon, setDeletingCoupon] = useState(null);
   const [deleteCouponLoading, setDeleteCouponLoading] = useState(false);
+  const [toastInfo, setToastInfo] = useState({ show: false, message: '', type: 'remove' });
 
   const fetchData = async () => {
     setLoading(true);
@@ -193,20 +195,23 @@ export const Offers = () => {
   };
 
   const handleConfirmDeleteCoupon = async () => {
-    if (!deletingCoupon) return;
+    if (!deletingCoupon || deleteCouponLoading) return;
     setDeleteCouponLoading(true);
     const { id, code } = deletingCoupon;
-    setCoupons(prev => prev.filter(c => c.id !== id && String(c.code).toUpperCase() !== String(code).toUpperCase()));
     try {
       const updated = await couponService.deleteCoupon(id, code);
-      setCoupons(updated);
+      if (Array.isArray(updated)) {
+        setCoupons(updated);
+      } else {
+        setCoupons(prev => prev.filter(c => c.id !== id && String(c.code).toUpperCase() !== String(code).toUpperCase()));
+      }
+      setToastInfo({ show: true, message: `Coupon "${code}" deleted successfully.`, type: 'remove' });
+      setDeletingCoupon(null);
     } catch (e) {
       console.error("Error deleting coupon:", e);
       window.alert(e.message || "Failed to delete coupon.");
-      await fetchDataSilently();
     } finally {
       setDeleteCouponLoading(false);
-      setDeletingCoupon(null);
     }
   };
 
@@ -739,9 +744,17 @@ export const Offers = () => {
         title="Delete Promo Coupon"
         message={`Are you sure you want to delete coupon "${deletingCoupon?.code}"? Customers will no longer be able to apply this discount.`}
         confirmText="Delete Coupon"
-        onClose={() => setDeletingCoupon(null)}
+        onClose={() => !deleteCouponLoading && setDeletingCoupon(null)}
         onConfirm={handleConfirmDeleteCoupon}
         loading={deleteCouponLoading}
+      />
+
+      {/* Toast Notification */}
+      <Toast
+        show={toastInfo.show}
+        message={toastInfo.message}
+        type={toastInfo.type}
+        onClose={() => setToastInfo(prev => ({ ...prev, show: false }))}
       />
     </AdminLayout>
   );

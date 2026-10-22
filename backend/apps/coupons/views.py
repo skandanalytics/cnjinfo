@@ -22,15 +22,9 @@ class CouponViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, view
     search_fields = ["code", "description"]
 
     def destroy(self, request, *args, **kwargs):
-        """Coupons that were ever redeemed are deactivated (redemption history is kept); others are deleted."""
+        """Coupons are deleted cleanly; historical redemptions retain snapshot coupon_code and order data."""
         coupon = self.get_object()
         branch_id = coupon.branch_id
-        if coupon.redemptions.exists():
-            coupon.is_active = False
-            coupon.save(update_fields=["is_active", "updated_at"])
-            self.audit("deactivate", coupon)
-            publish_catalog_event(branch_id, "coupon", "updated")
-            return Response({"detail": "Coupon has redemptions, so it was deactivated.", "deactivated": True})
         self.audit("delete", coupon)
         coupon.delete()
         publish_catalog_event(branch_id, "coupon", "deleted")

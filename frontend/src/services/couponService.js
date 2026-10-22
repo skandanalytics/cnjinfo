@@ -315,9 +315,19 @@ export const couponService = {
   },
 
   deleteCoupon: async (id, code) => {
-    const { isStaffScreen, deleteCoupon, explain } = await import('./adminApi');
+    const { isStaffScreen, deleteCoupon, listCoupons, explain } = await import('./adminApi');
     if (isStaffScreen()) {
-      try { return await deleteCoupon(id); } catch (err) { throw new Error(explain(err)); }
+      try {
+        let targetId = id;
+        if (!targetId || isNaN(Number(targetId))) {
+          const allCoupons = await listCoupons();
+          const found = allCoupons.find(c => String(c.code).toUpperCase() === String(code).toUpperCase());
+          if (found && found.id) targetId = found.id;
+        }
+        return await deleteCoupon(targetId);
+      } catch (err) {
+        throw new Error(explain(err));
+      }
     }
     try {
       if (id && typeof id === 'number' && id < 100000) {
