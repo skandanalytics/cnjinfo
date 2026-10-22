@@ -367,7 +367,7 @@ export const Kitchen = () => {
             title="Kitchen Queue & Live Status Monitor"
             showBackButton
             actions={
-              <div className="d-flex align-items-center gap-2">
+              <div className="d-flex align-items-center gap-2 pe-2 pe-md-3">
                 {!isBranchRestricted && (
                   <div className="d-flex align-items-center gap-2">
                     <span className="text-secondary small fw-semibold d-none d-md-inline">Branch:</span>

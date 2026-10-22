@@ -9,7 +9,7 @@ import { AuthContext } from './AuthContext';
 import OutOfStockModal from '../components/common/OutOfStockModal';
 import api from '../services/api';
 import { placeOrder as placeCustomerOrder } from '../services/customerCheckout';
-import { getOrderType } from '../utils/orderContext';
+import { getOrderType, setOrderType, setSelectedTableId } from '../utils/orderContext';
 
 const parseInstructions = (text) => {
   if (!text) {
@@ -187,7 +187,17 @@ export const CartProvider = ({ children }) => {
 
     if (savedTable) {
       try {
-        setTableContext(JSON.parse(savedTable));
+        const parsed = JSON.parse(savedTable);
+        setTableContext(parsed);
+        const tNum = String(parsed?.tableNumber || parsed?.number || '').toLowerCase();
+        if (tNum === 'takeaway' || parsed?.isTakeaway) {
+          setOrderType('TAKEAWAY');
+          setSelectedTableId(null);
+        } else {
+          setOrderType('DINE_IN');
+          const tid = parsed?.tableId || parsed?.id;
+          if (tid) setSelectedTableId(tid);
+        }
       } catch (e) { }
     }
 
@@ -284,6 +294,23 @@ export const CartProvider = ({ children }) => {
           if (currentFetchId !== fetchIdRef.current) return;
 
           if (!activeCart) {
+            const key = getCartStorageKey(user, tableContext);
+            let savedCart = sessionStorage.getItem(key) || localStorage.getItem(key);
+            if (!savedCart && !user) {
+              savedCart = sessionStorage.getItem('foodie_guest_cart_temp')
+                || sessionStorage.getItem('foodie_guest_cart')
+                || localStorage.getItem('foodie_guest_cart')
+                || localStorage.getItem('foodie_guest_cart_temp');
+            }
+            if (savedCart) {
+              try {
+                const parsed = JSON.parse(savedCart);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  setCartItems(parsed);
+                  return;
+                }
+              } catch (e) {}
+            }
             setCartItems([]);
             saveCartToStorage([], user);
             return;
@@ -321,8 +348,30 @@ export const CartProvider = ({ children }) => {
 
           if (currentFetchId !== fetchIdRef.current) return;
 
-          setCartItems(mappedItems);
-          saveCartToStorage(mappedItems, user);
+          if (mappedItems.length > 0) {
+            setCartItems(mappedItems);
+            saveCartToStorage(mappedItems, user);
+          } else {
+            const key = getCartStorageKey(user, tableContext);
+            let savedCart = sessionStorage.getItem(key) || localStorage.getItem(key);
+            if (!savedCart && !user) {
+              savedCart = sessionStorage.getItem('foodie_guest_cart_temp')
+                || sessionStorage.getItem('foodie_guest_cart')
+                || localStorage.getItem('foodie_guest_cart')
+                || localStorage.getItem('foodie_guest_cart_temp');
+            }
+            if (savedCart) {
+              try {
+                const parsed = JSON.parse(savedCart);
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  setCartItems(parsed);
+                  return;
+                }
+              } catch (e) {}
+            }
+            setCartItems([]);
+            saveCartToStorage([], user);
+          }
         } catch (e) {
           console.error("Error loading cart from database:", e);
           if (currentFetchId === fetchIdRef.current) {
@@ -362,11 +411,19 @@ export const CartProvider = ({ children }) => {
     if (tableInfo) {
       sessionStorage.setItem('foodie_table', JSON.stringify(tableInfo));
       localStorage.setItem('foodie_table', JSON.stringify(tableInfo));
-      /* Occupancy is written by the backend when an order is placed. Matching by table number here
-         can attach the wrong table when more than one branch uses the same number. */
+      const tNum = String(tableInfo.tableNumber || tableInfo.number || '').toLowerCase();
+      if (tNum === 'takeaway' || tableInfo.isTakeaway) {
+        setOrderType('TAKEAWAY');
+        setSelectedTableId(null);
+      } else {
+        setOrderType('DINE_IN');
+        const tid = tableInfo.tableId || tableInfo.id;
+        if (tid) setSelectedTableId(tid);
+      }
     } else {
       sessionStorage.removeItem('foodie_table');
       localStorage.removeItem('foodie_table');
+      setSelectedTableId(null);
     }
   };
 

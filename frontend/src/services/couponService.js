@@ -179,30 +179,32 @@ export const couponService = {
     }
     const menu = await api.get(`/public/branches/${branchId}/menu/`);
     const offers = Array.isArray(menu.data?.offers) ? menu.data.offers : [];
-    return offers.map((c) => {
-      const isPct = c.discount_type === 'PERCENT';
-      const discVal = parseFloat(c.discount_value || 0);
-      const minVal = parseFloat(c.min_order_value || 0);
-      const maxVal = c.max_discount != null ? parseFloat(c.max_discount) : null;
-      return {
-        id: c.code,
-        code: c.code,
-        discount: discVal,
-        discount_value: discVal,
-        type: isPct ? 'percentage' : 'fixed',
-        discount_type: isPct ? 'PERCENTAGE' : 'FIXED',
-        minOrderValue: minVal,
-        minimum_order_amount: minVal,
-        maxDiscount: maxVal,
-        status: c.is_active === false ? 'Inactive' : 'Active',
-        is_active: c.is_active !== false,
-        description: c.description || (isPct ? `${discVal}% off` : `Flat ₹${discVal} off`),
-        autoApply: Boolean(c.auto_apply),
-        isFirstTimeOffer: Boolean(c.is_first_time_offer),
-        valid_from: c.valid_from,
-        valid_until: c.valid_to,
-      };
-    });
+    return offers
+      .filter((c) => c.is_active !== false && c.status !== 'Inactive')
+      .map((c) => {
+        const isPct = c.discount_type === 'PERCENT';
+        const discVal = parseFloat(c.discount_value || 0);
+        const minVal = parseFloat(c.min_order_value || 0);
+        const maxVal = c.max_discount != null ? parseFloat(c.max_discount) : null;
+        return {
+          id: c.code,
+          code: c.code,
+          discount: discVal,
+          discount_value: discVal,
+          type: isPct ? 'percentage' : 'fixed',
+          discount_type: isPct ? 'PERCENTAGE' : 'FIXED',
+          minOrderValue: minVal,
+          minimum_order_amount: minVal,
+          maxDiscount: maxVal,
+          status: c.is_active === false ? 'Inactive' : 'Active',
+          is_active: c.is_active !== false,
+          description: c.description || (isPct ? `${discVal}% off` : `Flat ₹${discVal} off`),
+          autoApply: Boolean(c.auto_apply),
+          isFirstTimeOffer: Boolean(c.is_first_time_offer),
+          valid_from: c.valid_from,
+          valid_until: c.valid_to,
+        };
+      });
   },
 
   createCoupon: async (couponData) => {
@@ -356,8 +358,8 @@ export const couponService = {
     if (!c) {
       throw new Error("Invalid coupon code");
     }
-    if (c.status !== "Active") {
-      throw new Error("This coupon is currently inactive");
+    if (c.status !== "Active" || c.is_active === false) {
+      throw new Error("This coupon is inactive.");
     }
 
     if (codeUpper === 'WELCOME100') {

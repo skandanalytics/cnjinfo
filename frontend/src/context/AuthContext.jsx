@@ -28,11 +28,14 @@ const restoreInitialAuth = () => {
     try {
       const parsed = JSON.parse(savedAuth);
       if (parsed && parsed.user && parsed.isAuthenticated !== false) {
-        try {
-          sessionStorage.setItem(key, savedAuth);
-          sessionStorage.setItem(tokenKey, savedToken || 'dummy-token');
-        } catch (e) {}
-        return { user: parsed.user, isAuthenticated: true };
+        const hasValidToken = Boolean(savedToken && savedToken !== 'dummy-token');
+        if (hasValidToken) {
+          try {
+            sessionStorage.setItem(key, savedAuth);
+            sessionStorage.setItem(tokenKey, savedToken);
+          } catch (e) {}
+          return { user: parsed.user, isAuthenticated: true };
+        }
       }
     } catch (e) {
       console.error('Error parsing initial auth state:', e);
@@ -120,7 +123,10 @@ export const AuthProvider = ({ children }) => {
     } else {
       localStorage.setItem(`foodie_token_${roleKey}`, token || '');
       localStorage.setItem(`foodie_auth_${roleKey}`, payload);
-      if (refresh) sessionStorage.setItem('foodie_customer_refresh', refresh);
+      if (refresh) {
+        sessionStorage.setItem('foodie_customer_refresh', refresh);
+        localStorage.setItem('foodie_customer_refresh', refresh);
+      }
     }
 
     const userPhone = userObj.phone || userObj.customerPhone || userObj.customer_phone || userObj.mobile;
@@ -215,6 +221,7 @@ export const AuthProvider = ({ children }) => {
       sessionStorage.removeItem('foodie_cart');
       localStorage.removeItem('foodie_token_customer');
       localStorage.removeItem('foodie_auth_customer');
+      localStorage.removeItem('foodie_customer_refresh');
       localStorage.removeItem('foodie_customer_phone');
       localStorage.removeItem('foodie_last_placed_order');
       localStorage.removeItem('foodie_last_order_items');

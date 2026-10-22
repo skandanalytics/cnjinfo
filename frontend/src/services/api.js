@@ -42,7 +42,7 @@ api.interceptors.request.use(
       ? adminToken
       : customerToken;
 
-    if (token) {
+    if (token && token !== 'dummy-token') {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
       const guestToken = sessionStorage.getItem('foodie_guest_token');
@@ -146,8 +146,9 @@ api.interceptors.response.use(
           }
         } else {
           const sentCustomerAuth = Boolean(error.config?.headers?.Authorization);
+          const isCustomerOpenRoute = currentPath === '/customer/cart' || currentPath === '/customer/home' || currentPath.startsWith('/customer/food/');
           if (sentCustomerAuth && !error.config?._retried) {
-            const refresh = sessionStorage.getItem('foodie_customer_refresh');
+            const refresh = sessionStorage.getItem('foodie_customer_refresh') || localStorage.getItem('foodie_customer_refresh');
             if (refresh) {
               return import('axios').then(async ({ default: axios }) => {
                 try {
@@ -155,16 +156,21 @@ api.interceptors.response.use(
                   const access = res.data.access;
                   sessionStorage.setItem('foodie_token_customer', access);
                   localStorage.setItem('foodie_token_customer', access);
-                  if (res.data.refresh) sessionStorage.setItem('foodie_customer_refresh', res.data.refresh);
+                  if (res.data.refresh) {
+                    sessionStorage.setItem('foodie_customer_refresh', res.data.refresh);
+                    localStorage.setItem('foodie_customer_refresh', res.data.refresh);
+                  }
                   error.config._retried = true;
                   error.config.headers.Authorization = `Bearer ${access}`;
                   return api(error.config);
                 } catch {
                   sessionStorage.removeItem('foodie_token_customer');
                   sessionStorage.removeItem('foodie_auth_customer');
+                  sessionStorage.removeItem('foodie_customer_refresh');
                   localStorage.removeItem('foodie_token_customer');
                   localStorage.removeItem('foodie_auth_customer');
-                  if (currentPath !== '/customer/welcome' && currentPath !== '/') {
+                  localStorage.removeItem('foodie_customer_refresh');
+                  if (!isCustomerOpenRoute && currentPath !== '/customer/welcome' && currentPath !== '/') {
                     window.location.href = '/customer/welcome';
                   }
                   return Promise.reject(error);
@@ -175,9 +181,11 @@ api.interceptors.response.use(
           if (sentCustomerAuth && error.config?._retried !== true) {
             sessionStorage.removeItem('foodie_token_customer');
             sessionStorage.removeItem('foodie_auth_customer');
+            sessionStorage.removeItem('foodie_customer_refresh');
             localStorage.removeItem('foodie_token_customer');
             localStorage.removeItem('foodie_auth_customer');
-            if (currentPath !== '/customer/welcome' && currentPath !== '/') {
+            localStorage.removeItem('foodie_customer_refresh');
+            if (!isCustomerOpenRoute && currentPath !== '/customer/welcome' && currentPath !== '/') {
               window.location.href = '/customer/welcome';
             }
           }

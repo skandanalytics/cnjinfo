@@ -16,7 +16,18 @@ export function normalizeOrderType(value) {
 }
 
 export function getOrderType() {
-  return normalizeOrderType(sessionStorage.getItem(TYPE_KEY));
+  const direct = normalizeOrderType(sessionStorage.getItem(TYPE_KEY));
+  if (direct) return direct;
+  try {
+    const tableRaw = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+    if (tableRaw) {
+      const parsed = JSON.parse(tableRaw);
+      const tNum = String(parsed?.tableNumber || parsed?.number || '').toLowerCase();
+      if (tNum === 'takeaway' || parsed?.isTakeaway) return TAKEAWAY;
+      return DINE_IN;
+    }
+  } catch (e) {}
+  return null;
 }
 
 export function setOrderType(value) {
@@ -42,7 +53,16 @@ export function hasScannedTable() {
 
 export function getSelectedTableId() {
   const id = Number(sessionStorage.getItem(TABLE_KEY));
-  return Number.isInteger(id) && id > 0 ? id : null;
+  if (Number.isInteger(id) && id > 0) return id;
+  try {
+    const tableRaw = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+    if (tableRaw) {
+      const parsed = JSON.parse(tableRaw);
+      const tid = Number(parsed?.tableId || parsed?.id);
+      if (Number.isInteger(tid) && tid > 0) return tid;
+    }
+  } catch (e) {}
+  return null;
 }
 
 export function setSelectedTableId(id) {

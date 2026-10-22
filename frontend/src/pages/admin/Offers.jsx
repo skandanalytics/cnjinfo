@@ -581,50 +581,70 @@ export const Offers = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCoupons.map((c) => (
-                    <tr key={c.id || c.code} className="small">
-                      <td className="fw-bold text-dark font-monospace">{c.code}</td>
-                      <td>{c.type === 'percentage' ? 'Percentage' : 'Flat Discount'}</td>
-                      <td className="fw-bold text-danger">{c.type === 'percentage' ? `${c.discount}%` : `₹${c.discount}`}</td>
-                      <td className="text-secondary fw-semibold">₹{c.minOrderValue || c.minimum_order_amount || 0}</td>
-                      <td>{c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (c.validity ? new Date(c.validity).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'No Expiry')}</td>
-                      <td>
-                        <div className="form-check form-switch m-0">
-                          <input
-                            className="form-check-input"
-                            type="checkbox"
-                            role="switch"
-                            checked={Boolean(c.autoApply)}
-                            aria-label={`Auto apply ${c.code}`}
-                            onChange={() => handleToggleAutoApply(c)}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        </div>
-                      </td>
-                      <td>
-                        <Badge status={c.status} style={{ fontSize: '10px' }} />
-                      </td>
-                      <td className="text-end">
-                        <div className="d-flex align-items-center justify-content-end gap-2">
-                          <button
-                            onClick={() => handleToggleStatus(c.id, c.code, c.status)}
-                            className={`btn btn-sm rounded-pill px-3 fw-bold ${c.status === 'Active' ? 'btn-outline-secondary' : 'btn-outline-success'}`}
-                            style={{ fontSize: '11px' }}
-                          >
-                            {c.status === 'Active' ? 'Deactivate' : 'Activate'}
-                          </button>
-                          <button
-                            onClick={() => handleDeleteCouponClick(c.id, c.code)}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-flex align-items-center gap-1"
-                            title="Delete Coupon"
-                            style={{ fontSize: '11px' }}
-                          >
-                            <FiTrash2 size={13} /> Delete
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredCoupons.map((c) => {
+                    const isInactive = c.status !== 'Active' || c.is_active === false;
+                    return (
+                      <tr 
+                        key={c.id || c.code} 
+                        className={`small ${isInactive ? 'bg-light-subtle' : ''}`}
+                        style={isInactive ? { backgroundColor: 'rgba(248, 249, 250, 0.7)' } : undefined}
+                      >
+                        <td className={`font-monospace ${isInactive ? 'text-secondary fw-semibold' : 'fw-bold text-dark'}`} style={{ opacity: isInactive ? 0.65 : 1 }}>
+                          {c.code}
+                        </td>
+                        <td className={isInactive ? 'text-muted' : ''} style={{ opacity: isInactive ? 0.65 : 1 }}>
+                          {c.type === 'percentage' ? 'Percentage' : 'Flat Discount'}
+                        </td>
+                        <td className={`fw-bold ${isInactive ? 'text-secondary' : 'text-danger'}`} style={{ opacity: isInactive ? 0.65 : 1 }}>
+                          {c.type === 'percentage' ? `${c.discount}%` : `₹${c.discount}`}
+                        </td>
+                        <td className={isInactive ? 'text-muted' : 'text-secondary fw-semibold'} style={{ opacity: isInactive ? 0.65 : 1 }}>
+                          ₹{c.minOrderValue || c.minimum_order_amount || 0}
+                        </td>
+                        <td className={isInactive ? 'text-muted' : ''} style={{ opacity: isInactive ? 0.65 : 1 }}>
+                          {c.valid_until ? new Date(c.valid_until).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : (c.validity ? new Date(c.validity).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : 'No Expiry')}
+                        </td>
+                        <td>
+                          <div className="form-check form-switch m-0" style={{ opacity: isInactive ? 0.5 : 1 }}>
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              role="switch"
+                              checked={Boolean(c.autoApply)}
+                              disabled={isInactive}
+                              aria-label={`Auto apply ${c.code}`}
+                              aria-disabled={isInactive}
+                              onChange={() => !isInactive && handleToggleAutoApply(c)}
+                              style={{ cursor: isInactive ? 'not-allowed' : 'pointer' }}
+                              title={isInactive ? 'Activate coupon to enable auto-apply' : undefined}
+                            />
+                          </div>
+                        </td>
+                        <td style={{ opacity: isInactive ? 0.75 : 1 }}>
+                          <Badge status={c.status} style={{ fontSize: '10px' }} />
+                        </td>
+                        <td className="text-end">
+                          <div className="d-flex align-items-center justify-content-end gap-2">
+                            <button
+                              onClick={() => handleToggleStatus(c.id, c.code, c.status)}
+                              className={`btn btn-sm rounded-pill px-3 fw-bold ${c.status === 'Active' ? 'btn-outline-secondary' : 'btn-outline-success'}`}
+                              style={{ fontSize: '11px', opacity: 1 }}
+                            >
+                              {c.status === 'Active' ? 'Deactivate' : 'Activate'}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteCouponClick(c.id, c.code)}
+                              className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-flex align-items-center gap-1"
+                              title="Delete Coupon"
+                              style={{ fontSize: '11px', opacity: 1 }}
+                            >
+                              <FiTrash2 size={13} /> Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

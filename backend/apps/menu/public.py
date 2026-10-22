@@ -102,7 +102,7 @@ class PublicMenuView(PublicThrottled):
                    "max_discount": None if c.max_discount is None else str(c.max_discount),
                    "valid_from": c.valid_from, "valid_to": c.valid_to, "is_active": c.is_active,
                    "is_first_time_offer": c.is_first_time_auto, "auto_apply": c.auto_apply}
-                  for c in Coupon.objects.filter(branch=branch).order_by("min_order_value", "code")]
+                  for c in Coupon.objects.filter(branch=branch, is_active=True, valid_from__lte=now, valid_to__gte=now).order_by("min_order_value", "code")]
         return Response({"branch": {"id": branch.id, "name": branch.name}, "categories": categories,
                          "foods": rows, "offers": offers})
 

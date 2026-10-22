@@ -172,6 +172,8 @@ def apply_coupon(cart, code):
     coupon = Coupon.objects.filter(branch=cart.branch, code__iexact=code).first()
     if coupon is None:
         raise CartError("Invalid coupon code.", "coupon_invalid")
+    if not coupon.is_active:
+        raise CartError("This coupon is inactive.", "coupon_inactive")
     # Dry-run the pricing with this code to learn whether it is acceptable right now.
     result = evaluate(cart, code_override=[coupon.code])
     if result["pricing"] is None:

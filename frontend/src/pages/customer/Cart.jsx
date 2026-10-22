@@ -59,7 +59,8 @@ export const Cart = () => {
     let isMounted = true;
     const fetchCouponsAndEligibility = async () => {
       const data = await couponService.getCoupons().catch(() => []);
-      if (isMounted) setAvailableCoupons(Array.isArray(data) ? data : []);
+      const activeOnly = (Array.isArray(data) ? data : []).filter(c => c.is_active !== false && c.status !== 'Inactive');
+      if (isMounted) setAvailableCoupons(activeOnly);
       const firstTimeStatus = await isFirstTimeCustomer(user);
       if (isMounted) {
         setIsFirstTime(firstTimeStatus);
@@ -147,6 +148,7 @@ export const Cart = () => {
 
   const currentNetSubtotal = Math.round(Number(serverCart?.pricing?.merchandise_total ?? getSubtotal()) * 100) / 100;
   const suggestion = availableCoupons
+    .filter((row) => row.is_active !== false && row.status !== 'Inactive')
     .filter((row) => isFirstTime || !(row.isFirstTimeOffer || row.is_first_time_offer))
     .map((row) => ({
       coupon: row,
