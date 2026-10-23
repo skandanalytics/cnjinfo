@@ -570,8 +570,8 @@ export const Home = () => {
           className="sticky-filter-header mb-4 py-3 px-3 rounded-4 shadow-sm bg-white border border-light-subtle text-start"
           style={{
             position: 'sticky',
-            top: 0,
-            zIndex: 90,
+            top: '58px',
+            zIndex: 1000,
             backdropFilter: 'blur(10px)',
             backgroundColor: 'rgba(255, 255, 255, 0.98)'
           }}

@@ -146,8 +146,8 @@ class CartContextView(CartBase):
         branch = self.branch_from(s.validated_data)
         cart = services.get_or_create_cart(ident, branch)
         try:
-            services.set_context(cart, s.validated_data["order_type"], s.validated_data.get("qr"),
-                                 s.validated_data.get("table"))
+            cart = services.set_context(cart, s.validated_data["order_type"], s.validated_data.get("qr"),
+                                        s.validated_data.get("table"))
         except CartError as exc:
             return fail(exc)
         return self.render(request, cart)

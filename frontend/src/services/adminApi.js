@@ -754,8 +754,9 @@ function mapEmployee(e) {
   };
 }
 
-export async function listEmployees() {
-  return listOf(await staffJson('/employees/')).map(mapEmployee);
+export async function listEmployees(branchId) {
+  const query = branchId && branchId !== 'ALL' ? `?branch=${branchId}` : '';
+  return listOf(await staffJson(`/employees/${query}`)).map(mapEmployee);
 }
 
 export async function saveEmployee(form, existing) {

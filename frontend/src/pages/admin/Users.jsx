@@ -49,6 +49,7 @@ export const Users = () => {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [branches, setBranches] = useState([]);
+  const [selectedBranch, setSelectedBranch] = useState('ALL');
   const actorBranchId = currentUser?.branchId || null;
 
   const emptyForm = () => ({
@@ -126,13 +127,19 @@ export const Users = () => {
     };
   }, []);
 
-  // Stats calculation
+  // Branch-scoped employee list
+  const branchEmployees = useMemo(() => {
+    if (!selectedBranch || selectedBranch === 'ALL') return employees;
+    return employees.filter(u => String(u.branch) === String(selectedBranch));
+  }, [employees, selectedBranch]);
+
+  // Stats calculation reflecting selected branch
   const stats = useMemo(() => {
-    const total = employees.length;
-    const kitchenStaff = employees.filter(u => u.department === 'Kitchen' || (u.designation && u.designation.toLowerCase().includes('chef'))).length;
-    const floorStaff = employees.filter(u => u.department === 'Dining Floor' || (u.designation && /steward|waiter/i.test(u.designation))).length;
-    const billingStaff = employees.filter(u => u.department === 'Billing & POS' || (u.designation && u.designation.toLowerCase().includes('cashier'))).length;
-    const managementStaff = employees.filter(u => u.department === 'Management' || u.role === 'admin' || (u.designation && u.designation.toLowerCase().includes('manager'))).length;
+    const total = branchEmployees.length;
+    const kitchenStaff = branchEmployees.filter(u => u.department === 'Kitchen' || (u.designation && u.designation.toLowerCase().includes('chef'))).length;
+    const floorStaff = branchEmployees.filter(u => u.department === 'Dining Floor' || (u.designation && /steward|waiter/i.test(u.designation))).length;
+    const billingStaff = branchEmployees.filter(u => u.department === 'Billing & POS' || (u.designation && u.designation.toLowerCase().includes('cashier'))).length;
+    const managementStaff = branchEmployees.filter(u => u.department === 'Management' || u.role === 'admin' || (u.designation && u.designation.toLowerCase().includes('manager'))).length;
 
     return {
       total,
@@ -141,11 +148,11 @@ export const Users = () => {
       billingStaff,
       managementStaff
     };
-  }, [employees]);
+  }, [branchEmployees]);
 
-  // Filtering
+  // Filtering reflecting selected branch, tab, and search query
   const filteredEmployees = useMemo(() => {
-    return employees.filter(u => {
+    return branchEmployees.filter(u => {
       // Tab filter
       if (selectedTab === 'kitchen' && u.department !== 'Kitchen' && !u.designation?.toLowerCase().includes('chef')) return false;
       if (selectedTab === 'floor' && u.department !== 'Dining Floor' && !/steward|waiter/i.test(u.designation || '')) return false;
@@ -169,7 +176,7 @@ export const Users = () => {
 
       return true;
     });
-  }, [employees, selectedTab, search]);
+  }, [branchEmployees, selectedTab, search]);
 
   // Handle Save (Add or Edit) Employee
   const handleSaveEmployee = async (e) => {
@@ -368,24 +375,44 @@ export const Users = () => {
                 ))}
               </div>
 
-              {/* Search Bar */}
-              <SearchBar
-                placeholder="Search staff, ID, role..."
-                value={search}
-                onChange={setSearch}
-                records={employees.map((person) => ({
-                  id: person.id,
-                  label: person.name,
-                  title: person.name,
-                  subtitle: [person.employeeId, person.designation || person.role].filter(Boolean).join(' · '),
-                  searchText: [person.name, person.employeeId, person.role, person.designation, person.department, person.phone].filter(Boolean).join(' '),
-                }))}
-                onSelectSuggestion={(item) => {
-                  const row = employees.find((person) => String(person.id) === String(item?.id));
-                  if (row) handleViewEmployee(row);
-                }}
-                style={{ width: '260px' }}
-              />
+              {/* Branch Filter & Search Bar */}
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                {branches && branches.length > 0 && (
+                  <select
+                    id="employee-branch-filter"
+                    aria-label="Filter staff by branch"
+                    className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs bg-light text-dark"
+                    style={{ width: 'auto', minWidth: '160px', height: '38px', paddingLeft: '14px', paddingRight: '28px', fontSize: '13px', cursor: 'pointer' }}
+                    value={selectedBranch}
+                    onChange={(e) => setSelectedBranch(e.target.value)}
+                  >
+                    <option value="ALL">All Branches</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={String(b.id)}>
+                        {b.name} {b.city ? `(${b.city})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <SearchBar
+                  placeholder="Search staff, ID, role..."
+                  value={search}
+                  onChange={setSearch}
+                  records={branchEmployees.map((person) => ({
+                    id: person.id,
+                    label: person.name,
+                    title: person.name,
+                    subtitle: [person.employeeId, person.designation || person.role].filter(Boolean).join(' · '),
+                    searchText: [person.name, person.employeeId, person.role, person.designation, person.department, person.phone].filter(Boolean).join(' '),
+                  }))}
+                  onSelectSuggestion={(item) => {
+                    const row = branchEmployees.find((person) => String(person.id) === String(item?.id));
+                    if (row) handleViewEmployee(row);
+                  }}
+                  style={{ width: '260px' }}
+                />
+              </div>
             </div>
 
             {/* Staff / Employee Table */}

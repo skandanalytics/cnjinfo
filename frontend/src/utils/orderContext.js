@@ -4,6 +4,7 @@
 const TYPE_KEY = 'foodie_order_type';
 const QR_KEY = 'foodie_table_qr';
 const TABLE_KEY = 'foodie_selected_table';
+const LAST_DINE_IN_TABLE_KEY = 'foodie_last_dine_in_table';
 
 export const DINE_IN = 'DINE_IN';
 export const TAKEAWAY = 'TAKEAWAY';
@@ -51,23 +52,45 @@ export function hasScannedTable() {
   return Boolean(getScannedTableQr());
 }
 
+export function getLastDineInTableId() {
+  const id = Number(sessionStorage.getItem(LAST_DINE_IN_TABLE_KEY));
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+export function rememberDineInTableId(id) {
+  if (id && Number.isInteger(Number(id)) && Number(id) > 0) {
+    sessionStorage.setItem(LAST_DINE_IN_TABLE_KEY, String(id));
+  } else if (!id) {
+    sessionStorage.removeItem(LAST_DINE_IN_TABLE_KEY);
+  }
+}
+
 export function getSelectedTableId() {
   const id = Number(sessionStorage.getItem(TABLE_KEY));
   if (Number.isInteger(id) && id > 0) return id;
+  const lastId = getLastDineInTableId();
+  if (lastId) return lastId;
   try {
     const tableRaw = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
     if (tableRaw) {
       const parsed = JSON.parse(tableRaw);
-      const tid = Number(parsed?.tableId || parsed?.id);
-      if (Number.isInteger(tid) && tid > 0) return tid;
+      const tNum = String(parsed?.tableNumber || parsed?.number || '').toLowerCase();
+      if (tNum !== 'takeaway' && !parsed?.isTakeaway) {
+        const tid = Number(parsed?.tableId || parsed?.id);
+        if (Number.isInteger(tid) && tid > 0) return tid;
+      }
     }
   } catch (e) {}
   return null;
 }
 
 export function setSelectedTableId(id) {
-  if (id) sessionStorage.setItem(TABLE_KEY, String(id));
-  else sessionStorage.removeItem(TABLE_KEY);
+  if (id && Number.isInteger(Number(id)) && Number(id) > 0) {
+    sessionStorage.setItem(TABLE_KEY, String(id));
+    sessionStorage.setItem(LAST_DINE_IN_TABLE_KEY, String(id));
+  } else {
+    sessionStorage.removeItem(TABLE_KEY);
+  }
 }
 
 export function hasDineInTable() {

@@ -106,7 +106,6 @@ export const Branches = () => {
       email: '',
       managerName: '',
       openingHours: '10:00 AM - 11:30 PM',
-      tablesCount: 24,
       status: 'Active',
       isMainBranch: branches.length === 0,
       image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80'
@@ -371,7 +370,7 @@ export const Branches = () => {
               />
             </div>
 
-            <div className="col-12 col-md-4">
+            <div className={`col-12 ${editingBranch ? 'col-md-4' : 'col-md-6'}`}>
               <Input 
                 label="Branch Manager Name"
                 name="managerName"
@@ -382,7 +381,7 @@ export const Branches = () => {
               />
             </div>
 
-            <div className="col-12 col-md-4">
+            <div className={`col-12 ${editingBranch ? 'col-md-4' : 'col-md-6'}`}>
               <Input 
                 label="Opening Hours"
                 name="openingHours"
@@ -392,16 +391,19 @@ export const Branches = () => {
               />
             </div>
 
-            <div className="col-12 col-md-4">
-              <Input 
-                label="Total Tables"
-                name="tablesCount"
-                type="number"
-                min={0}
-                value={formData.tablesCount}
-                onChange={handleFormChange}
-              />
-            </div>
+            {editingBranch && (
+              <div className="col-12 col-md-4">
+                <Input 
+                  label="Total Tables"
+                  name="tablesCount"
+                  type="number"
+                  value={editingBranch.liveTables ?? editingBranch.tablesCount ?? 0}
+                  disabled
+                  readOnly
+                  helpText="Managed via Tables directory"
+                />
+              </div>
+            )}
 
             <div className="col-12">
               <Input 

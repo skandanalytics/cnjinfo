@@ -7,19 +7,68 @@ import { useCart } from '../../hooks/useCart';
 import Button from '../../components/common/Button';
 import formatCurrency from '../../utils/formatCurrency';
 import BackButton from '../../components/common/BackButton';
-import { applyOrderContext, availableTables, resolvePublicBranchId, selectableTables } from '../../services/customerCheckout';
 import {
-  DINE_IN, NO_TABLES_MESSAGE, TAKEAWAY, getOrderType, getSelectedTableId, hasDineInTable, hasScannedTable,
-  setOrderType, setSelectedTableId,
+  applyOrderContext, availableTables, fetchCurrentCart, resolvePublicBranchId, selectableTables,
+} from '../../services/customerCheckout';
+import {
+  DINE_IN, NO_TABLES_MESSAGE, TAKEAWAY, getLastDineInTableId, getOrderType, getSelectedTableId,
+  hasDineInTable, hasScannedTable, rememberDineInTableId, setOrderType, setSelectedTableId,
 } from '../../utils/orderContext';
 import { formatCompactTableLabel } from '../../utils/tableUtils';
 
-const OptionButton = ({ active, disabled, onClick, icon, title, hint, testId }) => (
+function enforceCartPricing(cart, nextType, targetTable = null) {
+  if (!cart) return cart;
+  const currentPricing = cart.pricing || {};
+  const items = cart.items || [];
+  const totalQty = items.reduce((sum, item) => sum + Number(item.quantity || 1), 0);
+  const isTakeaway = nextType === TAKEAWAY;
+  const takeawayCharge = isTakeaway ? totalQty * 10 : 0;
+
+  const itemsSubtotal = Number(currentPricing.items_subtotal ?? items.reduce((s, i) => s + Number(i.line_total || 0), 0));
+  const addOns = Number(currentPricing.customization_total || 0);
+  const dishDiscount = Number(currentPricing.dish_discount_total || 0);
+  const couponDiscount = Number(currentPricing.coupon_discount_total ?? (currentPricing.coupons || []).reduce((s, c) => s + Number(c.discount || 0), 0));
+  const merchandise = Math.max(0, itemsSubtotal + addOns - dishDiscount);
+  const foodAfterCoupon = Math.max(0, merchandise - couponDiscount);
+
+  const taxable = foodAfterCoupon + takeawayCharge;
+  const gstRate = Number(currentPricing.gst_rate ?? 5);
+  const gstAmount = Math.round((taxable * (gstRate / 100)) * 100) / 100;
+  const serviceCharge = Number(currentPricing.service_charge_amount || 0);
+  const rawTotal = taxable + gstAmount + serviceCharge;
+  const finalTotal = Math.round(rawTotal);
+  const roundOff = Math.round((finalTotal - rawTotal) * 100) / 100;
+
+  const effectiveTable = !isTakeaway
+    ? (targetTable || cart.table || (getSelectedTableId() ? { id: getSelectedTableId(), table_number: String(getSelectedTableId()) } : null))
+    : null;
+
+  return {
+    ...cart,
+    order_type: nextType,
+    table: effectiveTable,
+    pricing: {
+      ...currentPricing,
+      items_subtotal: itemsSubtotal.toFixed(2),
+      merchandise_total: merchandise.toFixed(2),
+      coupon_discount_total: couponDiscount.toFixed(2),
+      takeaway_charge: takeawayCharge.toFixed(2),
+      taxable_amount: taxable.toFixed(2),
+      gst_rate: gstRate,
+      gst_amount: gstAmount.toFixed(2),
+      service_charge_amount: serviceCharge.toFixed(2),
+      amount_before_round: rawTotal.toFixed(2),
+      round_off: roundOff.toFixed(2),
+      total_amount: finalTotal.toFixed(2),
+    },
+  };
+}
+
+const OptionButton = ({ active, onClick, icon, title, hint, testId }) => (
   <button
     type="button"
     data-testid={testId}
     onClick={onClick}
-    disabled={disabled}
     aria-pressed={active}
     className={`btn p-3 rounded-4 d-flex align-items-center gap-3 text-start border-2 flex-fill ${active ? 'btn-danger text-white' : 'btn-outline-danger bg-white'}`}
   >
@@ -40,14 +89,13 @@ export const Checkout = () => {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const firstLoad = useRef(true);
 
   const chooseType = async (type, tableId = null) => {
     setError('');
     setNotice('');
 
     // Resolve target table ID for Dine-In (prefer passed tableId, then saved table ID, then current table from cartView)
-    const effectiveTableId = tableId || getSelectedTableId() || cartView?.table?.id;
+    let effectiveTableId = tableId || getSelectedTableId() || cartView?.table?.id;
 
     if (type === DINE_IN && !hasScannedTable() && !effectiveTableId) {
       setBusy(true);
@@ -57,79 +105,47 @@ export const Checkout = () => {
         const open = selectableTables(tables);
         if (!tables.length) {
           setNotice(NO_TABLES_MESSAGE);
+          setBusy(false);
           return;
         }
         if (!open.length) {
           setNotice('Tables are listed, but none are free for a new dine-in order.');
+          setBusy(false);
           return;
         }
+        effectiveTableId = open[0].id;
+        setSelectedTableId(effectiveTableId);
+        rememberDineInTableId(effectiveTableId);
         if (open.length > 1) {
           setTableChoices(open);
-          return;
         }
-        setSelectedTableId(open[0].id);
-        return chooseType(DINE_IN, open[0].id);
       } catch (err) {
         setError(err.message || 'Could not check table availability.');
-        return;
-      } finally {
         setBusy(false);
+        return;
       }
     }
 
-    // Preserve selected table across Takeaway toggles: DO NOT clear selectedTableId when switching to Takeaway
     if (type === DINE_IN && effectiveTableId) {
       setSelectedTableId(effectiveTableId);
+      rememberDineInTableId(effectiveTableId);
     }
 
     setOrderType(type);
     setType(type);
 
     // Optimistically and immediately update UI without waiting for network roundtrip
-    if (cartView?.pricing) {
-      setCartView(prev => {
-        if (!prev?.pricing) return prev;
-        const currentPricing = prev.pricing;
-        const totalQty = (prev.items || []).reduce((sum, item) => sum + Number(item.quantity || 1), 0);
-        const takeawayCharge = type === TAKEAWAY ? totalQty * 10 : 0;
-
-        const itemsSubtotal = Number(currentPricing.items_subtotal || 0);
-        const addOns = Number(currentPricing.customization_total || 0);
-        const dishDiscount = Number(currentPricing.dish_discount_total || 0);
-        const couponDiscount = (currentPricing.coupons || []).reduce((s, c) => s + Number(c.discount || 0), 0);
-        const netFood = Math.max(0, itemsSubtotal + addOns - dishDiscount - couponDiscount);
-        const taxable = netFood + takeawayCharge;
-        const gstRate = Number(currentPricing.gst_rate || 5) / 100;
-        const rawGst = taxable * gstRate;
-        const gstAmount = (rawGst - Math.floor(rawGst)) >= 0.5 ? Math.ceil(rawGst) : Math.floor(rawGst);
-        const serviceCharge = Number(currentPricing.service_charge_amount || 0);
-        const unroundedTotal = taxable + gstAmount + serviceCharge;
-        const finalTotal = Math.round(unroundedTotal);
-        const roundOff = Math.round((finalTotal - unroundedTotal) * 100) / 100;
-
-        return {
-          ...prev,
-          order_type: type,
-          table: type === DINE_IN ? (prev.table || (effectiveTableId ? { id: effectiveTableId, table_number: String(effectiveTableId) } : null)) : null,
-          pricing: {
-            ...currentPricing,
-            takeaway_charge: takeawayCharge.toFixed(2),
-            taxable_amount: taxable.toFixed(2),
-            gst_amount: gstAmount.toFixed(2),
-            round_off: roundOff.toFixed(2),
-            total_amount: finalTotal.toFixed(2)
-          }
-        };
-      });
-    }
+    setCartView(prev => enforceCartPricing(prev, type, effectiveTableId ? { id: effectiveTableId, table_number: String(effectiveTableId) } : null));
 
     setBusy(true);
     try {
       const view = await applyOrderContext(type, effectiveTableId);
-      setCartView(view);
+      setCartView(enforceCartPricing(view, type, effectiveTableId ? { id: effectiveTableId, table_number: String(effectiveTableId) } : null));
       if (type === TAKEAWAY) {
         setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
       } else if (view.table) {
+        setSelectedTableId(view.table.id);
+        rememberDineInTableId(view.table.id);
         setTable({ tableNumber: view.table.table_number, tableId: view.table.id, location: view.table.location, orderType: DINE_IN });
       }
     } catch (err) {
@@ -140,11 +156,48 @@ export const Checkout = () => {
   };
 
   useEffect(() => {
-    if (firstLoad.current && orderType) {
-      firstLoad.current = false;
-      chooseType(orderType);
-    }
-  });
+    let active = true;
+    const init = async () => {
+      try {
+        setBusy(true);
+        const currentType = getOrderType();
+        const tableId = getSelectedTableId();
+        if (currentType === DINE_IN && (hasScannedTable() || tableId)) {
+          const view = await applyOrderContext(DINE_IN, tableId);
+          if (!active) return;
+          setCartView(enforceCartPricing(view, DINE_IN, tableId ? { id: tableId, table_number: String(tableId) } : null));
+          setType(DINE_IN);
+        } else if (currentType === TAKEAWAY) {
+          const view = await applyOrderContext(TAKEAWAY);
+          if (!active) return;
+          setCartView(enforceCartPricing(view, TAKEAWAY));
+          setType(TAKEAWAY);
+        } else {
+          const view = await fetchCurrentCart();
+          if (!active) return;
+          const initialType = view?.order_type || null;
+          setCartView(initialType ? enforceCartPricing(view, initialType) : view);
+          if (initialType) {
+            setType(initialType);
+            setOrderType(initialType);
+          }
+        }
+      } catch (err) {
+        if (!active) return;
+        try {
+          const view = await fetchCurrentCart();
+          if (active && view) {
+            const currentType = getOrderType();
+            setCartView(currentType ? enforceCartPricing(view, currentType) : view);
+          }
+        } catch {}
+      } finally {
+        if (active) setBusy(false);
+      }
+    };
+    init();
+    return () => { active = false; };
+  }, []);
 
   const items = cartView?.items || [];
   const canProceed = Boolean(orderType && cartView?.can_checkout) && !busy;
@@ -165,7 +218,6 @@ export const Checkout = () => {
                 <OptionButton
                   testId="order-type-dine-in"
                   active={orderType === DINE_IN}
-                  disabled={busy}
                   onClick={() => chooseType(DINE_IN, getSelectedTableId())}
                   icon={<FiCoffee size={22} />}
                   title="Table Dine-In"
@@ -174,7 +226,6 @@ export const Checkout = () => {
                 <OptionButton
                   testId="order-type-takeaway"
                   active={orderType === TAKEAWAY}
-                  disabled={busy}
                   onClick={() => chooseType(TAKEAWAY)}
                   icon={<FiShoppingBag size={22} />}
                   title="Takeaway"

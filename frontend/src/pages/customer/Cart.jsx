@@ -492,7 +492,7 @@ export const Cart = () => {
                                 ? 'bg-danger-subtle text-danger border-danger-subtle' 
                                 : 'bg-secondary-subtle text-secondary border-secondary-subtle'
                           }`} style={{ fontSize: '10px' }}>
-                            {c.code}{c.autoApply ? ' · Auto' : ''}
+                            {c.code}
                           </span>
                           <div>
                             <div className="small fw-semibold text-dark" style={{ fontSize: '11px' }}>

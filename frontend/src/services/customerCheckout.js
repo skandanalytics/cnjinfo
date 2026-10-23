@@ -25,6 +25,13 @@ export function customerBranchId() {
   return Number.isFinite(branch) && branch > 0 ? branch : null;
 }
 
+export async function fetchCurrentCart() {
+  const branch = customerBranchId();
+  if (!branch) return null;
+  const res = await api.get(`/cart/?branch=${branch}`);
+  return res.data;
+}
+
 // Puts the chosen order type (and, for Dine-In, the scanned table) on the server cart and returns the
 // re-priced cart view. Throws with the server's reason when the context is not acceptable.
 export async function applyOrderContext(orderType, explicitTableId = null) {
