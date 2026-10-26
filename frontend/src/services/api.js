@@ -28,6 +28,20 @@ const api = axios.create({
  */
 api.interceptors.request.use(
   (config) => {
+    // Normalize URL to prevent duplicate /api prefixes or duplicate slashes
+    if (config.url && !/^https?:\/\//i.test(config.url)) {
+      let cleanUrl = config.url.replace(/^\/+/, '/');
+      const baseEndsWithApi = config.baseURL && /\/api\/?$/i.test(config.baseURL);
+      if (baseEndsWithApi) {
+        if (cleanUrl.startsWith('/api/')) {
+          cleanUrl = cleanUrl.slice(4);
+        } else if (cleanUrl === '/api') {
+          cleanUrl = '';
+        }
+      }
+      config.url = cleanUrl;
+    }
+
     const currentPath = window.location.pathname;
 
     const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
@@ -317,4 +331,6 @@ export const normalizeApiResponse = (res) => {
   return res.data;
 };
 
+export { api };
+export { API_BASE_URL } from '../config/apiConfig';
 export default api;

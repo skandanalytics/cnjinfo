@@ -4,6 +4,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Loader from '../common/Loader';
 import { FiPrinter, FiToggleLeft, FiToggleRight } from 'react-icons/fi';
+import { SERVER_ORIGIN } from '../../config/apiConfig';
 
 export const QRDisplayModal = ({
   isOpen,

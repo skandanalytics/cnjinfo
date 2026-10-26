@@ -1,4 +1,4 @@
-import { getApiUrl } from '../config/apiConfig';
+import { getApiUrl } from '../config/api';
 
 const ACCESS = 'foodie_staff_access';
 const REFRESH = 'foodie_staff_refresh';
