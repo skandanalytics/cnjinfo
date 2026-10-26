@@ -4,21 +4,15 @@ import sys
 
 
 def _ensure_venv():
-    try:
-        import django  # noqa: F401
-    except ImportError:
-        base_dir = os.path.dirname(os.path.abspath(__file__))
-        venv_site = os.path.join(base_dir, ".venv", "Lib", "site-packages")
-        if os.path.isdir(venv_site) and venv_site not in sys.path:
-            sys.path.insert(0, venv_site)
-        try:
-            import django  # noqa: F401
-        except ImportError:
-            venv_python = os.path.join(base_dir, ".venv", "Scripts", "python.exe")
-            if os.path.exists(venv_python) and sys.executable.lower() != venv_python.lower():
-                import subprocess
-                res = subprocess.run([venv_python] + sys.argv, cwd=base_dir)
-                sys.exit(res.returncode)
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    venv_python = os.path.join(base_dir, ".venv", "Scripts", "python.exe")
+    if os.path.exists(venv_python) and sys.executable.lower() != os.path.abspath(venv_python).lower():
+        import subprocess
+        res = subprocess.run([venv_python] + sys.argv, cwd=base_dir)
+        sys.exit(res.returncode)
+    venv_site = os.path.join(base_dir, ".venv", "Lib", "site-packages")
+    if os.path.isdir(venv_site) and venv_site not in sys.path:
+        sys.path.insert(0, venv_site)
 
 
 _ensure_venv()

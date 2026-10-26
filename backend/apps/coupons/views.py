@@ -11,6 +11,8 @@ from apps.realtime.publish import publish_catalog_event
 from .models import Coupon
 from .serializers import CouponSerializer, RedemptionSerializer
 
+__all__ = ["CouponViewSet"]
+
 
 class CouponViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, viewsets.ModelViewSet):
     audit_entity = "Coupon"
