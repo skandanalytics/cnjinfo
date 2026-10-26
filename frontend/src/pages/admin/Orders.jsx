@@ -122,6 +122,21 @@ export const Orders = () => {
   const filteredOrders = (orders || []).filter((o) => {
     if (!o || (!o.id && !o.order_id)) return false;
 
+    let currentUser = user;
+    if (!currentUser?.id) {
+      try {
+        const stored = localStorage.getItem('foodie_auth_admin') || sessionStorage.getItem('foodie_auth_admin');
+        if (stored) currentUser = JSON.parse(stored);
+      } catch {}
+    }
+    const isEmployee = currentUser?.role === 'employee' || ['STAFF', 'CHEF', 'CASHIER'].includes(currentUser?.backendRole || currentUser?.role);
+    if (isEmployee && currentUser?.id) {
+      const placedId = String(o.placedById || o.placed_by_id || o.employeeId || '');
+      if (placedId !== String(currentUser.id)) {
+        return false;
+      }
+    }
+
     // Branch filter
     if (branchFilter !== 'ALL' && String(o.branchId || o.branch_id || '') !== String(branchFilter)) {
       return false;

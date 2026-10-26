@@ -900,9 +900,26 @@ export function mapOrder(o) {
 }
 
 export async function listOrdersForUi(options = {}) {
-  const query = options?.mine ? '?mine=1' : '';
+  let isMine = Boolean(options?.mine);
+  let loggedInUser = null;
+  try {
+    const raw = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
+    if (raw) loggedInUser = JSON.parse(raw);
+  } catch {}
+  const isEmployee = loggedInUser?.role === 'employee' || ['STAFF', 'CHEF', 'CASHIER'].includes(loggedInUser?.backendRole || loggedInUser?.role);
+  if (isEmployee) {
+    isMine = true;
+  }
+  const query = isMine ? '?mine=1' : '';
   const rows = listOf(await staffJson(`/orders/${query}`));
-  return rows.map(mapOrder);
+  let mapped = rows.map(mapOrder);
+  if (isEmployee && loggedInUser?.id) {
+    mapped = mapped.filter((o) => {
+      const placedId = String(o.placedById || o.placed_by_id || o.employeeId || '');
+      return placedId === String(loggedInUser.id);
+    });
+  }
+  return mapped;
 }
 
 export async function transitionOrder(id, status, reason) {

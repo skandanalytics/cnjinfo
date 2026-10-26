@@ -2,7 +2,7 @@ from django.http import HttpResponse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import IsStaffMember
+from apps.accounts.permissions import IsStaffMember, sees_every_order
 from apps.accounts.scoping import can_access_branch
 from apps.orders.models import Order
 
@@ -17,9 +17,11 @@ def _visible(request, pk):
     user = request.user
     if user.user_type == "CUSTOMER":
         return order if order.customer_id == user.id else None
-    if can_access_branch(user, order.branch_id):
-        return order
-    return None
+    if not can_access_branch(user, order.branch_id):
+        return None
+    if not sees_every_order(user) and order.placed_by_id != user.id:
+        return None
+    return order
 
 
 class InvoiceDownloadView(APIView):
@@ -45,7 +47,7 @@ class BillPreviewView(APIView):
     permission_classes = [IsStaffMember]
 
     def get(self, request, pk):
-        order = Order.objects.select_related("branch").prefetch_related("items").filter(pk=pk).first()
-        if order is None or not can_access_branch(request.user, order.branch_id):
+        order = _visible(request, pk)
+        if order is None:
             return Response({"detail": "Not found."}, status=404)
         return Response(preview_bill(order))

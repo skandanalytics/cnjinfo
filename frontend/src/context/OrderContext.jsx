@@ -27,7 +27,12 @@ export const OrderProvider = ({ children }) => {
 
   const staffHasSession = () => {
     if (typeof window === 'undefined') return false;
-    return Boolean(sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin'));
+    return Boolean(
+      sessionStorage.getItem('foodie_staff_access') ||
+      sessionStorage.getItem('foodie_token_admin') ||
+      localStorage.getItem('foodie_staff_access') ||
+      localStorage.getItem('foodie_token_admin')
+    );
   };
 
   const loadStaffOrders = useCallback(async (showLoading = false) => {
@@ -40,17 +45,20 @@ export const OrderProvider = ({ children }) => {
     if (showLoading) setLoading(true);
     try {
       const { listOrdersForUi } = await import('../services/adminApi');
-      const isEmployee = user?.role === 'employee';
+      let currentUser = user;
+      if (!currentUser?.id) {
+        try {
+          const stored = localStorage.getItem('foodie_auth_admin') || sessionStorage.getItem('foodie_auth_admin');
+          if (stored) currentUser = JSON.parse(stored);
+        } catch {}
+      }
+      const isEmployee = currentUser?.role === 'employee' || ['STAFF', 'CHEF', 'CASHIER'].includes(currentUser?.backendRole || currentUser?.role);
       const data = await listOrdersForUi(isEmployee ? { mine: true } : {});
       let list = Array.isArray(data) ? data : [];
-      if (isEmployee && user?.id) {
+      if (isEmployee && currentUser?.id) {
         list = list.filter(o => {
           const placedId = String(o.placedById || o.placed_by_id || o.placedBy?.id || o.placed_by?.id || o.employeeId || '');
-          const placedName = String(o.placedByName || o.placed_by_name || '').toLowerCase();
-          const uName = String(user.name || user.username || '').toLowerCase();
-          if (placedId && placedId === String(user.id)) return true;
-          if (placedName && uName && placedName === uName) return true;
-          return placedId === String(user.id);
+          return placedId === String(currentUser.id);
         });
       }
       setOrders(uniqueById(list));
@@ -64,7 +72,7 @@ export const OrderProvider = ({ children }) => {
         loadStaffOrders(false);
       }
     }
-  }, []);
+  }, [user?.id, user?.role, user?.name, user?.username]);
 
   const fetchOrders = async (userIdOrShowLoading, maybeShowLoading) => {
     let showLoading = true;

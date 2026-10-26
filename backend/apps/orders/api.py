@@ -4,7 +4,7 @@ from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import ADMIN_ROLES, IsCustomer, IsStaffMember, get_active_employee
+from apps.accounts.permissions import ADMIN_ROLES, IsCustomer, IsStaffMember, get_active_employee, sees_every_order
 from apps.accounts.scoping import allowed_branch_id, can_access_branch
 from apps.accounts.services import record_audit
 from apps.branches.models import Branch
@@ -29,13 +29,7 @@ def _error(exc):
 
 
 def _sees_every_order(user):
-    """Admins and branch managers see every order in their branch. Other staff see orders they placed."""
-    if not user or not user.is_authenticated:
-        return False
-    if getattr(user, "is_superuser", False):
-        return True
-    employee = get_active_employee(user)
-    return employee is not None and employee.role in ADMIN_ROLES
+    return sees_every_order(user)
 
 
 class OrderListCreateView(APIView):

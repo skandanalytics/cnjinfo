@@ -15,6 +15,7 @@ import { branchService } from '../../services/branchService';
 import { currentBranchId, createAssistedOrder, getPricingQuote } from '../../services/adminApi';
 import { normalizeFoodType } from '../../utils/filters';
 import EBillModal from '../../components/orders/EBillModal';
+import Toast from '../../components/common/Toast';
 import { 
   FiSearch, FiX, FiPlus, FiMinus, FiTrash2, FiShoppingBag, 
   FiLayers, FiTag, FiCheck, FiDollarSign, FiClock, FiPercent,
@@ -89,6 +90,7 @@ export const Pos = () => {
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
+  const [toast, setToast] = useState({ show: false, message: '', type: 'remove' });
   const [placedOrder, setPlacedOrder] = useState(null);
   const [viewingEBill, setViewingEBill] = useState(null);
   const [mobilePosTab, setMobilePosTab] = useState('menu'); // 'menu' | 'order'
@@ -296,9 +298,33 @@ export const Pos = () => {
   };
 
   const handleAddDish = (dish) => {
-    if (dish.status === 'Out of Stock' || Number(dish.stock) <= 0) {
+    const isOutOfStock = 
+      dish.status === 'Out of Stock' || 
+      dish.status === 'OUT_OF_STOCK' || 
+      Number(dish.stock) <= 0 || 
+      dish.is_orderable === false || 
+      dish.isOrderable === false;
+
+    if (isOutOfStock) {
+      const msg = "This item is currently out of stock.";
+      setOrderError(msg);
+      setToast({ show: true, message: msg, type: 'remove' });
       return;
     }
+
+    const currentTotalQty = cartItems
+      .filter(i => String(i.dish.id) === String(dish.id))
+      .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+
+    const maxStock = (dish.stock !== undefined && dish.stock !== null) ? Number(dish.stock) : null;
+    if (maxStock !== null && !isNaN(maxStock) && currentTotalQty + 1 > maxStock) {
+      const msg = maxStock === 1 ? "Only 1 item is available." : `Only ${maxStock} of '${dish.name}' left.`;
+      setOrderError(msg);
+      setToast({ show: true, message: msg, type: 'remove' });
+      return;
+    }
+
+    setOrderError('');
 
     // If dish has customizations, open modal directly for choice
     if (Array.isArray(dish.customizations) && dish.customizations.length > 0) {
@@ -329,12 +355,29 @@ export const Pos = () => {
   const handleUpdateQuantity = (index, delta) => {
     setCartItems(prev => {
       const updated = [...prev];
-      const newQty = updated[index].quantity + delta;
+      const item = updated[index];
+      if (!item) return prev;
+      if (delta > 0) {
+        const currentTotalQty = updated
+          .filter(i => String(i.dish.id) === String(item.dish.id))
+          .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+        const maxStock = (item.dish.stock !== undefined && item.dish.stock !== null) ? Number(item.dish.stock) : null;
+        if (maxStock !== null && !isNaN(maxStock) && currentTotalQty + delta > maxStock) {
+          const msg = maxStock <= 0 
+            ? "This item is currently out of stock." 
+            : (maxStock === 1 ? "Only 1 item is available." : `Only ${maxStock} of '${item.dish.name}' left.`);
+          setOrderError(msg);
+          setToast({ show: true, message: msg, type: 'remove' });
+          return prev;
+        }
+      }
+      const newQty = item.quantity + delta;
       if (newQty <= 0) {
         updated.splice(index, 1);
       } else {
         updated[index].quantity = newQty;
       }
+      setOrderError('');
       return updated;
     });
   };
@@ -368,6 +411,18 @@ export const Pos = () => {
         return updated;
       });
     } else {
+      const currentTotalQty = cartItems
+        .filter(i => String(i.dish.id) === String(dish.id))
+        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+      const maxStock = (dish.stock !== undefined && dish.stock !== null) ? Number(dish.stock) : null;
+      if (maxStock !== null && !isNaN(maxStock) && currentTotalQty + 1 > maxStock) {
+        const msg = maxStock <= 0 
+          ? "This item is currently out of stock." 
+          : (maxStock === 1 ? "Only 1 item is available." : `Only ${maxStock} of '${dish.name}' left.`);
+        setOrderError(msg);
+        setToast({ show: true, message: msg, type: 'remove' });
+        return;
+      }
       setCartItems(prev => [...prev, {
         dish,
         quantity: 1,
@@ -375,6 +430,7 @@ export const Pos = () => {
         specialInstructions,
       }]);
     }
+    setOrderError('');
     setCustomizingItem(null);
   };
 
@@ -756,7 +812,12 @@ export const Pos = () => {
               ) : (
                 <div className="pos-dish-grid">
                   {filteredDishes.map((dish) => {
-                    const isOutOfStock = dish.status === 'Out of Stock' || Number(dish.stock) <= 0;
+                    const isOutOfStock = 
+                      dish.status === 'Out of Stock' || 
+                      dish.status === 'OUT_OF_STOCK' || 
+                      Number(dish.stock) <= 0 || 
+                      dish.is_orderable === false || 
+                      dish.isOrderable === false;
                     const ft = normalizeFoodType(dish.foodType || dish.type);
                     const cartItem = cartItems.find(i => String(i.dish.id) === String(dish.id));
                     const cartQty = cartItem ? cartItem.quantity : 0;
@@ -852,9 +913,21 @@ export const Pos = () => {
                             {/* Action: Add or Stepper */}
                             <div>
                               {isOutOfStock ? (
-                                <button disabled className="btn btn-sm btn-secondary opacity-50 rounded-pill px-3 py-1" style={{ fontSize: '11.5px', height: '32px' }}>
-                                  Unavailable
-                                </button>
+                                <div 
+                                  onClick={() => handleAddDish(dish)}
+                                  style={{ cursor: 'not-allowed', display: 'inline-block' }}
+                                >
+                                  <button
+                                    type="button"
+                                    disabled
+                                    className="btn btn-sm btn-secondary opacity-50 rounded-pill px-3 py-1 fw-bold shadow-xs d-flex align-items-center gap-1"
+                                    style={{ fontSize: '12px', height: '32px', cursor: 'not-allowed' }}
+                                    title="This item is currently out of stock."
+                                  >
+                                    <FiPlus size={14} />
+                                    <span>Add</span>
+                                  </button>
+                                </div>
                               ) : cartQty > 0 ? (
                                 <div className="d-flex align-items-center gap-1 bg-light border rounded-pill px-2 shadow-xs" style={{ height: '32px' }}>
                                   <button
@@ -872,8 +945,22 @@ export const Pos = () => {
                                   </span>
                                   <button
                                     type="button"
-                                    className="btn btn-xs btn-link text-danger p-0 border-0"
+                                    className={`btn btn-xs btn-link p-0 border-0 ${
+                                      dish.stock !== null && dish.stock !== undefined && cartQty >= Number(dish.stock)
+                                        ? 'text-secondary opacity-50'
+                                        : 'text-danger'
+                                    }`}
+                                    style={{
+                                      cursor: dish.stock !== null && dish.stock !== undefined && cartQty >= Number(dish.stock)
+                                        ? 'not-allowed'
+                                        : 'pointer'
+                                    }}
                                     onClick={() => handleAddDish(dish)}
+                                    title={
+                                      dish.stock !== null && dish.stock !== undefined && cartQty >= Number(dish.stock)
+                                        ? (Number(dish.stock) === 1 ? "Only 1 item is available." : `Only ${dish.stock} of '${dish.name}' left.`)
+                                        : "Increase quantity"
+                                    }
                                   >
                                     <FiPlus size={13} />
                                   </button>
@@ -1779,6 +1866,13 @@ export const Pos = () => {
           onClose={() => setViewingEBill(null)}
         />
 
+        {/* Toast Notification for Stock Availability */}
+        <Toast
+          show={toast.show}
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast((prev) => ({ ...prev, show: false }))}
+        />
       </div>
     </AdminLayout>
   );

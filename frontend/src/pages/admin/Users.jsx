@@ -24,6 +24,7 @@ import {
   FiEdit2,
   FiTrash2,
   FiEye,
+  FiEyeOff,
   FiShield,
   FiCoffee,
   FiLayers,
@@ -66,10 +67,12 @@ export const Users = () => {
   });
 
   const [formData, setFormData] = useState(emptyForm);
+  const [showPassword, setShowPassword] = useState(false);
 
   const resetForm = () => {
     setFormData(emptyForm());
     setFormError('');
+    setShowPassword(false);
   };
 
   const handleOpenAddModal = () => {
@@ -677,15 +680,28 @@ export const Users = () => {
                     {!editingUser && (
                       <div className="col-12 col-md-6">
                         <label className="form-label small fw-bold text-secondary">Password *</label>
-                        <input
-                          type="password"
-                          required
-                          minLength={4}
-                          className="form-control rounded-3"
-                          placeholder="Default is 123456"
-                          value={formData.password || ''}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                        />
+                        <div className="position-relative">
+                          <input
+                            type={showPassword ? 'text' : 'password'}
+                            required
+                            minLength={4}
+                            className="form-control rounded-3"
+                            style={{ paddingRight: '42px' }}
+                            placeholder="Default is 123456"
+                            value={formData.password || ''}
+                            onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-link position-absolute top-50 end-0 translate-middle-y text-secondary p-0 me-3 d-flex align-items-center justify-content-center"
+                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', zIndex: 5 }}
+                            onClick={() => setShowPassword((prev) => !prev)}
+                            aria-label={showPassword ? 'Hide password' : 'Show password'}
+                            title={showPassword ? 'Hide password' : 'Show password'}
+                          >
+                            {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
+                          </button>
+                        </div>
                       </div>
                     )}
 

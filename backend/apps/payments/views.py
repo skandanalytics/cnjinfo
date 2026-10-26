@@ -4,7 +4,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from apps.accounts.permissions import IsCustomer, IsCustomerOrStaff, IsStaffMember, get_active_employee
+from apps.accounts.permissions import IsCustomer, IsCustomerOrStaff, IsStaffMember, get_active_employee, sees_every_order
 from apps.accounts.scoping import can_access_branch
 from apps.accounts.services import record_audit
 
@@ -106,6 +106,8 @@ class PaymentListView(APIView):
                 return Response({"detail": "No active staff profile."}, status=403)
             if emp.branch_id is not None:
                 qs = qs.filter(order__branch_id=emp.branch_id)
+            if not sees_every_order(user):
+                qs = qs.filter(order__placed_by=user)
         return Response([serialize_payment(p) for p in qs])
 
 
@@ -122,5 +124,7 @@ class PaymentDetailView(APIView):
             if order.customer_id != user.id:
                 return Response({"detail": "Not found."}, status=404)
         elif not can_access_branch(user, order.branch_id):
+            return Response({"detail": "Not found."}, status=404)
+        elif not sees_every_order(user) and order.placed_by_id != user.id:
             return Response({"detail": "Not found."}, status=404)
         return Response(serialize_payment(payment))

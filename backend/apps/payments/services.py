@@ -232,12 +232,16 @@ def _remember(event_id, event_type, payload, payment):
 @transaction.atomic
 def record_counter(staff_user, order_id, amount=None):
     from apps.accounts.scoping import can_access_branch
+    from apps.accounts.permissions import sees_every_order
     order = Order.objects.select_for_update().filter(pk=order_id).first()
     if order is None or not can_access_branch(staff_user, order.branch_id):
         raise PaymentError("Not found.", "not_found", 404)
     from apps.accounts.models import Employee
     from apps.accounts.staff_catalog import parse_bill_access
     cashier = Employee.objects.filter(user=staff_user, role=Employee.Role.CASHIER).first()
+    if not sees_every_order(staff_user) and order.placed_by_id != staff_user.id:
+        if cashier is None:
+            raise PaymentError("You can only process payments for your own orders.", "forbidden", 403)
     if cashier is not None:
         duties = parse_bill_access(cashier.bill_access)
         if duties and "counter_payment" not in duties:

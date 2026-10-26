@@ -25,6 +25,16 @@ def get_active_employee(user):
     return emp
 
 
+def sees_every_order(user):
+    """Admins and branch managers see every order in their branch. Other staff see orders they placed."""
+    if not user or not user.is_authenticated:
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    emp = get_active_employee(user)
+    return emp is not None and emp.role in ADMIN_ROLES
+
+
 class IsCustomer(BasePermission):
     def has_permission(self, request, view):
         u = request.user
