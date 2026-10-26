@@ -71,15 +71,24 @@ export async function staffFetch(path, options = {}) {
   if (access) headers.Authorization = `Bearer ${access}`;
 
   let res = await fetch(getApiUrl(path), { method: options.method || 'GET', headers, body });
-  if (res.status === 401 && !options._retried) {
+  const isForbiddenStaffRoute = res.status === 403 && (
+    path.startsWith('/branches') ||
+    path.startsWith('/categories') ||
+    path.startsWith('/foods') ||
+    path.startsWith('/inventory') ||
+    path.startsWith('/coupons') ||
+    path.startsWith('/auth/me')
+  );
+
+  if ((res.status === 401 || isForbiddenStaffRoute) && !options._retried) {
     try {
       const next = await refreshStaffSession();
       headers.Authorization = `Bearer ${next}`;
-      res = await fetch(getApiUrl(path), { method: options.method || 'GET', headers, body });
+      res = await fetch(getApiUrl(path), { method: options.method || 'GET', headers, body, _retried: true });
     } catch {
       goToLogin();
-      const err = new Error('Session expired. Please log in again.');
-      err.status = 401;
+      const err = new Error('Session invalid or unauthorized on this backend server. Please log in again.');
+      err.status = res.status;
       throw err;
     }
   }

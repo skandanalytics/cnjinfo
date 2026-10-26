@@ -87,7 +87,7 @@ export const analyticsService = {
     const [allOrdersRaw, allTablesRaw, foodRes, usersRes] = await Promise.all([
       orderService.getAllOrders(true).catch(() => []),
       tableService.getTables().catch(() => []),
-      staff ? Promise.resolve({ data: [] }) : api.get('/restaurant/food/').catch(() => ({ data: [] })),
+      staff ? Promise.resolve({ data: [] }) : api.get('/foods/').catch(() => ({ data: [] })),
       staff ? Promise.resolve({ data: [] }) : api.get('/users/users/').catch(() => ({ data: [] }))
     ]);
 

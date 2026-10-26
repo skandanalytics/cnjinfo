@@ -20,7 +20,7 @@
  */
 
 // Set to your centralized server address:
-export const DEFAULT_SERVER_URL = 'http://localhost:8000';
+export const DEFAULT_SERVER_URL = 'http://192.168.150.171:8000';
 
 /**
  * Resolves the raw base URL from environment variables or the default server URL fallback.

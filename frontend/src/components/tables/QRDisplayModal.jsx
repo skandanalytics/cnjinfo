@@ -22,11 +22,9 @@ export const QRDisplayModal = ({
   const getInitialHost = () => {
     const saved = localStorage.getItem('foodie_network_host');
     if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
-    const origin = window.location.origin.replace(/\/+$/, '');
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://192.168.1.13:3000';
-    }
-    return origin;
+    const configured = (import.meta.env.VITE_FRONTEND_BASE_URL || '').trim().replace(/\/+$/, '');
+    if (configured) return configured;
+    return typeof window !== 'undefined' && window.location ? window.location.origin.replace(/\/+$/, '') : 'http://localhost:5173';
   };
 
   const [customHost, setCustomHost] = useState(getInitialHost);

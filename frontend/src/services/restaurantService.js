@@ -10,30 +10,30 @@ export const restaurantService = {
   getRestaurants: async () => {
     const { isStaffScreen, listBranches } = await import('./adminApi');
     if (isStaffScreen()) return listBranches();
-    const res = await api.get('/restaurant/restaurants/');
+    const res = await api.get('/branches/');
     return res.data;
   },
 
   getRestaurantById: async (id) => {
     if (!_isValidId(id)) return null;
-    const res = await api.get(`/restaurant/restaurants/${id}/`);
+    const res = await api.get(`/branches/${id}/`);
     return res.data;
   },
 
   createRestaurant: async (data) => {
-    const res = await api.post('/restaurant/restaurants/', data);
+    const res = await api.post('/branches/', data);
     return res.data;
   },
 
   updateRestaurant: async (id, data) => {
     if (!_isValidId(id)) return null;
-    const res = await api.put(`/restaurant/restaurants/${id}/`, data);
+    const res = await api.put(`/branches/${id}/`, data);
     return res.data;
   },
 
   deleteRestaurant: async (id) => {
     if (!_isValidId(id)) return true;
-    const res = await api.delete(`/restaurant/restaurants/${id}/`);
+    const res = await api.delete(`/branches/${id}/`);
     return res.data;
   }
 };

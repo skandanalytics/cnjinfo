@@ -25,9 +25,9 @@ export const inventoryService = {
       localStorage.setItem('foodie_dish_stocks', JSON.stringify(savedStocks));
     } catch (e) {}
 
-    // 2. Authoritative backend update to /restaurant/inventory/
+    // 2. Authoritative backend update to /inventory/
     try {
-      const invRes = await api.get('/restaurant/inventory/');
+      const invRes = await api.get('/inventory/');
       const invList = invRes.data?.data || (Array.isArray(invRes.data) ? invRes.data : (invRes.data?.results || []));
       const invObj = Array.isArray(invList) ? invList.find(i => {
         const invFoodId = i.food?.id || i.food_item?.id || i.food_id || i.food || i.food_item;
@@ -39,13 +39,13 @@ export const inventoryService = {
       if (invObj) {
         const invId = invObj.id || invObj.inventory_id;
         if (invId) {
-          await api.patch(`/restaurant/inventory/${invId}/`, {
+          await api.patch(`/inventory/${invId}/`, {
             quantity: numStock,
             status: invStatus
           });
         }
       } else if (!isNaN(Number(id))) {
-        await api.post('/restaurant/inventory/', {
+        await api.post('/inventory/', {
           food: Number(id),
           food_item: Number(id),
           quantity: numStock,
@@ -55,7 +55,7 @@ export const inventoryService = {
       }
 
       if (id && !isNaN(Number(id))) {
-        await api.patch(`/restaurant/food/${id}/`, {
+        await api.patch(`/foods/${id}/`, {
           is_available: numStock > 0
         }).catch(() => {});
       }
@@ -81,8 +81,8 @@ export const inventoryService = {
       throw new Error('A stock record cannot be deleted on its own. Delete the dish from Add Menu to remove it together with its stock.');
     }
     try {
-      // 1. Authoritative backend deletion from /restaurant/inventory/
-      const invRes = await api.get('/restaurant/inventory/').catch(() => ({ data: [] }));
+      // 1. Authoritative backend deletion from /inventory/
+      const invRes = await api.get('/inventory/').catch(() => ({ data: [] }));
       const invList = invRes.data?.data || (Array.isArray(invRes.data) ? invRes.data : (invRes.data?.results || []));
       const invObj = Array.isArray(invList) ? invList.find(i => {
         const invFoodId = i.food?.id || i.food_item?.id || i.food_id || i.food || i.food_item;
@@ -90,7 +90,7 @@ export const inventoryService = {
       }) : null;
 
       if (invObj && invObj.id) {
-        await api.delete(`/restaurant/inventory/${invObj.id}/`).catch((e) => {
+        await api.delete(`/inventory/${invObj.id}/`).catch((e) => {
           console.warn("[INVENTORY SERVICE] Delete backend inventory record notice:", e);
         });
       }

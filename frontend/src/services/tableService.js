@@ -282,7 +282,7 @@ export const tableService = {
       let rawList = [];
       let isBackendSuccess = false;
       try {
-        const res = await api.get('/restaurant/tables/', { bypassCache: true });
+        const res = await api.get('/tables/', { bypassCache: true });
         rawList = Array.isArray(res.data?.data)
           ? res.data.data
           : (Array.isArray(res.data) ? res.data : (res.data?.results || []));
@@ -524,7 +524,7 @@ export const tableService = {
 
     // Issue ONE single POST request with exact DRF serializer payload
     try {
-      const res = await api.post('/restaurant/tables/', {
+      const res = await api.post('/tables/', {
         table_number: rawNum,
         restaurant: 1,
         capacity: capNum,
@@ -604,26 +604,26 @@ export const tableService = {
 
     if (_isValidId(id) && !String(id).startsWith('table_')) {
       const updateStrategies = [
-        () => api.patch(`/restaurant/tables/${id}/`, {
+        () => api.patch(`/tables/${id}/`, {
           table_number: formattedDigits,
           capacity: capNum,
           restaurant: 1,
           status: backendStatus,
           is_active: true
         }),
-        () => api.patch(`/restaurant/tables/${id}/`, {
+        () => api.patch(`/tables/${id}/`, {
           table_number: canonNum,
           capacity: capNum,
           restaurant: 1,
           status: backendStatus,
           is_active: true
         }),
-        () => api.patch(`/restaurant/tables/${id}/`, {
+        () => api.patch(`/tables/${id}/`, {
           table_number: tableNumInt !== undefined ? tableNumInt : rawNum,
           capacity: capNum,
           status: backendStatus
         }),
-        () => api.patch(`/restaurant/tables/${id}/`, {
+        () => api.patch(`/tables/${id}/`, {
           capacity: capNum,
           status: backendStatus
         })
@@ -691,7 +691,7 @@ export const tableService = {
 
     if (_isValidId(id) && !String(id).startsWith('table_')) {
       try {
-        const res = await api.patch(`/restaurant/tables/${id}/`, {
+        const res = await api.patch(`/tables/${id}/`, {
           is_available: isAvail,
           status: backendStatus
         });
@@ -736,9 +736,9 @@ export const tableService = {
 
     try {
       if (_isValidId(id) && !String(id).startsWith('table_')) {
-        await api.delete(`/restaurant/tables/${id}/`).catch(() => { });
+        await api.delete(`/tables/${id}/`).catch(() => { });
       }
-      const res = await api.get('/restaurant/tables/');
+      const res = await api.get('/tables/');
       const rawList = Array.isArray(res.data?.data) ? res.data.data : (Array.isArray(res.data) ? res.data : (res.data?.results || []));
       const canonTarget = getCanonicalTableNumber(targetNum || id);
       const targetDigits = (targetNum || id) ? String(targetNum || id).replace(/\D/g, '') : '';
@@ -755,13 +755,13 @@ export const tableService = {
       });
       for (const t of toDelete) {
         if (_isValidId(t.id)) {
-          await api.delete(`/restaurant/tables/${t.id}/`).catch(() => { });
+          await api.delete(`/tables/${t.id}/`).catch(() => { });
         }
       }
     } catch (e) {
       if (_isValidId(id) && !String(id).startsWith('table_')) {
         try {
-          await api.delete(`/restaurant/tables/${id}/`).catch(() => { });
+          await api.delete(`/tables/${id}/`).catch(() => { });
         } catch (err) { }
       }
     }
@@ -805,7 +805,7 @@ export const tableService = {
         saveCustomTable({ ...found, status: 'Occupied', is_available: false, ...(orderId ? { orderId: String(orderId) } : {}) });
         if (_isValidId(found.id) && !String(found.id).startsWith('table_') && found.is_from_backend) {
           try {
-            await api.patch(`/restaurant/tables/${found.id}/`, {
+            await api.patch(`/tables/${found.id}/`, {
               is_available: false,
               status: 'OCCUPIED'
             });

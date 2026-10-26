@@ -4,6 +4,8 @@ from .permissions import get_active_employee
 
 def allowed_branch_id(user):
     """None means 'all branches' (owner-level staff with no branch). Raises LookupError for non-staff."""
+    if getattr(user, "is_superuser", False):
+        return None
     emp = get_active_employee(user)
     if emp is None:
         raise LookupError("Not an active staff member")

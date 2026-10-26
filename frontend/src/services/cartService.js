@@ -53,7 +53,7 @@ const resolveBackendTablePk = async (tableInput) => {
   const numId = Number(tableInput);
   if (!isNaN(numId) && numId > 0 && numId < 1000) {
     try {
-      const tablesRes = await api.get('/restaurant/tables/').catch(() => ({ data: [] }));
+      const tablesRes = await api.get('/tables/').catch(() => ({ data: [] }));
       const rawTables = tablesRes.data?.data || (Array.isArray(tablesRes.data) ? tablesRes.data : (tablesRes.data?.results || []));
       const tables = Array.isArray(rawTables) ? rawTables : [];
       const pkMatch = tables.find(t => Number(t.id) === numId);
@@ -66,7 +66,7 @@ const resolveBackendTablePk = async (tableInput) => {
   const cleanStr = String(tableInput).toUpperCase().trim();
   const cleanDigits = cleanStr.replace(/\D/g, '');
   try {
-    const tablesRes = await api.get('/restaurant/tables/').catch(() => ({ data: [] }));
+    const tablesRes = await api.get('/tables/').catch(() => ({ data: [] }));
     const rawTables = tablesRes.data?.data || (Array.isArray(tablesRes.data) ? tablesRes.data : (tablesRes.data?.results || []));
     const tables = Array.isArray(rawTables) ? rawTables : [];
     const match = tables.find(t => {

@@ -119,7 +119,7 @@ export const menuService = {
     // Resolve active restaurant ID dynamically
     let restaurantId = 1;
     try {
-      const restRes = await api.get('/restaurant/restaurants/');
+      const restRes = await api.get('/branches/');
       const restList = restRes.data?.data || (Array.isArray(restRes.data) ? restRes.data : (restRes.data?.results || []));
       if (Array.isArray(restList) && restList.length > 0) {
         restaurantId = restList[0].id || restList[0].restaurant_id || 1;
@@ -132,7 +132,7 @@ export const menuService = {
     let createdDesc = catDesc;
 
     try {
-      const res = await api.post('/restaurant/categories/', {
+      const res = await api.post('/categories/', {
         name: catName,
         description: catDesc || "",
         is_active: isActive,
@@ -145,7 +145,7 @@ export const menuService = {
         createdDesc = resData.description !== undefined ? resData.description : catDesc;
       }
     } catch (err) {
-      console.warn("Backend /restaurant/categories/ post warning, creating local custom category:", err);
+      console.warn("Backend /categories/ post warning, creating local custom category:", err);
       const errMsg = err.response?.data?.errors?.name?.[0] || err.response?.data?.message || err.message;
       if (errMsg && (errMsg.includes('unique') || errMsg.includes('already exists'))) {
         throw err;
@@ -236,7 +236,7 @@ export const menuService = {
 
     let restaurantId = 1;
     try {
-      const restRes = await api.get('/restaurant/restaurants/');
+      const restRes = await api.get('/branches/');
       const restList = restRes.data?.data || (Array.isArray(restRes.data) ? restRes.data : (restRes.data?.results || []));
       if (Array.isArray(restList) && restList.length > 0) {
         restaurantId = restList[0].id || restList[0].restaurant_id || 1;
@@ -262,7 +262,7 @@ export const menuService = {
     }
 
     try {
-      const res = await api.put(`/restaurant/categories/${numericId}/`, payload);
+      const res = await api.put(`/categories/${numericId}/`, payload);
       clearStaticProductCache();
       const updatedData = res.data?.data || res.data;
       const catId = updatedData.id || updatedData.category_id;
@@ -294,7 +294,7 @@ export const menuService = {
     // 1. Try deleting on backend if it has a numeric ID
     if (!isNaN(numericId) && numericId > 0) {
       try {
-        await api.delete(`/restaurant/categories/${numericId}/`);
+        await api.delete(`/categories/${numericId}/`);
       } catch (e) {
         console.warn(`Backend category delete failed for ${numericId} (will persist deletion locally):`, e);
       }

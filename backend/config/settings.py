@@ -94,15 +94,23 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
 # MySQL 8 is the primary operational database, with sqlite3 supported for portable testing.
-DB_ENGINE = os.getenv("DB_ENGINE", "django.db.backends.mysql")
-if "sqlite" in DB_ENGINE:
+raw_db_engine = os.getenv("DB_ENGINE", "django.db.backends.mysql").strip()
+if "sqlite" in raw_db_engine.lower():
+    DB_ENGINE = "django.db.backends.sqlite3"
     DATABASES = {
         "default": {
-            "ENGINE": "django.db.backends.sqlite3",
+            "ENGINE": DB_ENGINE,
             "NAME": BASE_DIR / (os.getenv("DB_NAME", "db.sqlite3")),
         }
     }
 else:
+    if raw_db_engine.lower() in ("mysql", "mariadb") or raw_db_engine == "django.db.backends.mysql":
+        DB_ENGINE = "django.db.backends.mysql"
+    elif raw_db_engine.lower() in ("postgresql", "postgres"):
+        DB_ENGINE = "django.db.backends.postgresql"
+    else:
+        DB_ENGINE = raw_db_engine
+
     DATABASES = {
         "default": {
             "ENGINE": DB_ENGINE,

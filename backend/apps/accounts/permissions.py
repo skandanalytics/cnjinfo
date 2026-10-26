@@ -50,14 +50,18 @@ class IsCustomerOrStaff(BasePermission):
 
 
 class IsStaffMember(BasePermission):
-    """Any active employee (cashier, chef, staff, manager, admin)."""
+    """Any active employee (cashier, chef, staff, manager, admin) or superuser."""
 
     def has_permission(self, request, view):
+        if getattr(request.user, "is_superuser", False):
+            return True
         return get_active_employee(request.user) is not None
 
 
 class IsAdminLevel(BasePermission):
     def has_permission(self, request, view):
+        if getattr(request.user, "is_superuser", False):
+            return True
         emp = get_active_employee(request.user)
         return bool(emp and emp.role in ADMIN_ROLES)
 
@@ -66,6 +70,8 @@ class IsOwnerLevel(BasePermission):
     """Admin-level staff with no branch restriction (can create and deactivate branches)."""
 
     def has_permission(self, request, view):
+        if getattr(request.user, "is_superuser", False):
+            return True
         emp = get_active_employee(request.user)
         return bool(emp and emp.role in ADMIN_ROLES and emp.branch_id is None)
 
@@ -74,6 +80,8 @@ class StaffReadAdminWrite(BasePermission):
     """Any active staff may read; only admin-level staff may write (SRS 3.3.1: employees cannot manage menu etc.)."""
 
     def has_permission(self, request, view):
+        if getattr(request.user, "is_superuser", False):
+            return True
         if request.method in SAFE_METHODS:
             return get_active_employee(request.user) is not None
         return IsAdminLevel().has_permission(request, view)
@@ -83,4 +91,6 @@ class IsKitchenStaff(BasePermission):
     """Kitchen queue access: every active employee (SRS 3.3.2). Branch scoping is applied by the view."""
 
     def has_permission(self, request, view):
+        if getattr(request.user, "is_superuser", False):
+            return True
         return get_active_employee(request.user) is not None

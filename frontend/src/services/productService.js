@@ -318,7 +318,7 @@ export const getCachedCategories = async (forceRefresh = false) => {
   }
   let remoteCats = [];
   try {
-    const res = await api.get('/restaurant/categories/');
+    const res = await api.get('/categories/');
     const payload = res.data?.data || (Array.isArray(res.data) ? res.data : (res.data?.results || []));
     remoteCats = Array.isArray(payload) ? payload : [];
   } catch (e) {
@@ -374,7 +374,7 @@ export const getCachedInventory = async (forceRefresh = false) => {
     return cachedInventory;
   }
   try {
-    const res = await api.get('/restaurant/inventory/');
+    const res = await api.get('/inventory/');
     const payload = res.data?.data || (Array.isArray(res.data) ? res.data : (res.data?.results || []));
     const inv = Array.isArray(payload) ? payload : [];
     cachedInventory = inv;
@@ -486,7 +486,7 @@ export const productService = {
 
     return [];
 
-    const foodRes = await api.get('/restaurant/food/');
+    const foodRes = await api.get('/foods/');
     const rawFoodList = foodRes.data?.data || (Array.isArray(foodRes.data) ? foodRes.data : (foodRes.data?.results || []));
 
     const [categories, inventory, images] = await Promise.all([
@@ -587,7 +587,7 @@ export const productService = {
     // If category not found in backend DB, try auto-creating it on backend
     if (!categoryId && targetCatName && isNaN(Number(targetCatName))) {
       try {
-        const newCatRes = await api.post('/restaurant/categories/', {
+        const newCatRes = await api.post('/categories/', {
           name: getFrontendCategoryName(targetCatName),
           description: `Category for ${targetCatName}`,
           is_active: true,
@@ -628,7 +628,7 @@ export const productService = {
     // Resolve active restaurant ID dynamically
     let restaurantId = 1;
     try {
-      const restRes = await api.get('/restaurant/restaurants/');
+      const restRes = await api.get('/branches/');
       const restList = restRes.data?.data || (Array.isArray(restRes.data) ? restRes.data : (restRes.data?.results || []));
       if (Array.isArray(restList) && restList.length > 0) {
         restaurantId = restList[0].id || restList[0].restaurant_id || 1;
@@ -651,7 +651,7 @@ export const productService = {
       } : {})
     };
 
-    const foodRes = await api.post('/restaurant/food/', payload);
+    const foodRes = await api.post('/foods/', payload);
     const newFood = foodRes.data?.data || foodRes.data;
     const newFoodId = newFood.id || newFood.food_id;
 
@@ -875,10 +875,10 @@ export const productService = {
     let updatedFood = null;
     if (hasFoodDetailsToPatch && Object.keys(payload).length > 0 && _isValidId(id)) {
       try {
-        const foodRes = await api.patch(`/restaurant/food/${id}/`, payload);
+        const foodRes = await api.patch(`/foods/${id}/`, payload);
         updatedFood = foodRes.data?.data || foodRes.data;
       } catch (err) {
-        console.warn("Backend patch /restaurant/food/ warning:", err);
+        console.warn("Backend patch /foods/ warning:", err);
       }
     }
     const updatedFoodId = (updatedFood && (updatedFood.id || updatedFood.food_id)) || id;
@@ -886,7 +886,7 @@ export const productService = {
     // Update inventory quantity if stock is passed
     if (data.stock !== undefined && _isValidId(updatedFoodId)) {
       try {
-        const invRes = await api.get('/restaurant/inventory/').catch(() => ({ data: [] }));
+        const invRes = await api.get('/inventory/').catch(() => ({ data: [] }));
         const invList = invRes.data?.data || (Array.isArray(invRes.data) ? invRes.data : (invRes.data?.results || []));
         const invObj = Array.isArray(invList) ? invList.find(i => {
           const invFoodId = i.food?.id || i.food_item?.id || i.food_id || i.food || i.food_item;
@@ -895,13 +895,13 @@ export const productService = {
         if (invObj) {
           const invId = invObj.id || invObj.inventory_id;
           if (_isValidId(invId)) {
-            await api.patch(`/restaurant/inventory/${invId}/`, {
+            await api.patch(`/inventory/${invId}/`, {
               quantity: parseInt(data.stock),
               status: data.stock > 5 ? 'IN_STOCK' : data.stock > 0 ? 'LOW_STOCK' : 'OUT_OF_STOCK'
             }).catch(() => {});
           }
         } else {
-          await api.post('/restaurant/inventory/', {
+          await api.post('/inventory/', {
             food: updatedFoodId,
             food_item: updatedFoodId,
             quantity: parseInt(data.stock),
@@ -1074,13 +1074,13 @@ export const productService = {
 
     // Delete corresponding inventory first
     try {
-      const invRes = await api.get('/restaurant/inventory/');
+      const invRes = await api.get('/inventory/');
       const invList = invRes.data?.data || (Array.isArray(invRes.data) ? invRes.data : (invRes.data?.results || []));
       const invObj = Array.isArray(invList) ? invList.find(i => (Number(i.food_item || i.food) === Number(id))) : null;
       if (invObj) {
         const invId = invObj.id || invObj.inventory_id;
         if (_isValidId(invId)) {
-          await api.delete(`/restaurant/inventory/${invId}/`);
+          await api.delete(`/inventory/${invId}/`);
         }
       }
     } catch (e) {
@@ -1089,13 +1089,13 @@ export const productService = {
 
     // Delete images
     try {
-      const imgRes = await api.get('/restaurant/food-images/');
+      const imgRes = await api.get('/food-images/').catch(() => ({ data: [] }));
       const imgList = imgRes.data?.data || (Array.isArray(imgRes.data) ? imgRes.data : (imgRes.data?.results || []));
       const images = Array.isArray(imgList) ? imgList.filter(img => (Number(img.food_item || img.food) === Number(id))) : [];
       for (const img of images) {
         const imgId = img.id || img.image_id;
         if (_isValidId(imgId)) {
-          await api.delete(`/restaurant/food-images/${imgId}/`);
+          await api.delete(`/food-images/${imgId}/`).catch(() => {});
         }
       }
     } catch (e) {
@@ -1132,7 +1132,7 @@ export const productService = {
       localStorage.setItem('foodie_dish_stocks', JSON.stringify(savedStocks));
     } catch (e) { }
 
-    await api.delete(`/restaurant/food/${id}/`);
+    await api.delete(`/foods/${id}/`);
 
     try {
       clearStaticProductCache();

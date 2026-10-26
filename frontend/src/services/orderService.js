@@ -776,8 +776,8 @@ export const orderService = {
     const ordersPromise = api.get(ordersUrl, bypassCache ? { bypassCache: true } : {});
     const secondaryPromise = includeDetails ? Promise.all([
       api.get('/orders/order-items/?page_size=100').catch(() => ({ data: [] })),
-      api.get('/restaurant/food/?page_size=100').catch(() => ({ data: [] })),
-      api.get('/restaurant/tables/?page_size=100').catch(() => ({ data: [] })),
+      api.get('/foods/?page_size=100').catch(() => ({ data: [] })),
+      api.get('/tables/?page_size=100').catch(() => ({ data: [] })),
       api.get('/orders/payments/?page_size=100').catch(() => ({ data: [] }))
     ]) : Promise.resolve(null);
 
@@ -908,8 +908,8 @@ export const orderService = {
 
     const [itemsRes, foodsRes, tablesRes, paymentsRes] = secondaryRes || (includeDetails ? await Promise.all([
       api.get('/orders/order-items/?page_size=100').catch(() => ({ data: [] })),
-      api.get('/restaurant/food/?page_size=100').catch(() => ({ data: [] })),
-      api.get('/restaurant/tables/?page_size=100').catch(() => ({ data: [] })),
+      api.get('/foods/?page_size=100').catch(() => ({ data: [] })),
+      api.get('/tables/?page_size=100').catch(() => ({ data: [] })),
       api.get('/orders/payments/?page_size=100').catch(() => ({ data: [] }))
     ]) : [null, null, null, null]);
 
@@ -1083,8 +1083,8 @@ export const orderService = {
 
     const [itemsRes, foodsRes, tablesRes, paymentsRes] = await Promise.all([
       api.get('/orders/order-items/?page_size=100').catch(() => ({ data: [] })),
-      api.get('/restaurant/food/?page_size=100').catch(() => ({ data: [] })),
-      api.get('/restaurant/tables/?page_size=100').catch(() => ({ data: [] })),
+      api.get('/foods/?page_size=100').catch(() => ({ data: [] })),
+      api.get('/tables/?page_size=100').catch(() => ({ data: [] })),
       api.get('/orders/payments/?page_size=100').catch(() => ({ data: [] }))
     ]);
 
@@ -1212,7 +1212,7 @@ export const orderService = {
         try {
           const rawTableStr = String(data.tableNumber || data.table || '').toUpperCase().trim();
           const cleanDigits = rawTableStr.replace(/[^0-9]/g, '');
-          const tablesRes = await api.get('/restaurant/tables/').catch(() => ({ data: [] }));
+          const tablesRes = await api.get('/tables/').catch(() => ({ data: [] }));
           const rawTables = tablesRes.data?.data || (Array.isArray(tablesRes.data) ? tablesRes.data : (tablesRes.data?.results || []));
           const allTables = Array.isArray(rawTables) ? rawTables : [];
 
@@ -1316,7 +1316,7 @@ export const orderService = {
     // Place all order items resolving exact backend food PKs (food, subtotal, special_instructions)
     let allBackendFoods = [];
     try {
-      const foodsRes = await api.get('/restaurant/food/').catch(() => ({ data: [] }));
+      const foodsRes = await api.get('/foods/').catch(() => ({ data: [] }));
       const rawFoods = foodsRes.data?.data || (Array.isArray(foodsRes.data) ? foodsRes.data : (foodsRes.data?.results || []));
       allBackendFoods = Array.isArray(rawFoods) ? rawFoods : [];
     } catch (e) { }
