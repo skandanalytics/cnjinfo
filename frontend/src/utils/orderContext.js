@@ -17,7 +17,7 @@ export function normalizeOrderType(value) {
 }
 
 export function getOrderType() {
-  const direct = normalizeOrderType(sessionStorage.getItem(TYPE_KEY));
+  const direct = normalizeOrderType(sessionStorage.getItem(TYPE_KEY) || localStorage.getItem(TYPE_KEY));
   if (direct) return direct;
   try {
     const tableRaw = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
@@ -33,19 +33,28 @@ export function getOrderType() {
 
 export function setOrderType(value) {
   const type = normalizeOrderType(value);
-  if (type) sessionStorage.setItem(TYPE_KEY, type);
-  else sessionStorage.removeItem(TYPE_KEY);
-  localStorage.removeItem(TYPE_KEY); // an old cross-session copy must not resurrect Dine-In without a QR
+  if (type) {
+    sessionStorage.setItem(TYPE_KEY, type);
+    localStorage.setItem(TYPE_KEY, type);
+  } else {
+    sessionStorage.removeItem(TYPE_KEY);
+    localStorage.removeItem(TYPE_KEY);
+  }
   return type;
 }
 
 export function getScannedTableQr() {
-  return sessionStorage.getItem(QR_KEY) || null;
+  return sessionStorage.getItem(QR_KEY) || localStorage.getItem(QR_KEY) || null;
 }
 
 export function rememberScannedTableQr(qr) {
-  if (qr) sessionStorage.setItem(QR_KEY, qr);
-  else sessionStorage.removeItem(QR_KEY);
+  if (qr) {
+    sessionStorage.setItem(QR_KEY, qr);
+    localStorage.setItem(QR_KEY, qr);
+  } else {
+    sessionStorage.removeItem(QR_KEY);
+    localStorage.removeItem(QR_KEY);
+  }
 }
 
 export function hasScannedTable() {
@@ -53,15 +62,17 @@ export function hasScannedTable() {
 }
 
 export function getLastDineInTableId() {
-  const id = Number(sessionStorage.getItem(LAST_DINE_IN_TABLE_KEY));
+  const id = Number(sessionStorage.getItem(LAST_DINE_IN_TABLE_KEY) || localStorage.getItem(LAST_DINE_IN_TABLE_KEY));
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
 export function rememberDineInTableId(id) {
   if (id && Number.isInteger(Number(id)) && Number(id) > 0) {
     sessionStorage.setItem(LAST_DINE_IN_TABLE_KEY, String(id));
+    localStorage.setItem(LAST_DINE_IN_TABLE_KEY, String(id));
   } else if (!id) {
     sessionStorage.removeItem(LAST_DINE_IN_TABLE_KEY);
+    localStorage.removeItem(LAST_DINE_IN_TABLE_KEY);
   }
 }
 
@@ -87,9 +98,12 @@ export function getSelectedTableId() {
 export function setSelectedTableId(id) {
   if (id && Number.isInteger(Number(id)) && Number(id) > 0) {
     sessionStorage.setItem(TABLE_KEY, String(id));
+    localStorage.setItem(TABLE_KEY, String(id));
     sessionStorage.setItem(LAST_DINE_IN_TABLE_KEY, String(id));
+    localStorage.setItem(LAST_DINE_IN_TABLE_KEY, String(id));
   } else {
     sessionStorage.removeItem(TABLE_KEY);
+    localStorage.removeItem(TABLE_KEY);
   }
 }
 

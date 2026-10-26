@@ -19,7 +19,7 @@ export const BackButton = ({ className = '', style = {}, onClick, to }) => {
     <button 
       type="button" 
       onClick={handleClick} 
-      className={`btn btn-light rounded-circle p-2 border d-flex align-items-center justify-content-center ${className}`}
+      className={`btn btn-light rounded-circle p-0 border d-inline-flex align-items-center justify-content-center ${className}`}
       style={{ width: '36px', height: '36px', ...style }}
       aria-label="Go back"
     >

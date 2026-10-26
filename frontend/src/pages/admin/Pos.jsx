@@ -37,6 +37,8 @@ export const Pos = () => {
   const [branches, setBranches] = useState([]);
   const [selectedBranchId, setSelectedBranchId] = useState(null);
   const [tables, setTables] = useState([]);
+  const [tablesLoading, setTablesLoading] = useState(false);
+  const [tablesError, setTablesError] = useState(null);
   const [dishes, setDishes] = useState([]);
   const [categories, setCategories] = useState([]);
   const [coupons, setCoupons] = useState([]);
@@ -60,6 +62,25 @@ export const Pos = () => {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponCodeInput, setCouponCodeInput] = useState('');
   const [couponError, setCouponError] = useState('');
+
+  const [serviceTaxEnabled, setServiceTaxEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('foodie_service_tax_enabled');
+      return saved !== null ? saved !== 'false' : true;
+    } catch (e) {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    const handleTaxSync = (e) => {
+      if (typeof e.detail?.enabled === 'boolean') {
+        setServiceTaxEnabled(e.detail.enabled);
+      }
+    };
+    window.addEventListener('foodie_service_tax_changed', handleTaxSync);
+    return () => window.removeEventListener('foodie_service_tax_changed', handleTaxSync);
+  }, []);
 
   // Modals
   const [customizingItem, setCustomizingItem] = useState(null); // { dish, cartIndex, selectedOptions: [], specialInstructions: '' }
@@ -105,10 +126,19 @@ export const Pos = () => {
     if (!branchId) return;
     if (!isSilent) setLoading(true);
     setOrderError('');
+    setTablesLoading(true);
+    setTablesError(null);
 
     try {
-      const [tableList, dishList, catList, couponList] = await Promise.all([
-        tableService.getTables().catch(() => []),
+      let tableList = [];
+      try {
+        tableList = await tableService.getTables(branchId);
+      } catch (tblErr) {
+        console.error('Error fetching tables in loadPosData:', tblErr);
+        setTablesError(tblErr.message || 'Failed to load tables for this branch.');
+      }
+
+      const [dishList, catList, couponList] = await Promise.all([
         productService.getProducts(true).catch(() => []),
         menuService.getMenus().catch(() => []),
         couponService.getCoupons().catch(() => [])
@@ -140,7 +170,28 @@ export const Pos = () => {
     } catch (e) {
       console.error('Error loading POS data:', e);
     } finally {
+      setTablesLoading(false);
       if (!isSilent) setLoading(false);
+    }
+  };
+
+  const reloadTables = async (branchIdOverride) => {
+    const targetBranch = branchIdOverride || selectedBranchId;
+    if (!targetBranch || tablesLoading) return;
+    setTablesLoading(true);
+    setTablesError(null);
+    try {
+      const tableList = await tableService.getTables(targetBranch);
+      const filteredTables = Array.isArray(tableList)
+        ? tableList.filter(t => !t.branch || Number(t.branch) === Number(targetBranch))
+        : [];
+      setTables(filteredTables);
+      setTablesError(null);
+    } catch (err) {
+      console.error('Error reloading tables:', err);
+      setTablesError(err.message || 'Failed to fetch tables for this branch.');
+    } finally {
+      setTablesLoading(false);
     }
   };
 
@@ -444,6 +495,17 @@ export const Pos = () => {
       return;
     }
 
+    const cleanPhone = customerPhone.trim();
+    if (!cleanPhone) {
+      setOrderError('Customer mobile number is required.');
+      return;
+    }
+    const cleanDigits = cleanPhone.replace(/\D/g, '');
+    if (cleanDigits.length < 10) {
+      setOrderError('Please enter a valid 10-digit customer mobile number.');
+      return;
+    }
+
     setSubmittingOrder(true);
     const idempotencyKey = `pos-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
@@ -465,6 +527,7 @@ export const Pos = () => {
       customer_name: customerName.trim(),
       payment_method: 'CASH',
       mark_paid: isPaid,
+      service_tax_enabled: serviceTaxEnabled,
     };
 
     try {
@@ -917,7 +980,10 @@ export const Pos = () => {
                   </div>
                   <button
                     type="button"
-                    onClick={() => setShowTablePicker(true)}
+                    onClick={() => {
+                      setShowTablePicker(true);
+                      reloadTables();
+                    }}
                     className="btn btn-sm btn-outline-dark rounded-pill px-3 fw-bold"
                     style={{ fontSize: '11.5px', height: '30px' }}
                   >
@@ -935,9 +1001,9 @@ export const Pos = () => {
               )}
             </div>
 
-            {/* 3. Customer Information (Optional) */}
+            {/* 3. Customer Information */}
             <div className="pos-order-section">
-              <span className="small text-muted fw-bold text-uppercase mb-1" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>Customer Info (Optional)</span>
+              <span className="small text-muted fw-bold text-uppercase mb-1" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>Customer Info</span>
               <div className="row g-2">
                 <div className="col-7">
                   <div className="input-group input-group-sm">
@@ -947,10 +1013,14 @@ export const Pos = () => {
                     <input
                       type="tel"
                       className="form-control border-light-subtle"
-                      placeholder="Mobile (Optional)"
+                      placeholder="Mobile Number *"
                       value={customerPhone}
-                      onChange={(e) => setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                      onChange={(e) => {
+                        setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
+                        if (orderError && orderError.toLowerCase().includes('mobile')) setOrderError('');
+                      }}
                       style={{ fontSize: '11.5px', height: '32px' }}
+                      required
                     />
                   </div>
                 </div>
@@ -962,7 +1032,7 @@ export const Pos = () => {
                     <input
                       type="text"
                       className="form-control border-light-subtle"
-                      placeholder="Name"
+                      placeholder="Name (Optional)"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
                       style={{ fontSize: '11.5px', height: '32px' }}
@@ -1378,91 +1448,196 @@ export const Pos = () => {
         )}
 
         {/* Table Selection Modal */}
-        {showTablePicker && (
-          <Modal
-            isOpen={showTablePicker}
-            title="Select Table for Dine-In"
-            onClose={() => setShowTablePicker(false)}
-          >
-            <div className="p-3">
-              {/* Table Filter Tabs */}
-              <div className="d-flex align-items-center gap-1.5 mb-3 bg-light p-1 rounded-pill">
-                {['ALL', 'AVAILABLE', 'OCCUPIED'].map((filterTab) => (
-                  <button
-                    key={filterTab}
-                    type="button"
-                    onClick={() => setTableFilter(filterTab)}
-                    className={`btn btn-xs flex-grow-1 rounded-pill fw-semibold ${
-                      tableFilter === filterTab ? 'btn-white bg-white text-dark shadow-xs' : 'btn-link text-muted'
-                    }`}
-                    style={{ fontSize: '11px', textDecoration: 'none' }}
-                  >
-                    {filterTab}
-                  </button>
-                ))}
-              </div>
+        {showTablePicker && (() => {
+          const availableCount = tables.filter(t => t.status === 'Available' && !t.is_occupied && t.is_active !== false).length;
+          const occupiedCount = tables.filter(t => t.status === 'Occupied' || Boolean(t.is_occupied) || t.status === 'Reserved').length;
+          const filteredTableList = tables.filter(t => {
+            if (tableFilter === 'ALL') return true;
+            if (tableFilter === 'AVAILABLE') return t.status === 'Available' && !t.is_occupied && t.is_active !== false;
+            if (tableFilter === 'OCCUPIED') return t.status === 'Occupied' || Boolean(t.is_occupied) || t.status === 'Reserved';
+            return true;
+          });
 
-              {/* Table Grid */}
-              <div className="row row-cols-2 row-cols-sm-3 g-2.5 overflow-auto" style={{ maxHeight: '350px' }}>
-                {tables
-                  .filter(t => {
-                    if (tableFilter === 'ALL') return true;
-                    if (tableFilter === 'AVAILABLE') return t.status === 'Available';
-                    if (tableFilter === 'OCCUPIED') return t.status === 'Occupied';
-                    return true;
-                  })
-                  .map((table) => {
-                    const isSelected = selectedTable && String(selectedTable.id) === String(table.id);
-                    const tableNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
-                    const isOccupied = table.status === 'Occupied' || Boolean(table.is_occupied);
+          return (
+            <Modal
+              isOpen={showTablePicker}
+              title="Select Table for Dine-In"
+              onClose={() => setShowTablePicker(false)}
+            >
+              <div className="p-3">
+                {/* Scenario D: Loading State */}
+                {tablesLoading && (
+                  <div className="text-center py-5">
+                    <div className="spinner-border text-danger spinner-border-sm mb-2" role="status">
+                      <span className="visually-hidden">Loading tables...</span>
+                    </div>
+                    <div className="text-muted small">Loading tables for this branch...</div>
+                  </div>
+                )}
 
-                    return (
-                      <div key={table.id} className="col">
-                        <div
+                {/* Scenario D: API Failure State with Retry */}
+                {!tablesLoading && tablesError && (
+                  <div className="text-center py-4 px-3">
+                    <div className="text-danger mb-2">
+                      <FiAlertCircle size={32} />
+                    </div>
+                    <h6 className="fw-bold text-dark mb-1">Failed to Load Tables</h6>
+                    <p className="text-muted small mb-3">{tablesError}</p>
+                    <div className="d-flex justify-content-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => reloadTables()}
+                        disabled={tablesLoading}
+                        className="btn btn-sm btn-danger rounded-pill px-3 d-inline-flex align-items-center gap-1.5"
+                      >
+                        <FiRefreshCw size={13} className={tablesLoading ? 'spin' : ''} />
+                        <span>Retry</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowTablePicker(false)}
+                        className="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Scenario A: No tables configured for selected branch */}
+                {!tablesLoading && !tablesError && tables.length === 0 && (
+                  <div className="text-center py-4 px-3">
+                    <div className="p-3 bg-light rounded-circle d-inline-flex align-items-center justify-content-center text-muted mb-3" style={{ width: '56px', height: '56px' }}>
+                      <FiLayers size={26} />
+                    </div>
+                    <h6 className="fw-bold text-dark mb-1">No Tables Configured</h6>
+                    <p className="text-muted small mb-3" style={{ maxWidth: '300px', margin: '0 auto' }}>
+                      No tables have been configured for this branch.
+                    </p>
+                    <div className="d-flex justify-content-center gap-2">
+                      {isAdmin && (
+                        <button
+                          type="button"
                           onClick={() => {
-                            if (isOccupied) {
-                              window.alert('Table is occupied.');
-                              return;
-                            }
-                            handleSelectTable(table);
+                            setShowTablePicker(false);
+                            navigate('/admin/tables');
                           }}
-                          className={`p-3 rounded-3 border text-center transition-all ${
-                            isOccupied 
-                              ? 'border-secondary-subtle bg-light opacity-60'
-                              : isSelected 
-                              ? 'border-danger bg-danger-subtle shadow-xs cursor-pointer' 
-                              : table.status === 'Available'
-                              ? 'border-success-subtle bg-white hover-shadow cursor-pointer'
-                              : 'border-warning-subtle bg-light-subtle cursor-pointer'
-                          }`}
-                          style={{ cursor: isOccupied ? 'not-allowed' : 'pointer' }}
-                          title={isOccupied ? 'Table is occupied.' : `Select Table ${tableNum}`}
+                          className="btn btn-sm btn-danger rounded-pill px-3"
                         >
-                          <div className="fw-bold fs-6 text-dark mb-0.5">
-                            Table {tableNum}
-                          </div>
-                          <div className="small text-muted mb-1.5" style={{ fontSize: '11px' }}>
-                            {table.capacity || 4} Diners
-                          </div>
-                          <Badge status={table.status} className="px-2 py-0.5" style={{ fontSize: '10px' }} />
+                          Manage Tables
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setShowTablePicker(false)}
+                        className="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Tables exist: Scenarios B & C */}
+                {!tablesLoading && !tablesError && tables.length > 0 && (
+                  <>
+                    {/* Scenario B: Tables exist but none available */}
+                    {availableCount === 0 && (
+                      <div className="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3 rounded-3" role="alert">
+                        <FiAlertCircle className="flex-shrink-0" size={16} />
+                        <div>
+                          <strong>No tables are currently available.</strong> All configured tables are occupied or reserved.
                         </div>
                       </div>
-                    );
-                  })}
-              </div>
+                    )}
 
-              <div className="mt-3 pt-3 border-top text-end">
-                <button
-                  type="button"
-                  onClick={() => setShowTablePicker(false)}
-                  className="btn btn-sm btn-outline-secondary rounded-pill px-3"
-                >
-                  Close
-                </button>
+                    {/* Table Filter Tabs */}
+                    <div className="d-flex align-items-center gap-1.5 mb-3 bg-light p-1 rounded-pill">
+                      {[
+                        { key: 'ALL', label: `ALL (${tables.length})` },
+                        { key: 'AVAILABLE', label: `AVAILABLE (${availableCount})` },
+                        { key: 'OCCUPIED', label: `OCCUPIED (${occupiedCount})` }
+                      ].map((tab) => (
+                        <button
+                          key={tab.key}
+                          type="button"
+                          onClick={() => setTableFilter(tab.key)}
+                          className={`btn btn-xs flex-grow-1 rounded-pill fw-semibold ${
+                            tableFilter === tab.key ? 'btn-white bg-white text-dark shadow-xs' : 'btn-link text-muted'
+                          }`}
+                          style={{ fontSize: '11px', textDecoration: 'none' }}
+                        >
+                          {tab.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Filtered Empty State */}
+                    {filteredTableList.length === 0 ? (
+                      <div className="text-center py-4 text-muted small">
+                        {tableFilter === 'AVAILABLE'
+                          ? 'No tables are currently available.'
+                          : 'No tables match the selected filter.'}
+                      </div>
+                    ) : (
+                      /* Table Grid */
+                      <div className="row row-cols-2 row-cols-sm-3 g-2.5 overflow-auto" style={{ maxHeight: '350px' }}>
+                        {filteredTableList.map((table) => {
+                          const isSelected = selectedTable && String(selectedTable.id) === String(table.id);
+                          const tableNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
+                          const isOccupied = table.status === 'Occupied' || Boolean(table.is_occupied) || table.status === 'Reserved' || table.is_active === false;
+
+                          return (
+                            <div key={table.id} className="col">
+                              <div
+                                onClick={() => {
+                                  if (isOccupied) {
+                                    window.alert(table.status === 'Reserved' ? 'Table is reserved.' : 'Table is occupied.');
+                                    return;
+                                  }
+                                  handleSelectTable(table);
+                                }}
+                                className={`p-3 rounded-3 border text-center transition-all ${
+                                  isOccupied 
+                                    ? 'border-secondary-subtle bg-light opacity-60'
+                                    : isSelected 
+                                    ? 'border-danger bg-danger-subtle shadow-xs cursor-pointer' 
+                                    : table.status === 'Available'
+                                    ? 'border-success-subtle bg-white hover-shadow cursor-pointer'
+                                    : 'border-warning-subtle bg-light-subtle cursor-pointer'
+                                }`}
+                                style={{ cursor: isOccupied ? 'not-allowed' : 'pointer' }}
+                                title={isOccupied ? `Table ${tableNum} is ${table.status}` : `Select Table ${tableNum}`}
+                              >
+                                <div className="fw-bold fs-6 text-dark mb-0.5">
+                                  Table {tableNum}
+                                </div>
+                                <div className="small text-muted mb-1.5" style={{ fontSize: '11px' }}>
+                                  {table.capacity || 4} Diners
+                                </div>
+                                <Badge status={table.status} className="px-2 py-0.5" style={{ fontSize: '10px' }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    <div className="mt-3 pt-3 border-top text-end">
+                      <button
+                        type="button"
+                        onClick={() => setShowTablePicker(false)}
+                        className="btn btn-sm btn-outline-secondary rounded-pill px-3"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          </Modal>
-        )}
+            </Modal>
+          );
+        })()}
 
         {/* Coupons Available Modal */}
         {showCouponModal && (

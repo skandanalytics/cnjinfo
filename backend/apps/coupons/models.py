@@ -44,6 +44,8 @@ class Coupon(models.Model):
     def clean(self):
         if self.discount_type == self.Type.PERCENT and self.discount_value > 100:
             raise ValidationError({"discount_value": "Percent discount cannot exceed 100."})
+        if self.min_order_value is not None and self.discount_value is not None and self.min_order_value <= self.discount_value:
+            raise ValidationError({"min_order_value": "Minimum order value must be greater than the discount value."})
 
     def __str__(self):
         return self.code

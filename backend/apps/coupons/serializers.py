@@ -39,6 +39,9 @@ class CouponSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
             raise serializers.ValidationError({"discount_value": "Discount must be greater than zero."})
         if dtype == Coupon.Type.PERCENT and value > 100:
             raise serializers.ValidationError({"discount_value": "Percent discount cannot exceed 100."})
+        min_order = get("min_order_value")
+        if min_order is not None and value is not None and min_order <= value:
+            raise serializers.ValidationError({"min_order_value": "Minimum order value must be greater than the discount value."})
         if get("max_discount") is not None and get("max_discount") <= 0:
             raise serializers.ValidationError({"max_discount": "Must be greater than zero."})
         from django.utils import timezone

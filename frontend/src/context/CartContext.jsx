@@ -966,7 +966,24 @@ export const CartProvider = ({ children }) => {
     return [];
   };
 
-  const [isServiceChargeRemoved, setIsServiceChargeRemoved] = useState(false);
+  const [isServiceChargeRemoved, setIsServiceChargeRemoved] = useState(() => {
+    try {
+      const saved = localStorage.getItem('foodie_service_tax_enabled');
+      return saved !== null ? saved === 'false' : false;
+    } catch (e) {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const handleTaxSync = (e) => {
+      if (typeof e.detail?.enabled === 'boolean') {
+        setIsServiceChargeRemoved(!e.detail.enabled);
+      }
+    };
+    window.addEventListener('foodie_service_tax_changed', handleTaxSync);
+    return () => window.removeEventListener('foodie_service_tax_changed', handleTaxSync);
+  }, []);
 
   const toggleServiceChargeRemoval = () => {
     setIsServiceChargeRemoved(prev => !prev);

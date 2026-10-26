@@ -34,8 +34,14 @@ api.interceptors.request.use(
     const isAdminRoute =
       currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || currentPath.startsWith('/db') || staffOrdering;
 
-    const adminToken = sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin');
-    const customerToken = sessionStorage.getItem('foodie_token_customer') || localStorage.getItem('foodie_token_customer');
+    const adminToken =
+      sessionStorage.getItem('foodie_staff_access') ||
+      sessionStorage.getItem('foodie_token_admin') ||
+      localStorage.getItem('foodie_staff_access') ||
+      localStorage.getItem('foodie_token_admin');
+    const customerToken =
+      sessionStorage.getItem('foodie_token_customer') ||
+      localStorage.getItem('foodie_token_customer');
 
     // Staff who are placing an order keep their staff login on the shared customer pages.
     const token = isAdminRoute
@@ -45,7 +51,7 @@ api.interceptors.request.use(
     if (token && token !== 'dummy-token') {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
-      const guestToken = sessionStorage.getItem('foodie_guest_token');
+      const guestToken = sessionStorage.getItem('foodie_guest_token') || localStorage.getItem('foodie_guest_token');
       if (guestToken) config.headers['X-Guest-Token'] = guestToken;
     }
 
@@ -240,8 +246,12 @@ api.get = function (url, config = {}) {
   const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
   const staffOrdering = typeof sessionStorage !== 'undefined' && sessionStorage.getItem('foodie_staff_ordering') === '1';
   const isAdminRoute = currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || currentPath.startsWith('/db') || staffOrdering;
-  const adminToken = typeof sessionStorage !== 'undefined' ? (sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin') || '') : '';
-  const customerToken = typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('foodie_token_customer') || '' : '';
+  const adminToken = typeof sessionStorage !== 'undefined'
+    ? (sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem('foodie_token_admin') || localStorage.getItem('foodie_staff_access') || localStorage.getItem('foodie_token_admin') || '')
+    : '';
+  const customerToken = typeof sessionStorage !== 'undefined'
+    ? (sessionStorage.getItem('foodie_token_customer') || localStorage.getItem('foodie_token_customer') || '')
+    : '';
   const token = isAdminRoute ? adminToken : customerToken;
 
   const key = `${url}?${JSON.stringify(config.params || {})}&auth=${token}`;

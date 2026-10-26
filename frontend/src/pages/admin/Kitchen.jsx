@@ -396,9 +396,10 @@ export const Kitchen = () => {
                 )}
                 <button
                   type="button"
-                  className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1"
+                  className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1"
                   onClick={() => fetchOrders(true)}
                   title="Refresh Kitchen Queue from Backend"
+                  aria-label="Refresh Kitchen Queue"
                 >
                   <i className="bi bi-arrow-clockwise"></i>
                 </button>

@@ -1,4 +1,4 @@
-﻿from rest_framework import serializers, status
+from rest_framework import serializers, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
@@ -27,6 +27,7 @@ class QuoteSerializer(serializers.Serializer):
     coupon_codes = serializers.ListField(child=serializers.CharField(max_length=50), required=False, default=list,
                                          max_length=5)
     customer_phone = serializers.CharField(required=False, allow_blank=True)  # staff-assisted orders only
+    service_tax_enabled = serializers.BooleanField(required=False, default=True)
 
 
 class QuoteView(APIView):
@@ -66,7 +67,8 @@ class QuoteView(APIView):
                 customer = NewCustomer()
         lines = [Line(i["food"], i["quantity"], list(i["options"]), i["special_instructions"]) for i in d["items"]]
         try:
-            result = price_order(branch, lines, d["order_type"], customer, d["coupon_codes"])
+            result = price_order(branch, lines, d["order_type"], customer, d["coupon_codes"],
+                                 service_tax_enabled=d.get("service_tax_enabled", True))
         except PricingError as exc:
             return Response({"detail": "Cart cannot be priced.", "errors": exc.errors}, status=400)
         return Response(public_breakdown(result))

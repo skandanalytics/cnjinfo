@@ -4,15 +4,22 @@ const ACCESS = 'foodie_staff_access';
 const REFRESH = 'foodie_staff_refresh';
 
 export function getStaffAccess() {
-  return sessionStorage.getItem(ACCESS) || sessionStorage.getItem('foodie_token_admin') || '';
+  return (
+    sessionStorage.getItem(ACCESS) ||
+    sessionStorage.getItem('foodie_token_admin') ||
+    localStorage.getItem(ACCESS) ||
+    localStorage.getItem('foodie_token_admin') ||
+    ''
+  );
 }
 
 export function setStaffSession(access, refresh) {
   sessionStorage.setItem(ACCESS, access);
   if (refresh) sessionStorage.setItem(REFRESH, refresh);
   sessionStorage.setItem('foodie_token_admin', access);
-  localStorage.removeItem('foodie_token_admin');
-  localStorage.removeItem('foodie_auth_admin');
+  localStorage.setItem(ACCESS, access);
+  if (refresh) localStorage.setItem(REFRESH, refresh);
+  localStorage.setItem('foodie_token_admin', access);
 }
 
 export function clearStaffSession() {
@@ -25,7 +32,7 @@ export function clearStaffSession() {
 let refreshPromise = null;
 
 export async function refreshStaffSession() {
-  const refresh = sessionStorage.getItem(REFRESH);
+  const refresh = sessionStorage.getItem(REFRESH) || localStorage.getItem(REFRESH);
   if (!refresh) throw new Error('No refresh token');
   if (!refreshPromise) {
     refreshPromise = fetch(getApiUrl('/auth/refresh/'), {
@@ -47,6 +54,10 @@ export async function refreshStaffSession() {
 function goToLogin() {
   clearStaffSession();
   if (window.location.pathname.startsWith('/db') || window.location.pathname === '/login') return;
+  const currentPath = window.location.pathname + window.location.search;
+  try {
+    sessionStorage.setItem('foodie_auth_redirect', currentPath);
+  } catch (e) {}
   window.location.href = '/login';
 }
 

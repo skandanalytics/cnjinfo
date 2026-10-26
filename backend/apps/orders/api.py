@@ -1,3 +1,5 @@
+from decimal import ROUND_HALF_UP, Decimal
+from django.db import transaction
 from rest_framework import serializers, status
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -6,9 +8,11 @@ from apps.accounts.permissions import ADMIN_ROLES, IsCustomer, IsStaffMember, ge
 from apps.accounts.scoping import allowed_branch_id, can_access_branch
 from apps.accounts.services import record_audit
 from apps.branches.models import Branch
+from apps.menu.pricing_helpers import money
 
 from .lifecycle import OrderError, change_status, create_assisted, create_from_cart, serialize_order
 from .models import Order
+from .pricing import service_charge_for
 
 
 class PlaceOrderSerializer(serializers.Serializer):
@@ -17,6 +21,7 @@ class PlaceOrderSerializer(serializers.Serializer):
     payment_method = serializers.ChoiceField(choices=["UPI", "CARD", "NETBANKING", "WALLET", "COUNTER"])
     cart_id = serializers.IntegerField(required=False, allow_null=True)
     cart = serializers.IntegerField(required=False, allow_null=True)
+    service_tax_enabled = serializers.BooleanField(required=False, default=True)
 
 
 def _error(exc):
@@ -52,7 +57,8 @@ class OrderListCreateView(APIView):
         try:
             order, created = create_from_cart(request.user, ser.validated_data["branch"],
                                               ser.validated_data["idempotency_key"],
-                                              ser.validated_data["payment_method"])
+                                              ser.validated_data["payment_method"],
+                                              service_tax_enabled=ser.validated_data.get("service_tax_enabled", True))
         except OrderError as exc:
             return _error(exc)
         if created:
@@ -95,10 +101,20 @@ class AssistedOrderSerializer(serializers.Serializer):
     items = AssistedItemSerializer(many=True)
     idempotency_key = serializers.CharField(max_length=64)
     coupon_code = serializers.CharField(max_length=50, required=False, allow_blank=True, default="")
-    customer_phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+    customer_phone = serializers.CharField(max_length=20, required=True, allow_blank=False)
     customer_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     payment_method = serializers.CharField(max_length=30, required=False, default="CASH")
     mark_paid = serializers.BooleanField(required=False, default=False)
+    service_tax_enabled = serializers.BooleanField(required=False, default=True)
+
+    def validate_customer_phone(self, value):
+        val = (value or "").strip()
+        if not val:
+            raise serializers.ValidationError("Customer mobile number is required.")
+        digits = "".join(filter(str.isdigit, val))
+        if len(digits) < 7:
+            raise serializers.ValidationError("Please enter a valid mobile number.")
+        return val
 
 
 class AssistedOrderView(APIView):
@@ -123,6 +139,7 @@ class AssistedOrderView(APIView):
                 customer_name=data.get("customer_name", ""),
                 mark_paid=data.get("mark_paid", False),
                 payment_method=data.get("payment_method", "CASH"),
+                service_tax_enabled=data.get("service_tax_enabled", True),
             )
         except OrderError as exc:
             return _error(exc)
@@ -152,6 +169,90 @@ class OrderDetailView(APIView):
         order = self._visible(request, pk)
         if order is None:
             return Response({"detail": "Not found."}, status=404)
+        return Response(serialize_order(order))
+
+    def patch(self, request, pk):
+        user = request.user
+        if not user or not user.is_authenticated:
+            return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        # Only authorized administrators / branch managers / superusers can modify per-order service charges
+        if getattr(user, "is_superuser", False):
+            is_admin = True
+        else:
+            emp = get_active_employee(user)
+            is_admin = emp is not None and emp.role in ADMIN_ROLES
+        if not is_admin:
+            return Response({"detail": "Only administrators can modify order service charges.", "code": "permission_denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        enabled_raw = request.data.get("service_charge_enabled")
+        if enabled_raw is None:
+            enabled_raw = request.data.get("service_tax_enabled")
+        if enabled_raw is None:
+            return Response({"detail": "Missing service_charge_enabled field.", "code": "invalid_input"}, status=status.HTTP_400_BAD_REQUEST)
+
+        enabled = str(enabled_raw).lower() in ("true", "1", "yes") if not isinstance(enabled_raw, bool) else enabled_raw
+
+        with transaction.atomic():
+            try:
+                if str(pk).isdigit():
+                    order = Order.objects.select_for_update().prefetch_related("items", "status_history").get(pk=int(pk))
+                else:
+                    order = Order.objects.select_for_update().prefetch_related("items", "status_history").get(order_number=str(pk))
+            except Order.DoesNotExist:
+                return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            if not can_access_branch(user, order.branch_id):
+                return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
+
+            if order.payment_status == Order.PaymentStatus.PAID:
+                return Response({"detail": "Cannot modify service charge for an order that is already paid.", "code": "order_already_paid"}, status=status.HTTP_400_BAD_REQUEST)
+
+            if order.status == Order.Status.CANCELLED:
+                return Response({"detail": "Cannot modify service charge for a cancelled order.", "code": "order_cancelled"}, status=status.HTTP_400_BAD_REQUEST)
+
+            food_after_coupon = max(Decimal("0.00"), order.taxable_amount - order.takeaway_charge)
+            branch = Branch.objects.filter(pk=order.branch_id).first() if order.branch_id else None
+
+            if enabled:
+                configured_rate = branch.service_charge_rate if branch else Decimal("0")
+                if configured_rate > Decimal("0"):
+                    rate = configured_rate
+                    service = money(food_after_coupon * rate / Decimal("100"))
+                else:
+                    rate, service = service_charge_for(food_after_coupon, configured_rate)
+                    if rate == Decimal("0.00") and food_after_coupon > Decimal("0"):
+                        rate = Decimal("2.00")
+                        service = money(food_after_coupon * rate / Decimal("100"))
+            else:
+                rate = Decimal("0.00")
+                service = Decimal("0.00")
+
+            raw_total = order.taxable_amount + order.gst_amount + service
+            payable = raw_total.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+            round_off = payable - raw_total
+
+            order.service_charge_rate = rate
+            order.service_charge_amount = service
+            order.round_off = round_off
+            order.total_amount = payable
+            order.save(update_fields=["service_charge_rate", "service_charge_amount", "round_off", "total_amount", "updated_at"])
+
+            record_audit(
+                user,
+                "order.service_charge_update",
+                "Order",
+                order.id,
+                branch=branch,
+                changes={
+                    "service_charge_enabled": enabled,
+                    "service_charge_rate": str(rate),
+                    "service_charge_amount": str(service),
+                    "total_amount": str(payable),
+                },
+                ip=request.META.get("REMOTE_ADDR"),
+            )
+
         return Response(serialize_order(order))
 
     def _visible(self, request, pk):

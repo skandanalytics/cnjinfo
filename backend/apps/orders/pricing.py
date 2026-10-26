@@ -101,7 +101,7 @@ def _load_lines(branch, lines):
     return resolved
 
 
-def price_order(branch, lines, order_type, customer=None, coupon_codes=None, now=None, allow_auto=True):
+def price_order(branch, lines, order_type, customer=None, coupon_codes=None, now=None, allow_auto=True, service_tax_enabled=True):
     """Return a dict breakdown for the cart. Raises PricingError when any line is invalid."""
     now = now or timezone.now()
     if not lines:
@@ -138,7 +138,10 @@ def price_order(branch, lines, order_type, customer=None, coupon_codes=None, now
     takeaway = money(Decimal(total_item_quantity) * Decimal("10.00")) if order_type == "TAKEAWAY" else ZERO
     taxable = food_after_coupon + takeaway
     gst = money(taxable * branch.gst_rate / 100)
-    service_rate, service = service_charge_for(food_after_coupon, branch.service_charge_rate)
+    if service_tax_enabled:
+        service_rate, service = service_charge_for(food_after_coupon, branch.service_charge_rate)
+    else:
+        service_rate, service = Decimal("0.00"), Decimal("0.00")
     raw_total = taxable + gst + service
     payable = raw_total.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
     round_off = payable - raw_total

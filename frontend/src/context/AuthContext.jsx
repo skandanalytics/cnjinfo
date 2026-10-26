@@ -15,9 +15,9 @@ const restoreInitialAuth = () => {
   const key = `foodie_auth_${roleKey}`;
   const tokenKey = `foodie_token_${roleKey}`;
 
-  let savedAuth = isAdminRoute ? sessionStorage.getItem(key) : (sessionStorage.getItem(key) || localStorage.getItem(key));
+  let savedAuth = sessionStorage.getItem(key) || localStorage.getItem(key);
   let savedToken = isAdminRoute
-    ? (sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem(tokenKey))
+    ? (sessionStorage.getItem('foodie_staff_access') || sessionStorage.getItem(tokenKey) || localStorage.getItem('foodie_staff_access') || localStorage.getItem(tokenKey))
     : (sessionStorage.getItem(tokenKey) || localStorage.getItem(tokenKey));
   if (isAdminRoute && (!savedToken || savedToken === 'dummy-token')) {
     return { user: null, isAuthenticated: false };
@@ -52,7 +52,7 @@ export const AuthProvider = ({ children }) => {
     const path = window.location.pathname;
     const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
     const staffRoute = path.startsWith('/admin') || path.startsWith('/employee') || path.startsWith('/db') || staffOrdering;
-    return staffRoute && Boolean(sessionStorage.getItem('foodie_staff_access'));
+    return staffRoute && Boolean(sessionStorage.getItem('foodie_staff_access') || localStorage.getItem('foodie_staff_access'));
   });
   const { user, isAuthenticated } = authState;
 
@@ -116,10 +116,16 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.setItem(`foodie_token_${roleKey}`, token || '');
     sessionStorage.setItem(`foodie_auth_${roleKey}`, payload);
     if (roleKey === 'admin') {
-      if (token) sessionStorage.setItem('foodie_staff_access', token);
-      if (refresh) sessionStorage.setItem('foodie_staff_refresh', refresh);
-      localStorage.removeItem('foodie_token_admin');
-      localStorage.removeItem('foodie_auth_admin');
+      if (token) {
+        sessionStorage.setItem('foodie_staff_access', token);
+        localStorage.setItem('foodie_staff_access', token);
+      }
+      if (refresh) {
+        sessionStorage.setItem('foodie_staff_refresh', refresh);
+        localStorage.setItem('foodie_staff_refresh', refresh);
+      }
+      localStorage.setItem('foodie_token_admin', token || '');
+      localStorage.setItem('foodie_auth_admin', payload);
     } else {
       localStorage.setItem(`foodie_token_${roleKey}`, token || '');
       localStorage.setItem(`foodie_auth_${roleKey}`, payload);
@@ -241,6 +247,9 @@ export const AuthProvider = ({ children }) => {
       sessionStorage.removeItem('foodie_staff_ordering');
       localStorage.removeItem('foodie_token_admin');
       localStorage.removeItem('foodie_auth_admin');
+      localStorage.removeItem('foodie_staff_access');
+      localStorage.removeItem('foodie_staff_refresh');
+      localStorage.removeItem('foodie_staff_ordering');
     }
 
     sessionStorage.removeItem('foodie_token');

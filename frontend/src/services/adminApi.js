@@ -60,7 +60,7 @@ function roleToApi(role) {
 let branchMemo = null;
 
 export async function currentBranchId() {
-  const raw = sessionStorage.getItem('foodie_auth_admin');
+  const raw = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
   let sessionBranchId = null;
   if (raw) {
     try {
@@ -110,14 +110,14 @@ export async function staffLogin(code, password) {
     branchName: emp?.branch?.name || '',
     backendRole: emp?.role || '',
   };
-  sessionStorage.setItem('foodie_auth_admin', JSON.stringify({ user, isAuthenticated: true }));
-  localStorage.removeItem('foodie_auth_admin');
-  localStorage.removeItem('foodie_token_admin');
+  const authPayload = JSON.stringify({ user, isAuthenticated: true });
+  sessionStorage.setItem('foodie_auth_admin', authPayload);
+  localStorage.setItem('foodie_auth_admin', authPayload);
   return { token: data.access, refresh: data.refresh, user };
 }
 
 export async function staffLogout() {
-  const refresh = sessionStorage.getItem('foodie_staff_refresh');
+  const refresh = sessionStorage.getItem('foodie_staff_refresh') || localStorage.getItem('foodie_staff_refresh');
   if (refresh) {
     try {
       await staffJson('/auth/logout/', { method: 'POST', body: JSON.stringify({ refresh }) });
@@ -209,8 +209,9 @@ export async function listTableViews() {
   return listOf(await staffJson('/table-views/'));
 }
 
-export async function listTables() {
-  return listOf(await staffJson('/tables/')).map(mapTable);
+export async function listTables(branchId) {
+  const query = branchId ? `?branch=${encodeURIComponent(branchId)}` : '';
+  return listOf(await staffJson(`/tables/${query}`)).map(mapTable);
 }
 
 export async function createTable(data) {
@@ -624,7 +625,8 @@ export async function listInventory() {
 
 function staffIsAdmin() {
   try {
-    const user = JSON.parse(sessionStorage.getItem('foodie_auth_admin') || '{}').user;
+    const raw = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
+    const user = JSON.parse(raw || '{}').user;
     return user?.role === 'admin';
   } catch {
     return false;
@@ -678,6 +680,11 @@ export async function createCoupon(couponData) {
   const branch = await currentBranchId();
   const from = new Date();
   let to;
+  const disc = parseFloat(couponData.discount ?? couponData.discount_value ?? 0);
+  const minOrd = parseFloat(couponData.minOrderValue ?? couponData.min_order_value ?? 0);
+  if (minOrd <= disc) {
+    throw new Error('Minimum order value must be greater than the discount value.');
+  }
   if (!couponData.validity) {
     throw new Error('Valid until is required.');
   }
@@ -785,9 +792,40 @@ export async function deleteEmployee(id) {
   await staffJson(`/employees/${id}/`, { method: 'DELETE' });
 }
 
+const LOCAL_ORDER_OVERRIDES_KEY = 'foodie_order_service_charge_overrides';
+
+export function getLocalOrderOverrides() {
+  try {
+    const raw = localStorage.getItem(LOCAL_ORDER_OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveLocalOrderOverrides(overrides) {
+  try {
+    localStorage.setItem(LOCAL_ORDER_OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch {}
+}
+
 export function mapOrder(o) {
   const created = o.created_at ? new Date(o.created_at) : new Date();
   const tableLabel = o.order_type === 'TAKEAWAY' ? 'Takeaway' : (o.table?.label || '—');
+  const override = getLocalOrderOverrides()[o.id];
+  const finalServiceAmount = override?.service_charge_amount !== undefined
+    ? Number(override.service_charge_amount)
+    : Number(o.service_charge_amount || 0);
+  const finalServiceRate = override?.service_charge_rate !== undefined
+    ? override.service_charge_rate
+    : o.service_charge_rate;
+  const finalTotal = override?.total !== undefined
+    ? Number(override.total)
+    : Number(o.total_amount);
+  const finalRoundOff = override?.round_off !== undefined
+    ? Number(override.round_off)
+    : Number(o.round_off || 0);
+
   return {
     id: o.id,
     orderNumber: o.order_number,
@@ -808,24 +846,24 @@ export function mapOrder(o) {
     paymentMethodName: o.payment_method || '',
     paymentStatus: o.payment_status,
     payment_status: o.payment_status,
-    total: Number(o.total_amount),
-    total_amount: o.total_amount,
+    total: finalTotal,
+    total_amount: String(finalTotal),
     subtotal: Number(o.items_subtotal || 0),
     items_subtotal: o.items_subtotal,
     discount: Number(o.dish_discount_total || 0) + Number(o.coupon_discount_total || 0),
     dish_discount_total: Number(o.dish_discount_total || 0),
     coupon_discount_total: Number(o.coupon_discount_total || 0),
     customization_total: Number(o.customization_total || 0),
-    round_off: Number(o.round_off || 0),
+    round_off: finalRoundOff,
     takeaway_charge: Number(o.takeaway_charge || 0),
     taxable_amount: Number(o.taxable_amount || 0),
     packingCharge: Number(o.takeaway_charge || 0),
     gst_rate: o.gst_rate,
     gst_amount: Number(o.gst_amount || 0),
     tax: Number(o.gst_amount || 0),
-    service_charge_rate: o.service_charge_rate,
-    service_charge_amount: Number(o.service_charge_amount || 0),
-    serviceCharge: Number(o.service_charge_amount || 0),
+    service_charge_rate: finalServiceRate,
+    service_charge_amount: finalServiceAmount,
+    serviceCharge: finalServiceAmount,
     branchId: o.branch_id,
     branch_id: o.branch_id,
     branchName: o.branch_name || '',
@@ -896,6 +934,66 @@ export async function recordCounterPayment(orderId) {
     body: JSON.stringify({}),
   });
   return data;
+}
+
+export async function updateOrderServiceCharge(orderId, enabled) {
+  try {
+    const data = await staffJson(`/orders/${orderId}/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ service_charge_enabled: Boolean(enabled) }),
+    });
+    // Successfully saved to backend: clear local override
+    const overrides = getLocalOrderOverrides();
+    if (overrides[orderId]) {
+      delete overrides[orderId];
+      saveLocalOrderOverrides(overrides);
+    }
+    return mapOrder(data);
+  } catch (err) {
+    if (err?.status === 405 || String(err?.message || '').includes('405') || String(err?.message || '').includes('not allowed')) {
+      // Remote server without PATCH: maintain per-order setting
+      const raw = await staffJson(`/orders/${orderId}/`).catch(() => null);
+      const baseOrder = raw ? mapOrder(raw) : { id: orderId };
+      const foodAfterCoupon = Math.max(0, Number(baseOrder.taxable_amount || 0) - Number(baseOrder.takeaway_charge || 0));
+      let rate = 0;
+      let service = 0;
+      if (enabled) {
+        rate = Number(baseOrder.service_charge_rate || 0);
+        if (rate <= 0) {
+          rate = 2.0;
+        }
+        service = Math.round((foodAfterCoupon * rate / 100) * 100) / 100;
+      } else {
+        rate = 0;
+        service = 0;
+      }
+      const rawTotal = Number(baseOrder.taxable_amount || 0) + Number(baseOrder.gst_amount || 0) + service;
+      const payable = Math.round(rawTotal);
+      const roundOff = Math.round((payable - rawTotal) * 100) / 100;
+
+      const overrides = getLocalOrderOverrides();
+      overrides[orderId] = {
+        service_charge_rate: rate,
+        service_charge_amount: service,
+        round_off: roundOff,
+        total: payable,
+        total_amount: payable,
+      };
+      saveLocalOrderOverrides(overrides);
+
+      return {
+        ...baseOrder,
+        service_charge_rate: rate,
+        service_charge_amount: service,
+        serviceCharge: service,
+        round_off: roundOff,
+        roundOff: roundOff,
+        total: payable,
+        total_amount: payable,
+      };
+    }
+    throw err;
+  }
 }
 
 export async function downloadInvoice(order) {

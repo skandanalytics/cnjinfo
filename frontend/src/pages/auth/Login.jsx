@@ -51,7 +51,13 @@ export const Login = () => {
     setLoading(true);
     try {
       const userObj = await login(email, password);
-      const fromUrl = location.state?.from;
+      let fromUrl = location.state?.from;
+      if (!fromUrl) {
+        try {
+          fromUrl = sessionStorage.getItem('foodie_auth_redirect');
+          if (fromUrl) sessionStorage.removeItem('foodie_auth_redirect');
+        } catch (e) {}
+      }
       if (fromUrl && typeof fromUrl === 'string') {
         const isEmployeeDest = fromUrl.startsWith('/employee');
         const isAdminDest = fromUrl.startsWith('/admin') || fromUrl.startsWith('/db');

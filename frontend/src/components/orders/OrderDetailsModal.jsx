@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import formatCurrency from '../../utils/formatCurrency';
@@ -12,13 +12,23 @@ export const OrderDetailsModal = ({
   onStatusChange,
   onViewEBill,
   onPaymentRecorded,
+  onOrderUpdated,
 }) => {
   const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'employee';
+  const isAdmin = user?.role === 'admin' || user?.role === 'employee' || user?.role === 'SUPER_ADMIN';
   const [loading, setLoading] = useState(false);
+  const [togglingServiceCharge, setTogglingServiceCharge] = useState(false);
   const [notice, setNotice] = useState(null);
+  const [currentOrder, setCurrentOrder] = useState(order);
 
-  if (!order) return null;
+  useEffect(() => {
+    setCurrentOrder(order);
+  }, [order]);
+
+  if (!currentOrder) return null;
+
+  const isPaid = String(currentOrder.payment_status || '').toUpperCase() === 'PAID';
+  const isServiceChargeActive = Number(currentOrder.service_charge_amount ?? currentOrder.serviceCharge ?? 0) > 0 || Number(currentOrder.service_charge_rate ?? 0) > 0;
 
   const handleStatusUpdate = async (nextStatus) => {
     let reason;
@@ -29,7 +39,7 @@ export const OrderDetailsModal = ({
     }
     setLoading(true);
     try {
-      await onStatusChange(order.id, nextStatus, reason);
+      await onStatusChange(currentOrder.id, nextStatus, reason);
     } catch (e) {
       setNotice({ kind: 'error', text: e.message || 'The status could not be updated.' });
     }
@@ -37,12 +47,40 @@ export const OrderDetailsModal = ({
     onClose();
   };
 
+  const handleToggleServiceCharge = async (nextChecked) => {
+    if (isPaid || togglingServiceCharge || loading) return;
+    setTogglingServiceCharge(true);
+    setNotice(null);
+    try {
+      const { updateOrderServiceCharge } = await import('../../services/adminApi');
+      const updated = await updateOrderServiceCharge(currentOrder.id, nextChecked);
+      setCurrentOrder(updated);
+      if (onOrderUpdated) {
+        onOrderUpdated(updated);
+      }
+      setNotice({
+        kind: 'success',
+        text: nextChecked
+          ? `Service charge (${updated.service_charge_rate != null ? `${updated.service_charge_rate}%` : ''}) enabled for this order.`
+          : 'Service charge removed for this order.',
+      });
+    } catch (e) {
+      setNotice({
+        kind: 'error',
+        text: e?.message || 'Failed to update service charge for this order.',
+      });
+    } finally {
+      setTogglingServiceCharge(false);
+    }
+  };
+
   const handleCounterPay = async () => {
-    if (String(order.payment_status || '').toUpperCase() === 'PAID') return;
+    if (isPaid) return;
+    if (togglingServiceCharge || loading) return;
     setLoading(true);
     try {
       const { recordCounterPayment } = await import('../../services/adminApi');
-      await recordCounterPayment(order.id);
+      await recordCounterPayment(currentOrder.id);
       setNotice({ kind: 'success', text: 'Payment marked as paid successfully.' });
       if (onPaymentRecorded) await onPaymentRecorded();
     } catch (e) {
@@ -57,7 +95,7 @@ export const OrderDetailsModal = ({
       <div className="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => { if(onViewEBill) onViewEBill(); }}
+          onClick={() => { if(onViewEBill) onViewEBill(currentOrder); }}
           className="btn btn-outline-danger fw-bold d-flex align-items-center gap-1.5 rounded-pill px-3 py-2"
           style={{ fontSize: '13px' }}
         >
@@ -67,35 +105,35 @@ export const OrderDetailsModal = ({
 
         {isAdmin && (
           <div className="d-flex align-items-center gap-2">
-            {order.status === 'Pending' && (
+            {currentOrder.status === 'Pending' && (
               <>
-                <Button variant="danger" onClick={() => handleStatusUpdate('Cancelled')} disabled={loading}>
+                <Button variant="danger" onClick={() => handleStatusUpdate('Cancelled')} disabled={loading || togglingServiceCharge}>
                   Reject
                 </Button>
-                <Button variant="primary" onClick={() => handleStatusUpdate('Preparing')} loading={loading}>
+                <Button variant="primary" onClick={() => handleStatusUpdate('Preparing')} loading={loading} disabled={togglingServiceCharge}>
                   Accept Order
                 </Button>
               </>
             )}
-            {order.status === 'Preparing' && (
-              <Button variant="primary" onClick={() => handleStatusUpdate('Ready')} loading={loading}>
+            {currentOrder.status === 'Preparing' && (
+              <Button variant="primary" onClick={() => handleStatusUpdate('Ready')} loading={loading} disabled={togglingServiceCharge}>
                 Mark Ready (Sent to Counter)
               </Button>
             )}
-            {order.status === 'Ready' && (
-              <Button variant="primary" onClick={() => handleStatusUpdate('Serving')} loading={loading}>
+            {currentOrder.status === 'Ready' && (
+              <Button variant="primary" onClick={() => handleStatusUpdate('Serving')} loading={loading} disabled={togglingServiceCharge}>
                 Serve to Table
               </Button>
             )}
-            {(order.status === 'Serving' || order.status === 'Served') && (
-              <Button variant="primary" onClick={() => handleStatusUpdate('Completed')} loading={loading}>
+            {(currentOrder.status === 'Serving' || currentOrder.status === 'Served') && (
+              <Button variant="primary" onClick={() => handleStatusUpdate('Completed')} loading={loading} disabled={togglingServiceCharge}>
                 Complete Session (Settle Bill)
               </Button>
             )}
-            {String(order.payment_status || '').toUpperCase() === 'PAID' ? (
+            {isPaid ? (
               <span className="badge bg-success rounded-pill px-3 py-2">Paid</span>
-            ) : String(order.status || '').toLowerCase() !== 'cancelled' && (
-              <Button variant="outline-danger" onClick={handleCounterPay} disabled={loading}>
+            ) : String(currentOrder.status || '').toLowerCase() !== 'cancelled' && (
+              <Button variant="outline-danger" onClick={handleCounterPay} disabled={loading || togglingServiceCharge}>
                 Mark as Paid
               </Button>
             )}
@@ -106,7 +144,7 @@ export const OrderDetailsModal = ({
   };
 
   return (
-    <Modal isOpen={isOpen} title={`Order details #${order.id}`} onClose={onClose} footerActions={getActionButtons()} size="lg">
+    <Modal isOpen={isOpen} title={`Order details #${currentOrder.id}`} onClose={onClose} footerActions={getActionButtons()} size="lg">
       {notice && (
         <div className={`alert ${notice.kind === 'error' ? 'alert-danger' : 'alert-success'} py-2 small fw-semibold`} role="status">{notice.text}</div>
       )}
@@ -115,7 +153,7 @@ export const OrderDetailsModal = ({
         <div className="col-12 col-md-7">
           <h6 className="fw-bold text-dark mb-3">Items Ordered</h6>
           <div className="bg-light p-3 rounded-3 mb-4">
-            {order.items && order.items.length > 0 ? order.items.map((item, idx) => (
+            {currentOrder.items && currentOrder.items.length > 0 ? currentOrder.items.map((item, idx) => (
               <div key={idx} className="d-flex align-items-start justify-content-between mb-2 small border-bottom border-light pb-2 last-border-0">
                 <div className="text-dark fw-semibold text-break me-2">
                   {item.name || 'Dish Item'} <strong className="text-danger ms-1">x{item.quantity || 1}</strong>
@@ -142,37 +180,62 @@ export const OrderDetailsModal = ({
           <div className="small p-2 border rounded-3">
             <div className="d-flex align-items-center justify-content-between mb-1">
               <span className="text-secondary">Subtotal</span>
-              <span className="text-dark fw-bold">{formatCurrency(order.subtotal)}</span>
+              <span className="text-dark fw-bold">{formatCurrency(currentOrder.subtotal)}</span>
             </div>
-            {order.discount > 0 && (
+            {currentOrder.discount > 0 && (
               <div className="d-flex align-items-center justify-content-between mb-1 text-success">
                 <span>Voucher Discount</span>
-                <span className="fw-bold">-{formatCurrency(order.discount)}</span>
+                <span className="fw-bold">-{formatCurrency(currentOrder.discount)}</span>
               </div>
             )}
-            {(order.voucher || order.voucherCode || order.coupon) && (
+            {(currentOrder.voucher || currentOrder.voucherCode || currentOrder.coupon) && (
               <div className="d-flex align-items-center justify-content-between mb-1 text-success">
                 <span>Voucher Applied</span>
-                <span className="fw-bold font-monospace">{order.voucher || order.voucherCode || order.coupon}</span>
+                <span className="fw-bold font-monospace">{currentOrder.voucher || currentOrder.voucherCode || currentOrder.coupon}</span>
               </div>
             )}
-            {Number(order.takeaway_charge || order.packingCharge || 0) > 0 && (
+            {Number(currentOrder.takeaway_charge || currentOrder.packingCharge || 0) > 0 && (
               <div className="d-flex align-items-center justify-content-between mb-1 text-dark">
                 <span className="text-secondary">Takeaway charge</span>
-                <span className="text-dark fw-bold">+{formatCurrency(order.takeaway_charge ?? order.packingCharge)}</span>
+                <span className="text-dark fw-bold">+{formatCurrency(currentOrder.takeaway_charge ?? currentOrder.packingCharge)}</span>
               </div>
             )}
             <div className="d-flex align-items-center justify-content-between mb-1">
-              <span className="text-secondary">GST{order.gst_rate != null && order.gst_rate !== '' ? ` (${order.gst_rate}%)` : ''}</span>
-              <span className="text-dark fw-bold">{formatCurrency(order.gst_amount ?? order.tax ?? 0)}</span>
+              <span className="text-secondary">GST{currentOrder.gst_rate != null && currentOrder.gst_rate !== '' ? ` (${currentOrder.gst_rate}%)` : ''}</span>
+              <span className="text-dark fw-bold">{formatCurrency(currentOrder.gst_amount ?? currentOrder.tax ?? 0)}</span>
             </div>
-            <div className="d-flex align-items-center justify-content-between mb-1">
-              <span className="text-secondary">Service charge{order.service_charge_rate != null && order.service_charge_rate !== '' ? ` (${order.service_charge_rate}%)` : ''}</span>
-              <span className="text-dark fw-bold">{formatCurrency(order.service_charge_amount ?? order.serviceCharge ?? 0)}</span>
+            <div className="d-flex align-items-center justify-content-between mb-1 py-0.5">
+              <div className="d-flex align-items-center gap-2">
+                <span className="text-secondary">
+                  Service charge{currentOrder.service_charge_rate != null && currentOrder.service_charge_rate !== '' ? ` (${currentOrder.service_charge_rate}%)` : ''}
+                </span>
+                {isAdmin && (
+                  <div className="form-check form-switch m-0 d-inline-flex align-items-center" style={{ minHeight: 'auto' }}>
+                    <input
+                      id="order-service-charge-toggle"
+                      className="form-check-input cursor-pointer m-0"
+                      type="checkbox"
+                      role="switch"
+                      checked={isServiceChargeActive}
+                      onChange={(e) => handleToggleServiceCharge(e.target.checked)}
+                      disabled={isPaid || togglingServiceCharge || loading}
+                      title={isPaid ? "Service charge cannot be modified for paid orders" : (isServiceChargeActive ? "Disable service charge for this order" : "Enable service charge for this order")}
+                      style={{ width: '32px', height: '17px' }}
+                    />
+                  </div>
+                )}
+              </div>
+              <span className="text-dark fw-bold d-flex align-items-center gap-1">
+                {togglingServiceCharge ? (
+                  <span className="spinner-border spinner-border-sm text-secondary" style={{ width: '12px', height: '12px' }} />
+                ) : (
+                  formatCurrency(currentOrder.service_charge_amount ?? currentOrder.serviceCharge ?? 0)
+                )}
+              </span>
             </div>
             <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2 fw-bold text-danger fs-5">
               <span>Grand Total</span>
-              <span>{formatCurrency(order.total)}</span>
+              <span>{formatCurrency(currentOrder.total)}</span>
             </div>
           </div>
         </div>
@@ -181,23 +244,23 @@ export const OrderDetailsModal = ({
         <div className="col-12 col-md-5 border-start border-light-subtle">
           <h6 className="fw-bold text-dark mb-3">Order Details</h6>
           <div className="p-3 border rounded-3 bg-light mb-4 small">
-            <div className="mb-2">Order Type: <strong className="text-danger">{order.orderType === 'Takeaway' || String(order.table).toLowerCase() === 'takeaway' ? 'Takeaway' : 'Table Dine-In'}</strong></div>
-            {order.orderType !== 'Takeaway' && String(order.table).toLowerCase() !== 'takeaway' && (
+            <div className="mb-2">Order Type: <strong className="text-danger">{currentOrder.orderType === 'Takeaway' || String(currentOrder.table).toLowerCase() === 'takeaway' ? 'Takeaway' : 'Table Dine-In'}</strong></div>
+            {currentOrder.orderType !== 'Takeaway' && String(currentOrder.table).toLowerCase() !== 'takeaway' && (
               <>
-                <div className="mb-2">Table No: <strong>{order.table}</strong></div>
-                {(order.diners || order.number_of_diners) && (
-                  <div className="mb-2">Diners: <strong>{order.diners || order.number_of_diners} {Number(order.diners || order.number_of_diners) === 1 ? 'Diner' : 'Diners'}</strong></div>
+                <div className="mb-2">Table No: <strong>{currentOrder.table}</strong></div>
+                {(currentOrder.diners || currentOrder.number_of_diners) && (
+                  <div className="mb-2">Diners: <strong>{currentOrder.diners || currentOrder.number_of_diners} {Number(currentOrder.diners || currentOrder.number_of_diners) === 1 ? 'Diner' : 'Diners'}</strong></div>
                 )}
               </>
             )}
-            <div className="mb-2">Source: <strong>{order.source}</strong></div>
-            <div className="mb-2">Payment Method: <strong>{order.paymentMethod}</strong></div>
-            <div>Date/Time: <strong>{order.date} at {order.time}</strong></div>
+            <div className="mb-2">Source: <strong>{currentOrder.source}</strong></div>
+            <div className="mb-2">Payment Method: <strong>{currentOrder.paymentMethod}</strong></div>
+            <div>Date/Time: <strong>{currentOrder.date} at {currentOrder.time}</strong></div>
           </div>
 
           <h6 className="fw-bold text-dark mb-3">Operation History</h6>
           <div className="d-flex flex-column gap-3 small border-start ps-3" style={{ maxHeight: '180px', overflowY: 'auto' }}>
-            {order.history?.map((h, idx) => (
+            {currentOrder.history?.map((h, idx) => (
               <div key={idx} className="position-relative mb-2">
                 <span className="position-absolute bg-danger rounded-circle" style={{ width: '8px', height: '8px', left: '-21px', top: '5px' }}></span>
                 <div className="fw-bold text-dark">{h.action}</div>

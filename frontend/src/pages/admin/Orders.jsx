@@ -38,6 +38,54 @@ export const Orders = () => {
   const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState(null);
 
+  const [serviceTaxEnabled, setServiceTaxEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('foodie_service_tax_enabled');
+      return saved !== null ? saved !== 'false' : true;
+    } catch (e) {
+      return true;
+    }
+  });
+
+  const handleToggleServiceTax = (enabled) => {
+    setServiceTaxEnabled(enabled);
+    try {
+      localStorage.setItem('foodie_service_tax_enabled', String(enabled));
+    } catch (e) {}
+    window.dispatchEvent(new CustomEvent('foodie_service_tax_changed', { detail: { enabled } }));
+  };
+
+  const adjustOrderForServiceTax = (order) => {
+    if (!order) return order;
+    if (serviceTaxEnabled) return order;
+
+    const originalService = Number(order.service_charge_amount ?? order.serviceCharge ?? 0);
+    const taxable = Number(order.taxable_amount ?? 0);
+    const gst = Number(order.gst_amount ?? order.tax ?? 0);
+
+    let newTotal = Number(order.total ?? order.total_amount ?? 0);
+    let newRoundOff = Number(order.round_off ?? order.roundOff ?? 0);
+
+    if (taxable > 0 || gst > 0) {
+      const rawTotal = taxable + gst;
+      newTotal = Math.round(rawTotal);
+      newRoundOff = Math.round((newTotal - rawTotal) * 100) / 100;
+    } else if (originalService > 0) {
+      newTotal = Math.max(0, Math.round(newTotal - originalService));
+    }
+
+    return {
+      ...order,
+      service_charge_amount: 0,
+      serviceCharge: 0,
+      service_charge_rate: 0,
+      round_off: newRoundOff,
+      roundOff: newRoundOff,
+      total: newTotal,
+      total_amount: newTotal,
+    };
+  };
+
   useEffect(() => {
     fetchOrders(false);
     restaurantService.getRestaurants()
@@ -161,6 +209,29 @@ export const Orders = () => {
         actions={
           orders && orders.length > 0 ? (
             <div className="d-flex align-items-center gap-2 flex-wrap">
+              {/* Service Tax Checkbox / Toggle */}
+              <div
+                className="form-check form-switch d-flex align-items-center gap-2 m-0 bg-white border border-secondary-subtle rounded-pill px-3 py-1.5 shadow-xs"
+                style={{ minHeight: '32px' }}
+                title={user?.role === 'employee' ? 'Only administrators can change service tax' : 'Enable or disable service tax'}
+              >
+                <input
+                  id="service-tax-toggle"
+                  className="form-check-input m-0 cursor-pointer"
+                  type="checkbox"
+                  role="switch"
+                  checked={serviceTaxEnabled}
+                  onChange={(e) => handleToggleServiceTax(e.target.checked)}
+                  disabled={user?.role === 'employee'}
+                />
+                <label
+                  htmlFor="service-tax-toggle"
+                  className="form-check-label small fw-bold text-dark cursor-pointer user-select-none text-nowrap"
+                  style={{ fontSize: '12px' }}
+                >
+                  Service Tax
+                </label>
+              </div>
               {restaurants.length > 0 && (
                 <select
                   value={branchFilter}
@@ -262,7 +333,7 @@ export const Orders = () => {
           {filteredOrders.map((order) => (
             <div key={order.id} className="col-12">
               <OrderCard
-                order={order}
+                order={adjustOrderForServiceTax(order)}
                 onViewDetails={(ord) => setSelectedOrder(ord)}
                 onViewEBill={(ord) => setEBillOrder(ord)}
               />
@@ -278,7 +349,12 @@ export const Orders = () => {
           order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
           onStatusChange={updateStatus}
-          onViewEBill={() => setEBillOrder(selectedOrder)}
+          onViewEBill={(ord) => setEBillOrder(ord || selectedOrder)}
+          onOrderUpdated={(updated) => {
+            setSelectedOrder(updated);
+            setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
+            fetchOrders(false);
+          }}
           onPaymentRecorded={async () => {
             await fetchOrders(false);
           }}
@@ -289,7 +365,7 @@ export const Orders = () => {
       {eBillOrder && (
         <EBillModal
           isOpen={!!eBillOrder}
-          order={eBillOrder}
+          order={adjustOrderForServiceTax(eBillOrder)}
           onClose={() => setEBillOrder(null)}
         />
       )}

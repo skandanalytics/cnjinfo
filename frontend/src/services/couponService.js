@@ -215,6 +215,9 @@ export const couponService = {
     const cleanCode = String(couponData.code || '').trim().toUpperCase();
     const discountVal = parseFloat(couponData.discount || couponData.discount_value || 0);
     const minVal = parseFloat(couponData.minOrderValue || couponData.minimum_order_amount || 0);
+    if (minVal <= discountVal) {
+      throw new Error('Minimum order value must be greater than the discount value.');
+    }
     const isPct = couponData.type === 'percentage' || couponData.discount_type === 'PERCENTAGE';
     const desc = couponData.description || (isPct ? `${discountVal}% OFF on orders above ₹${minVal}` : `Flat ₹${discountVal} OFF on orders above ₹${minVal}`);
 

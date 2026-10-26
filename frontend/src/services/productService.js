@@ -409,7 +409,9 @@ export async function listOpenBranches() {
 
 export function chooseCustomerBranch(id) {
   sessionStorage.setItem('foodie_public_branch', String(id));
+  localStorage.setItem('foodie_public_branch', String(id));
   sessionStorage.setItem('foodie_branch_source', 'chosen');
+  localStorage.setItem('foodie_branch_source', 'chosen');
   cachedMappedProducts = null;
   cachedMappedProductsTime = 0;
 }
@@ -421,14 +423,16 @@ async function resolveCustomerBranchId() {
       const resolved = await api.get(`/public/qr/${qr}/`);
       if (resolved.data?.branch?.id) {
         sessionStorage.setItem('foodie_public_branch', String(resolved.data.branch.id));
+        localStorage.setItem('foodie_public_branch', String(resolved.data.branch.id));
         sessionStorage.setItem('foodie_branch_source', 'qr');
+        localStorage.setItem('foodie_branch_source', 'qr');
         sessionStorage.setItem('foodie_table_qr', qr);
         return String(resolved.data.branch.id);
       }
     } catch (e) { /* unknown QR falls through */ }
   }
-  const source = sessionStorage.getItem('foodie_branch_source');
-  const saved = sessionStorage.getItem('foodie_public_branch');
+  const source = sessionStorage.getItem('foodie_branch_source') || localStorage.getItem('foodie_branch_source');
+  const saved = sessionStorage.getItem('foodie_public_branch') || localStorage.getItem('foodie_public_branch');
   if (saved && (source === 'qr' || source === 'chosen')) return saved;
   try {
     const rows = await listOpenBranches();
@@ -476,6 +480,7 @@ export const productService = {
       cachedMappedProducts = mapped;
       cachedMappedProductsTime = Date.now();
       sessionStorage.setItem('foodie_public_branch', String(branchId));
+      localStorage.setItem('foodie_public_branch', String(branchId));
       return mapped;
     }
 

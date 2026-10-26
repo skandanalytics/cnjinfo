@@ -185,11 +185,12 @@ export const SearchBar = ({
 
   return (
     <div ref={containerRef} className={`position-relative ${className}`} style={{ ...style, minWidth: '160px' }}>
-      <FiSearch
-        className="position-absolute top-50 start-0 translate-middle-y ms-3"
-        style={{ color: disabled ? '#94a3b8' : 'var(--primary-color)', zIndex: 3 }}
-        size={18}
-      />
+      <div
+        className="position-absolute start-0 top-0 bottom-0 d-flex align-items-center justify-content-center ms-3"
+        style={{ color: disabled ? '#94a3b8' : 'var(--primary-color)', zIndex: 3, pointerEvents: 'none' }}
+      >
+        <FiSearch size={18} />
+      </div>
       <input
         ref={inputRef}
         type="text"
@@ -227,7 +228,7 @@ export const SearchBar = ({
             setHighlightedIndex(-1);
             inputRef.current?.focus();
           }}
-          className="btn btn-link position-absolute top-50 end-0 translate-middle-y me-2 p-1 text-secondary text-decoration-none border-0 bg-transparent"
+          className="position-absolute end-0 top-0 bottom-0 d-flex align-items-center justify-content-center me-2 p-1 text-secondary border-0 bg-transparent"
           style={{ cursor: 'pointer', zIndex: 3 }}
           aria-label="Clear search"
         >

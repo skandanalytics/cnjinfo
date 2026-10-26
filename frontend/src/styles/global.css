@@ -336,6 +336,49 @@ html, body {
   cursor: not-allowed;
 }
 
+/* Ensure absolute-positioned utility buttons inside controls stay vertically centered */
+.btn.translate-middle-y,
+.btn.translate-middle-y:hover,
+.btn.translate-middle-y:active,
+.btn.translate-middle-y:focus {
+  transform: translateY(-50%) !important;
+}
+
+/* ==========================================================================
+   Icon & Symbol Vertical Alignment Normalization (Application-Wide)
+   ========================================================================== */
+.bi, [class^="bi-"], [class*=" bi-"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.bi::before, [class^="bi-"]::before, [class*=" bi-"]::before {
+  vertical-align: 0 !important;
+  line-height: 1 !important;
+}
+
+/* Icons inside controls, buttons, dropdowns, and navigation */
+.btn > svg,
+.btn > .bi,
+.dropdown-item > svg,
+.dropdown-item > .bi,
+.nav-link > svg,
+.nav-link > .bi,
+.sidebar-link > svg,
+.sidebar-link > .bi {
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+/* Ensure select dropdown chevrons remain vertically centered */
+.form-select,
+.form-select-sm {
+  background-position: right 0.75rem center !important;
+}
+
 /* Card Food-Type Badge Overlay Container */
 .food-type-badge-container {
   display: inline-flex !important;

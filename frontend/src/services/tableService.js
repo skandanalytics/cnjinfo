@@ -274,9 +274,9 @@ const mapTableToFrontend = (t) => {
 
 export const tableService = {
   getCanonicalTableNumber,
-  getTables: async () => {
+  getTables: async (branchId) => {
     const { isStaffScreen, listTables } = await import('./adminApi');
-    if (isStaffScreen()) return listTables();
+    if (isStaffScreen()) return listTables(branchId);
     return [];
     try {
       let rawList = [];

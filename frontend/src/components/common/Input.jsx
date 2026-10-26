@@ -28,7 +28,7 @@ export const Input = ({
       <div className="position-relative">
         <input
           type={inputType}
-          className={`form-control rounded-3 py-2 ${error ? 'is-invalid' : ''}`}
+          className={`form-control rounded-3 py-2 ${isPassword ? 'pe-5' : ''} ${error ? 'is-invalid' : ''}`}
           placeholder={placeholder}
           value={value}
           onChange={onChange}
@@ -39,9 +39,11 @@ export const Input = ({
         {isPassword && (
           <button
             type="button"
-            className="btn position-absolute top-50 end-0 translate-middle-y border-0 text-muted px-3"
+            className="position-absolute end-0 top-0 bottom-0 d-flex align-items-center justify-content-center border-0 text-muted px-3 bg-transparent"
+            style={{ cursor: 'pointer', zIndex: 5, transform: 'none' }}
             onClick={() => setShowPassword(!showPassword)}
             tabIndex="-1"
+            aria-label={showPassword ? 'Hide password' : 'Show password'}
           >
             {showPassword ? <FiEyeOff size={18} /> : <FiEye size={18} />}
           </button>

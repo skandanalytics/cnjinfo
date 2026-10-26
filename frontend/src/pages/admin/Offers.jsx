@@ -140,6 +140,12 @@ export const Offers = () => {
       setCouponError('Valid until cannot be earlier than today.');
       return;
     }
+    const discountNum = parseFloat(discount);
+    const minOrderNum = parseFloat(minOrder || '0');
+    if (isNaN(discountNum) || isNaN(minOrderNum) || minOrderNum <= discountNum) {
+      setCouponError('Minimum order value must be greater than the discount value.');
+      return;
+    }
 
     try {
       await couponService.createCoupon({
@@ -696,7 +702,10 @@ export const Offers = () => {
             type="number"
             placeholder="e.g. 50"
             value={discount}
-            onChange={(e) => setDiscount(e.target.value)}
+            onChange={(e) => {
+              setDiscount(e.target.value);
+              if (couponError.includes('Minimum order value')) setCouponError('');
+            }}
             required
           />
           <Input
@@ -704,8 +713,12 @@ export const Offers = () => {
             type="number"
             placeholder="e.g. 299"
             value={minOrder}
-            onChange={(e) => setMinOrder(e.target.value)}
+            onChange={(e) => {
+              setMinOrder(e.target.value);
+              if (couponError.includes('Minimum order value')) setCouponError('');
+            }}
             required
+            error={(discount !== '' && minOrder !== '' && !isNaN(parseFloat(discount)) && !isNaN(parseFloat(minOrder)) && parseFloat(minOrder) <= parseFloat(discount)) ? 'Minimum order value must be greater than the discount value.' : undefined}
           />
           <Input
             label="Valid Until"
@@ -714,7 +727,7 @@ export const Offers = () => {
             value={validity}
             onChange={(e) => { setValidity(e.target.value); setCouponError(''); }}
             required
-            error={couponError}
+            error={couponError && !couponError.includes('Minimum order value') ? couponError : undefined}
           />
           {couponError && <div className="text-danger small fw-semibold mb-2">{couponError}</div>}
           <div className="form-check form-switch mb-3">

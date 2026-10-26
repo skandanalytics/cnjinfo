@@ -29,9 +29,10 @@ export const PageHeader = ({
           <button 
             type="button"
             onClick={handleBack} 
-            className="btn btn-light rounded-circle p-2 border d-flex align-items-center justify-content-center"
+            className="btn btn-light rounded-circle p-0 border d-inline-flex align-items-center justify-content-center"
             style={{ width: '36px', height: '36px' }}
-            title="Back to Manage Menus"
+            title="Back"
+            aria-label="Go back"
           >
             <FiChevronLeft size={20} />
           </button>

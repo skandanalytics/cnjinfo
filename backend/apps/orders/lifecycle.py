@@ -123,7 +123,7 @@ def _owns_order(order, user):
 
 
 @transaction.atomic
-def create_from_cart(user, branch, idempotency_key, payment_method):
+def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True):
     from apps.accounts.permissions import get_active_employee
     from apps.accounts.scoping import can_access_branch
 
@@ -153,7 +153,8 @@ def create_from_cart(user, branch, idempotency_key, payment_method):
         raise OrderError("Your cart needs attention before checkout.", "cart_invalid", 409)
     try:
         priced = price_order(branch, _lines_of(cart), cart.order_type, None if assisted else user,
-                             [c.code for c in cart.coupons.all()], allow_auto=not cart.skip_auto_coupons)
+                             [c.code for c in cart.coupons.all()], allow_auto=not cart.skip_auto_coupons,
+                             service_tax_enabled=service_tax_enabled)
     except PricingError as exc:
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
 
@@ -243,7 +244,7 @@ def _write_items(order, priced):
 
 
 @transaction.atomic
-def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=None, order_type=Order.Type.DINE_IN, coupon_code="", customer_phone="", customer_name="", mark_paid=False, payment_method="CASH"):
+def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=None, order_type=Order.Type.DINE_IN, coupon_code="", customer_phone="", customer_name="", mark_paid=False, payment_method="CASH", service_tax_enabled=True):
     """Staff places a dine-in or takeaway order. The creator is the logged-in staff member."""
     from apps.accounts.permissions import get_active_employee
     from apps.accounts.scoping import can_access_branch
@@ -286,12 +287,22 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
     # Customer lookup/association
     customer = None
     if customer_phone:
+        customer_phone = customer_phone.strip()
         customer = User.objects.filter(phone=customer_phone, user_type=User.UserType.CUSTOMER).first()
+        if customer is None and not User.objects.filter(phone=customer_phone).exists():
+            customer = User.objects.create(
+                phone=customer_phone,
+                name=(customer_name or "").strip(),
+                user_type=User.UserType.CUSTOMER,
+            )
+        elif customer and customer_name and customer_name.strip() and not customer.name:
+            customer.name = customer_name.strip()
+            customer.save(update_fields=["name"])
 
     lines = [Line(row["food"], row["quantity"], row.get("options", []), row.get("special_instructions", "")) for row in item_rows]
     coupon_codes = [coupon_code.strip()] if coupon_code and coupon_code.strip() else []
     try:
-        priced = price_order(branch, lines, order_type, customer, coupon_codes)
+        priced = price_order(branch, lines, order_type, customer, coupon_codes, service_tax_enabled=service_tax_enabled)
     except PricingError as exc:
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
 
