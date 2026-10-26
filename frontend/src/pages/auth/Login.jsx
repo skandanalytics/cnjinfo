@@ -4,7 +4,7 @@ import { useAuth } from '../../hooks/useAuth';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import { FiLock, FiMail, FiCheckCircle, FiShield, FiKey } from 'react-icons/fi';
-import { getApiUrl } from '../../config/apiConfig';
+import api from '../../config/api';
 
 export const Login = () => {
   const navigate = useNavigate();
@@ -19,10 +19,9 @@ export const Login = () => {
 
   useEffect(() => {
     let active = true;
-    fetch(getApiUrl('/db/status/'), { headers: { Accept: 'application/json' } })
-      .then((res) => res.ok ? res.json() : Promise.reject())
-      .then((data) => {
-        if (active && data.setup_required) navigate('/db', { replace: true });
+    api.get('/db/status/')
+      .then((res) => {
+        if (active && res.data?.setup_required) navigate('/db', { replace: true });
       })
       .catch(() => {});
     return () => { active = false; };

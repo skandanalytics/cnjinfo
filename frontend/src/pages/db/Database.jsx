@@ -2,23 +2,24 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { staffJson, clearStaffSession } from '../../services/staffClient';
 import { staffLogin } from '../../services/adminApi';
-import { getApiUrl } from '../../config/apiConfig';
+import api from '../../config/api';
 
 const PHRASE = 'DELETE ALL APPLICATION DATA';
 
 async function publicJson(path, options = {}) {
-  const res = await fetch(getApiUrl(`/db${path}`), {
-    method: options.method || 'GET',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const error = new Error(data.detail || 'The request could not be completed.');
-    error.status = res.status;
+  try {
+    const res = await api({
+      url: `/db${path}`,
+      method: options.method || 'GET',
+      data: options.body,
+    });
+    return res.data;
+  } catch (err) {
+    const data = err.response?.data || {};
+    const error = new Error(data.detail || err.message || 'The request could not be completed.');
+    error.status = err.response?.status;
     throw error;
   }
-  return data;
 }
 
 function readSession() {

@@ -7,7 +7,7 @@ import {
   staffJson,
 } from './staffClient';
 import { classifyStock } from '../utils/stockStatus';
-import { getApiUrl } from '../config/apiConfig';
+import api from '../config/api';
 
 export { isStaffScreen };
 
@@ -86,14 +86,16 @@ export async function currentBranchId() {
 }
 
 export async function staffLogin(code, password) {
-  const res = await fetch(getApiUrl('/auth/staff/login/'), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ employee_code: String(code || '').trim(), password }),
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new Error(data.detail || 'Invalid employee code or password.');
+  let data;
+  try {
+    const res = await api.post('/auth/staff/login/', {
+      employee_code: String(code || '').trim(),
+      password,
+    });
+    data = res.data || {};
+  } catch (err) {
+    const errData = err.response?.data || {};
+    throw new Error(errData.detail || err.message || 'Invalid employee code or password.');
   }
   setStaffSession(data.access, data.refresh);
   const emp = data.user?.employee;

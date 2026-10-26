@@ -4,6 +4,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import Loader from '../common/Loader';
 import { FiPrinter, FiToggleLeft, FiToggleRight } from 'react-icons/fi';
+import { SERVER_ORIGIN } from '../../config/apiConfig';
 
 export const QRDisplayModal = ({
   isOpen,
@@ -22,11 +23,8 @@ export const QRDisplayModal = ({
   const getInitialHost = () => {
     const saved = localStorage.getItem('foodie_network_host');
     if (saved && saved.trim()) return saved.trim().replace(/\/+$/, '');
-    const origin = window.location.origin.replace(/\/+$/, '');
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
-      return 'http://192.168.1.13:3000';
-    }
-    return origin;
+    if (SERVER_ORIGIN) return SERVER_ORIGIN;
+    return window.location.origin.replace(/\/+$/, '');
   };
 
   const [customHost, setCustomHost] = useState(getInitialHost);

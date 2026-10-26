@@ -20,7 +20,7 @@
  */
 
 // Set to your centralized server address:
-export const DEFAULT_SERVER_URL = 'http://localhost:8000';
+export const DEFAULT_SERVER_URL = 'http://192.168.1.15:8000';
 
 /**
  * Resolves the raw base URL from environment variables or the default server URL fallback.
@@ -52,7 +52,12 @@ function resolveRawBaseUrl() {
     return devTarget.replace(/\/+$/, '');
   }
 
-  return '';
+  // If running in browser, automatically target backend port 8000 on the same host
+  if (typeof window !== 'undefined' && window.location && window.location.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+
+  return 'http://127.0.0.1:8000';
 }
 
 const rawBase = resolveRawBaseUrl();
