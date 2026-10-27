@@ -227,9 +227,26 @@ export const Welcome = () => {
         rememberScannedTableQr(null);
         setTableNum('');
         setDineInAvailable(false);
-        setQrDisabled(true);
-        setQrMessage(err.response?.data?.detail || 'This table QR is currently unavailable or disabled.');
-        setError(err.response?.data?.detail || 'This table QR is currently unavailable or disabled.');
+        if (err.isNetworkError || !err.response) {
+          // Network error: Backend is unreachable - do not misclassify as QR disabled
+          setQrDisabled(false);
+          const msg = err.message || 'Unable to connect to the backend server. Please check your network connection.';
+          setQrMessage(msg);
+          setError(msg);
+        } else {
+          setQrDisabled(true);
+          const data = err.response?.data;
+          let msg = data?.detail || 'This table QR is currently unavailable or disabled.';
+          if (data?.code === 'qr_disabled') {
+            msg = 'QR code ordering is currently turned off by the restaurant.';
+          } else if (data?.code === 'table_inactive') {
+            msg = 'This table is currently inactive or not in service.';
+          } else if (data?.code === 'branch_inactive') {
+            msg = 'This restaurant branch is currently inactive.';
+          }
+          setQrMessage(msg);
+          setError(msg);
+        }
       });
     }
     // setTable is recreated on every provider render, so it must not be a dependency here.

@@ -1,4 +1,5 @@
 import api from './api';
+import { buildTableQrUrl } from '../utils/qrUrl';
 
 const _isValidId = (id) => {
   if (id === undefined || id === null) return false;
@@ -13,14 +14,17 @@ export const qrService = {
       const rawList = res.data?.data || (Array.isArray(res.data) ? res.data : (res.data?.results || []));
       return rawList.map(t => {
         const tableId = t.id || t.table_id;
-        const baseHost = localStorage.getItem('foodie_network_host') || window.location.origin;
+        const qrToken = t.qr_code || t.qr_token || t.code || `FOODIE-TABLE-${tableId}`;
+        const { targetUrl } = buildTableQrUrl({ tableId, qrToken });
+        const generatedImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(targetUrl)}`;
         return {
           id: tableId,
           table: tableId,
-          code: t.qr_token || `FOODIE-TABLE-${tableId}`,
-          qr_token: t.qr_token || `FOODIE-TABLE-${tableId}`,
-          qr_data: t.qr_data || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${baseHost}/customer/welcome?table=${tableId}`)}`,
-          qr_image_url: t.qr_data || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${baseHost}/customer/welcome?table=${tableId}`)}`,
+          code: qrToken,
+          qr_code: t.qr_code || qrToken,
+          qr_token: qrToken,
+          qr_data: t.qr_data || generatedImage,
+          qr_image_url: t.qr_data || generatedImage,
           is_active: t.qr_is_active === false ? false : true
         };
       });
@@ -36,14 +40,17 @@ export const qrService = {
       const res = await api.get(`/tables/${id}/`);
       const t = res.data?.data || res.data;
       const tableId = t.id || t.table_id || id;
-      const baseHost = localStorage.getItem('foodie_network_host') || window.location.origin;
+      const qrToken = t.qr_code || t.qr_token || t.code || `FOODIE-TABLE-${tableId}`;
+      const { targetUrl } = buildTableQrUrl({ tableId, qrToken });
+      const generatedImage = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(targetUrl)}`;
       return {
         id: tableId,
         table: tableId,
-        code: t.qr_token || `FOODIE-TABLE-${tableId}`,
-        qr_token: t.qr_token || `FOODIE-TABLE-${tableId}`,
-        qr_data: t.qr_data || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${baseHost}/customer/welcome?table=${tableId}`)}`,
-        qr_image_url: t.qr_data || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${baseHost}/customer/welcome?table=${tableId}`)}`,
+        code: qrToken,
+        qr_code: t.qr_code || qrToken,
+        qr_token: qrToken,
+        qr_data: t.qr_data || generatedImage,
+        qr_image_url: t.qr_data || generatedImage,
         is_active: t.qr_is_active === false ? false : true
       };
     } catch (e) {

@@ -179,11 +179,22 @@ class QRResolveView(APIView):
         if not qr_ordering_enabled():
             return Response({"detail": "QR codes are turned off.", "code": "qr_disabled"}, status=409)
         invalid = Response({"detail": "Invalid or inactive QR code.", "code": "qr_invalid"}, status=404)
+        table = None
+        raw_qr = str(qr).strip()
         try:
-            code = uuid.UUID(str(qr))
-        except ValueError:
-            return invalid
-        table = DiningTable.objects.select_related("branch").filter(qr_code=code).first()
+            code = uuid.UUID(raw_qr)
+            table = DiningTable.objects.select_related("branch").filter(qr_code=code).first()
+        except (ValueError, AttributeError):
+            pass
+
+        if not table:
+            if raw_qr.upper().startswith("FOODIE-TABLE-"):
+                num_str = raw_qr[len("FOODIE-TABLE-"):].strip()
+                if num_str.isdigit():
+                    table = DiningTable.objects.select_related("branch").filter(pk=int(num_str)).first()
+            elif raw_qr.isdigit():
+                table = DiningTable.objects.select_related("branch").filter(pk=int(raw_qr)).first()
+
         if not table or not (table.is_active and table.qr_is_active and table.branch.is_active):
             return invalid
         return Response({

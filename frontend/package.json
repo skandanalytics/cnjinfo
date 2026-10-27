@@ -8,6 +8,7 @@
     "build": "vite build",
     "lint": "oxlint",
     "test": "node test-search.js",
+    "network:check": "node scripts/detect-network.cjs",
     "preview": "vite preview"
   },
   "dependencies": {

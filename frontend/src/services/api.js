@@ -17,7 +17,7 @@ const api = axios.create({
     'Content-Type': 'application/json',
     Accept: 'application/json',
   },
-  timeout: 10000,
+  timeout: 30000,
 });
 
 /*
@@ -28,9 +28,10 @@ const api = axios.create({
  */
 api.interceptors.request.use(
   (config) => {
-    // Normalize URL to prevent duplicate /api prefixes or duplicate slashes
+    // Normalize URL to prevent duplicate /api prefixes, duplicate slashes, or missing slashes
     if (config.url && !/^https?:\/\//i.test(config.url)) {
-      let cleanUrl = config.url.replace(/^\/+/, '/');
+      let cleanUrl = config.url.startsWith('/') ? config.url : `/${config.url}`;
+      cleanUrl = cleanUrl.replace(/^\/+/, '/');
       const baseEndsWithApi = config.baseURL && /\/api\/?$/i.test(config.baseURL);
       if (baseEndsWithApi) {
         if (cleanUrl.startsWith('/api/')) {
@@ -38,6 +39,9 @@ api.interceptors.request.use(
         } else if (cleanUrl === '/api') {
           cleanUrl = '';
         }
+      }
+      if (!cleanUrl.startsWith('/') && cleanUrl !== '') {
+        cleanUrl = `/${cleanUrl}`;
       }
       config.url = cleanUrl;
     }

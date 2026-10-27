@@ -1,5 +1,5 @@
-"""Foodie settings. All environment-specific values come from environment variables (.env)."""
 import os
+import socket
 from datetime import timedelta
 from pathlib import Path
 
@@ -39,6 +39,7 @@ else:
     ALLOWED_HOSTS = ["*"]
 
 INSTALLED_APPS = [
+    "apps.orders",
     "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
@@ -58,7 +59,6 @@ INSTALLED_APPS = [
     "apps.inventory",
     "apps.carts",
     "apps.coupons",
-    "apps.orders",
     "apps.payments",
     "apps.billing",
     "apps.audit",
@@ -93,6 +93,11 @@ TEMPLATES = [{
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
+# Operating Mode: 'centralized' or 'local' (default: local)
+FOODIE_MODE = (os.getenv("FOODIE_MODE") or os.getenv("APP_MODE") or "local").strip().lower()
+IS_CENTRALIZED_MODE = FOODIE_MODE == "centralized"
+IS_LOCAL_MODE = FOODIE_MODE == "local"
+
 # MySQL 8 is the primary operational database, with sqlite3 supported for portable testing.
 raw_db_engine = os.getenv("DB_ENGINE", "django.db.backends.mysql").strip()
 if "sqlite" in raw_db_engine.lower():
@@ -111,13 +116,17 @@ else:
     else:
         DB_ENGINE = raw_db_engine
 
+    # Default hosts based on mode
+    default_db_host = "192.168.150.171" if IS_CENTRALIZED_MODE else "127.0.0.1"
+    default_db_user = "foodie_user" if IS_CENTRALIZED_MODE else "root"
+
     DATABASES = {
         "default": {
             "ENGINE": DB_ENGINE,
             "NAME": os.getenv("DB_NAME", "foodie_db"),
-            "USER": os.getenv("DB_USER", "foodie_user"),
+            "USER": os.getenv("DB_USER", default_db_user),
             "PASSWORD": os.getenv("DB_PASSWORD", ""),
-            "HOST": os.getenv("DB_HOST", "127.0.0.1"),
+            "HOST": os.getenv("DB_HOST", default_db_host),
             "PORT": os.getenv("DB_PORT", "3306"),
             "OPTIONS": {"charset": "utf8mb4", "init_command": "SET sql_mode='STRICT_TRANS_TABLES'"},
             # Daphne/ASGI serves each request on a thread-pool worker. Persistent
@@ -128,6 +137,11 @@ else:
             "TEST": {"NAME": os.getenv("DB_TEST_NAME", "test_foodie_db")},
         }
     }
+
+# Print sanitized startup summary to console
+if os.getenv("RUN_MAIN") == "true":
+    db_target = f"{DATABASES['default']['HOST']}:{DATABASES['default'].get('PORT', '3306')}/{DATABASES['default']['NAME']}"
+    print(f"[Foodie Backend] Mode: {FOODIE_MODE.upper()} | DB: {db_target} (User: {DATABASES['default']['USER']})")
 
 AUTH_USER_MODEL = "accounts.User"
 
@@ -202,6 +216,24 @@ if csrf_trusted_env:
     for o in csrf_trusted_env:
         if o not in CSRF_TRUSTED_ORIGINS:
             CSRF_TRUSTED_ORIGINS.append(o)
+
+# Dynamically discover all local host IPv4 addresses to ensure LAN access works
+# smoothly whenever host computer changes Wi-Fi/Ethernet networks
+_local_detected_ips = {"127.0.0.1", "localhost"}
+try:
+    _host_name = socket.gethostname()
+    for _ip in socket.gethostbyname_ex(_host_name)[2]:
+        _local_detected_ips.add(_ip)
+except Exception:
+    pass
+
+for _detected_ip in _local_detected_ips:
+    for _dev_port in ("5173", "5174", "8000", "3000"):
+        _origin = f"http://{_detected_ip}:{_dev_port}"
+        if _origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(_origin)
+        if _origin not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(_origin)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": ("rest_framework_simplejwt.authentication.JWTAuthentication",),
