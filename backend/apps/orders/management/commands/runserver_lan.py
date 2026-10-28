@@ -54,7 +54,7 @@ def test_db_connection():
 class Command(BaseRunserverCommand):
     help = "Starts the Foodie ASGI development server with LAN discovery and status display."
 
-    default_addr = '0.0.0.0'
+    default_addr = '127.0.0.1'
     default_port = '8000'
 
     def inner_run(self, *args, **options):

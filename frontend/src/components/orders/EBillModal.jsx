@@ -37,8 +37,14 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
 
   const statusText = String(order.backendStatus || order.status || '');
   const isCompleted = ['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(statusText.toUpperCase());
-  const paymentCode = String(order.payment_status || order.paymentStatus || 'UNPAID').toUpperCase();
-  const paymentLabel = PAYMENT_STATUS_LABEL[paymentCode] || paymentCode;
+  const isConfirmedPaid = Boolean(
+    order.is_paid ||
+    order.isPaid ||
+    String(order.payment_status || order.paymentStatus || '').toUpperCase() === 'PAID' ||
+    String(order.status || '').toUpperCase() === 'SETTLED'
+  );
+  const paymentCode = isConfirmedPaid ? 'PAID' : String(order.payment_status || order.paymentStatus || 'UNPAID').toUpperCase();
+  const paymentLabel = PAYMENT_STATUS_LABEL[paymentCode] || (paymentCode === 'PAID' ? 'Paid' : 'Unpaid');
   const methodName = order.paymentMethodName || (
     order.payment_method && !['UNPAID', 'PAID', 'PENDING', 'FAILED', 'REFUNDED', 'SUCCESS'].includes(String(order.payment_method).toUpperCase())
       ? order.payment_method
@@ -189,17 +195,19 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
 
         <div className="foodie-invoice-totals">
           <Row label="Subtotal" value={money(subtotal)} />
-          <Row label="Add-on charges" value={money(addonTotal)} />
-          <Row label="Menu discounts" value={discount(dishDiscount)} />
-          <Row label="Coupon discounts" value={discount(couponDiscount)} />
+          {addonTotal > 0 && <Row label="Add-on charges" value={money(addonTotal)} />}
+          {dishDiscount > 0 && <Row label="Menu discounts" value={discount(dishDiscount)} />}
           {(isTakeaway || packingCharge !== 0) && <Row label="Takeaway charges" value={money(packingCharge)} />}
+          {serviceCharge > 0 && (
+            <Row
+              label={`Service charge (${order.service_charge_rate != null && order.service_charge_rate !== '' ? order.service_charge_rate : 0}%)`}
+              value={money(serviceCharge)}
+            />
+          )}
           <Row label="Taxable amount" value={money(order.taxable_amount ?? 0)} />
+          {couponDiscount > 0 && <Row label="Coupon discounts" value={discount(couponDiscount)} />}
           <Row label={order.gst_rate != null && order.gst_rate !== '' ? `GST (${order.gst_rate}%)` : 'GST'} value={money(tax)} />
-          <Row
-            label={`Service charge (${order.service_charge_rate != null && order.service_charge_rate !== '' ? order.service_charge_rate : 0}%)`}
-            value={money(serviceCharge)}
-          />
-          <Row label="Round-off" value={money(roundOff)} />
+          {roundOff !== 0 && <Row label="Round-off" value={money(roundOff)} />}
           <Row label="Grand total" value={money(grandTotal)} emphasis />
         </div>
 

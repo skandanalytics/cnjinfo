@@ -95,12 +95,27 @@ export function getSelectedTableId() {
   return null;
 }
 
-export function setSelectedTableId(id) {
+export function setSelectedTableId(id, tableNumber = null) {
   if (id && Number.isInteger(Number(id)) && Number(id) > 0) {
     sessionStorage.setItem(TABLE_KEY, String(id));
     localStorage.setItem(TABLE_KEY, String(id));
     sessionStorage.setItem(LAST_DINE_IN_TABLE_KEY, String(id));
     localStorage.setItem(LAST_DINE_IN_TABLE_KEY, String(id));
+    try {
+      const currentTableRaw = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+      const current = currentTableRaw ? JSON.parse(currentTableRaw) : {};
+      const numStr = tableNumber || current.tableNumber || (Number(id) < 10 ? `T0${id}` : `T${id}`);
+      const updated = {
+        ...current,
+        tableId: id,
+        id,
+        tableNumber: numStr,
+        orderType: DINE_IN,
+        isTakeaway: false,
+      };
+      sessionStorage.setItem('foodie_table', JSON.stringify(updated));
+      localStorage.setItem('foodie_table', JSON.stringify(updated));
+    } catch (e) {}
   } else {
     sessionStorage.removeItem(TABLE_KEY);
     localStorage.removeItem(TABLE_KEY);

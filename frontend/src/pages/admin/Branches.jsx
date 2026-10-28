@@ -99,7 +99,7 @@ export const Branches = () => {
     setEditingBranch(null);
     setFormData({
       name: '',
-      code: `FD-${Math.random().toString(36).substring(2, 6).toUpperCase()}`,
+      code: '',
       city: 'Bangalore',
       address: '',
       phone: '',
@@ -125,7 +125,6 @@ export const Branches = () => {
       email: branch.email || '',
       managerName: branch.managerName || '',
       openingHours: branch.openingHours || '10:00 AM - 11:30 PM',
-      tablesCount: branch.tablesCount || 20,
       status: branch.status || 'Active',
       isMainBranch: Boolean(branch.isMainBranch),
       image: branch.image || ''
@@ -264,7 +263,7 @@ export const Branches = () => {
           )}
 
           <div className="row g-3">
-            <div className="col-12 col-md-8">
+            <div className={editingBranch ? "col-12 col-md-8" : "col-12"}>
               <Input 
                 label="Branch Name"
                 name="name"
@@ -275,16 +274,19 @@ export const Branches = () => {
               />
             </div>
 
-            <div className="col-12 col-md-4">
-              <Input 
-                label="Branch Code"
-                name="code"
-                placeholder="e.g. FD-CYBER-03"
-                value={formData.code}
-                onChange={handleFormChange}
-                disabled
-              />
-            </div>
+            {editingBranch && (
+              <div className="col-12 col-md-4">
+                <Input 
+                  label="Branch Code"
+                  name="code"
+                  placeholder="e.g. BR001"
+                  value={formData.code}
+                  disabled
+                  readOnly
+                  helpText="Assigned by system"
+                />
+              </div>
+            )}
 
             <div className="col-12 col-md-6">
               <Input 
@@ -370,7 +372,7 @@ export const Branches = () => {
               />
             </div>
 
-            <div className={`col-12 ${editingBranch ? 'col-md-4' : 'col-md-6'}`}>
+            <div className="col-12 col-md-6">
               <Input 
                 label="Branch Manager Name"
                 name="managerName"
@@ -381,7 +383,7 @@ export const Branches = () => {
               />
             </div>
 
-            <div className={`col-12 ${editingBranch ? 'col-md-4' : 'col-md-6'}`}>
+            <div className="col-12 col-md-6">
               <Input 
                 label="Opening Hours"
                 name="openingHours"
@@ -390,20 +392,6 @@ export const Branches = () => {
                 onChange={handleFormChange}
               />
             </div>
-
-            {editingBranch && (
-              <div className="col-12 col-md-4">
-                <Input 
-                  label="Total Tables"
-                  name="tablesCount"
-                  type="number"
-                  value={editingBranch.liveTables ?? editingBranch.tablesCount ?? 0}
-                  disabled
-                  readOnly
-                  helpText="Managed via Tables directory"
-                />
-              </div>
-            )}
 
             <div className="col-12">
               <Input 

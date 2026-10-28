@@ -171,8 +171,10 @@ export async function saveBranch(form, existingId) {
     cover_image_url: (form.image || '').trim(),
     is_primary: Boolean(form.isMainBranch),
     is_active: form.status === 'Active',
-    configured_table_count: Math.max(0, parseInt(form.tablesCount, 10) || 0),
   };
+  if (form.tablesCount !== undefined && form.tablesCount !== null && form.tablesCount !== '') {
+    body.configured_table_count = Math.max(0, parseInt(form.tablesCount, 10) || 0);
+  }
   const data = existingId
     ? await staffJson(`/branches/${existingId}/`, { method: 'PATCH', body: JSON.stringify(body) })
     : await staffJson('/branches/', { method: 'POST', body: JSON.stringify(body) });
@@ -347,7 +349,8 @@ function mapFood(f, stockByFood) {
     id: f.id,
     name: f.name,
     description: f.description || '',
-    price: paid,
+    price: original,
+    sellingPrice: paid,
     originalPrice: original,
     discountPrice: discount ? paid : 0,
     discountPercent: discount && discount.type === 'PERCENT' ? Number(discount.value) : 0,

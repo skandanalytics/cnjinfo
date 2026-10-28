@@ -337,28 +337,111 @@ export const Pos = () => {
       return;
     }
 
-    const idx = findCartIndex(dish.id);
-    if (idx >= 0) {
-      const updated = [...cartItems];
-      updated[idx].quantity += 1;
-      setCartItems(updated);
-    } else {
-      setCartItems(prev => [...prev, {
-        dish,
-        quantity: 1,
-        options: [],
-        specialInstructions: '',
-      }]);
-    }
+    setCartItems(prev => {
+      const idx = prev.findIndex(i => 
+        String(i.dish.id) === String(dish.id) &&
+        (!i.options || i.options.length === 0) &&
+        !i.specialInstructions
+      );
+      if (idx >= 0) {
+        const updated = [...prev];
+        updated[idx] = {
+          ...updated[idx],
+          quantity: Number(updated[idx].quantity || 0) + 1,
+        };
+        return updated;
+      } else {
+        return [...prev, {
+          dish,
+          quantity: 1,
+          options: [],
+          specialInstructions: '',
+        }];
+      }
+    });
+  };
+
+  const handleIncrementDish = (dish) => {
+    setCartItems(prev => {
+      let idx = -1;
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (String(prev[i].dish.id) === String(dish.id)) {
+          idx = i;
+          break;
+        }
+      }
+
+      if (idx === -1) {
+        // If not in cart, add it directly
+        return [...prev, {
+          dish,
+          quantity: 1,
+          options: [],
+          specialInstructions: '',
+        }];
+      }
+
+      const item = prev[idx];
+      const currentTotalQty = prev
+        .filter(i => String(i.dish.id) === String(item.dish.id))
+        .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
+
+      const maxStock = (dish.stock !== undefined && dish.stock !== null) 
+        ? Number(dish.stock) 
+        : ((item.dish.stock !== undefined && item.dish.stock !== null) ? Number(item.dish.stock) : null);
+
+      if (maxStock !== null && !isNaN(maxStock) && currentTotalQty + 1 > maxStock) {
+        const msg = maxStock <= 0 
+          ? "This item is currently out of stock." 
+          : (maxStock === 1 ? "Only 1 item is available." : `Only ${maxStock} of '${item.dish.name}' left.`);
+        setOrderError(msg);
+        setToast({ show: true, message: msg, type: 'remove' });
+        return prev;
+      }
+
+      setOrderError('');
+      const updated = [...prev];
+      updated[idx] = {
+        ...item,
+        quantity: Number(item.quantity || 0) + 1,
+      };
+      return updated;
+    });
+  };
+
+  const handleDecrementDish = (dish) => {
+    setCartItems(prev => {
+      let idx = -1;
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (String(prev[i].dish.id) === String(dish.id)) {
+          idx = i;
+          break;
+        }
+      }
+
+      if (idx === -1) return prev;
+      const item = prev[idx];
+      const newQty = Number(item.quantity || 0) - 1;
+      const updated = [...prev];
+      if (newQty <= 0) {
+        updated.splice(idx, 1);
+      } else {
+        updated[idx] = {
+          ...item,
+          quantity: newQty,
+        };
+      }
+      setOrderError('');
+      return updated;
+    });
   };
 
   const handleUpdateQuantity = (index, delta) => {
     setCartItems(prev => {
-      const updated = [...prev];
-      const item = updated[index];
+      const item = prev[index];
       if (!item) return prev;
       if (delta > 0) {
-        const currentTotalQty = updated
+        const currentTotalQty = prev
           .filter(i => String(i.dish.id) === String(item.dish.id))
           .reduce((sum, i) => sum + (Number(i.quantity) || 0), 0);
         const maxStock = (item.dish.stock !== undefined && item.dish.stock !== null) ? Number(item.dish.stock) : null;
@@ -371,11 +454,15 @@ export const Pos = () => {
           return prev;
         }
       }
-      const newQty = item.quantity + delta;
+      const newQty = Number(item.quantity || 0) + delta;
+      const updated = [...prev];
       if (newQty <= 0) {
         updated.splice(index, 1);
       } else {
-        updated[index].quantity = newQty;
+        updated[index] = {
+          ...item,
+          quantity: newQty,
+        };
       }
       setOrderError('');
       return updated;
@@ -819,8 +906,8 @@ export const Pos = () => {
                       dish.is_orderable === false || 
                       dish.isOrderable === false;
                     const ft = normalizeFoodType(dish.foodType || dish.type);
-                    const cartItem = cartItems.find(i => String(i.dish.id) === String(dish.id));
-                    const cartQty = cartItem ? cartItem.quantity : 0;
+                    const matchingCartItems = cartItems.filter(i => String(i.dish.id) === String(dish.id));
+                    const cartQty = matchingCartItems.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
                     const hasToppings = Array.isArray(dish.customizations) && dish.customizations.length > 0;
 
                     return (
@@ -933,10 +1020,8 @@ export const Pos = () => {
                                   <button
                                     type="button"
                                     className="btn btn-xs btn-link text-danger p-0 border-0"
-                                    onClick={() => {
-                                      const idx = cartItems.findIndex(i => String(i.dish.id) === String(dish.id));
-                                      if (idx >= 0) handleUpdateQuantity(idx, -1);
-                                    }}
+                                    onClick={() => handleDecrementDish(dish)}
+                                    title="Decrease quantity"
                                   >
                                     <FiMinus size={13} />
                                   </button>
@@ -955,7 +1040,7 @@ export const Pos = () => {
                                         ? 'not-allowed'
                                         : 'pointer'
                                     }}
-                                    onClick={() => handleAddDish(dish)}
+                                    onClick={() => handleIncrementDish(dish)}
                                     title={
                                       dish.stock !== null && dish.stock !== undefined && cartQty >= Number(dish.stock)
                                         ? (Number(dish.stock) === 1 ? "Only 1 item is available." : `Only ${dish.stock} of '${dish.name}' left.`)
@@ -1168,7 +1253,7 @@ export const Pos = () => {
                     const ft = normalizeFoodType(item.dish.foodType || item.dish.type);
 
                     return (
-                      <div key={idx} className="p-2.5 rounded-3 border bg-light-subtle">
+                      <div key={`${item.dish.id}-${idx}-${(item.options || []).map(o => o.id || o).join('-')}`} className="p-2.5 rounded-3 border bg-light-subtle">
                         <div className="d-flex align-items-start justify-content-between gap-2">
                           <div className="flex-grow-1 text-truncate">
                             <div className="d-flex align-items-center gap-1.5">
@@ -1329,13 +1414,6 @@ export const Pos = () => {
                 </div>
               )}
 
-              {billSummary.couponDiscount > 0 && (
-                <div className="d-flex justify-content-between text-success mb-1.5 small" style={{ fontSize: '12px' }}>
-                  <span>Coupon Savings</span>
-                  <span className="fw-semibold">-{formatCurrency(billSummary.couponDiscount)}</span>
-                </div>
-              )}
-
               {orderType === 'TAKEAWAY' && billSummary.packingCharge > 0 && (
                 <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
                   <span>Takeaway Packing Charge ({billSummary.totalQuantity} items × ₹10)</span>
@@ -1347,6 +1425,13 @@ export const Pos = () => {
                 <span>Taxable Amount</span>
                 <span className="fw-semibold text-dark">{formatCurrency(billSummary.taxableAmount)}</span>
               </div>
+
+              {billSummary.couponDiscount > 0 && (
+                <div className="d-flex justify-content-between text-success mb-1.5 small" style={{ fontSize: '12px' }}>
+                  <span>Coupon Discount</span>
+                  <span className="fw-semibold">-{formatCurrency(billSummary.couponDiscount)}</span>
+                </div>
+              )}
 
               <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
                 <span>GST (5%)</span>

@@ -95,8 +95,18 @@ def _display_snapshot(invoice):
         contact = _invoice_contact(order)
         if not snap.get("customer_name"):
             snap["customer_name"] = contact.get("customer_name") or ""
-        if not snap.get("payment_method"):
-            snap["payment_method"] = contact.get("payment_method") or ""
+        if contact.get("payment_method"):
+            snap["payment_method"] = contact.get("payment_method")
+        elif not snap.get("payment_method"):
+            snap["payment_method"] = getattr(order, "payment_method", "") or ""
+
+        # Ensure payment_status accurately reflects the order's real payment record
+        p_status = str(getattr(order, "payment_status", "") or "").upper()
+        if p_status in ("PAID", "SUCCESS") or (hasattr(order, "payments") and order.payments.filter(status="SUCCESS").exists()):
+            snap["payment_status"] = "PAID"
+        elif p_status:
+            snap["payment_status"] = p_status
+
         live_items = list(order.items.all())
         if items and len(items) == len(live_items):
             for row, live in zip(items, live_items):
@@ -240,19 +250,31 @@ def render_invoice_pdf(invoice, for_customer=False):
 
     gst_label = f"GST ({_rate(snap.get('gst_rate'))}%)"
     service_label = f"Service charge ({_rate(snap.get('service_charge_rate'))}%)"
+    takeaway_charge = _decimal(snap.get("takeaway_charge"))
+    service_charge_amount = _decimal(snap.get("service_charge_amount"))
+    coupon_discount_total = _decimal(snap.get("coupon_discount_total"))
+    customization_total = _decimal(snap.get("customization_total"))
+    dish_discount_total = _decimal(snap.get("dish_discount_total"))
+
     summary_rows = [
         ("Subtotal", _money(snap.get("items_subtotal"))),
-        ("Add-on charges", _money(snap.get("customization_total"))),
-        ("Menu discounts", _discount(snap.get("dish_discount_total"))),
-        ("Coupon discounts", _discount(snap.get("coupon_discount_total"))),
     ]
-    takeaway_charge = _decimal(snap.get("takeaway_charge"))
+    if customization_total > 0:
+        summary_rows.append(("Add-on charges", _money(customization_total)))
+    if dish_discount_total > 0:
+        summary_rows.append(("Menu discounts", _discount(dish_discount_total)))
     if takeaway or takeaway_charge != 0:
         summary_rows.append(("Packing Charges (Takeaway)", _money(takeaway_charge)))
+    if service_charge_amount > 0:
+        summary_rows.append((service_label, _money(service_charge_amount)))
+
+    summary_rows.append(("Taxable amount", _money(snap.get("taxable_amount"))))
+
+    if coupon_discount_total > 0:
+        summary_rows.append(("Coupon discounts", _discount(coupon_discount_total)))
+
     summary_rows.extend([
-        ("Taxable amount", _money(snap.get("taxable_amount"))),
         (gst_label, _money(snap.get("gst_amount"))),
-        (service_label, _money(snap.get("service_charge_amount"))),
         ("Round-off", _money(snap.get("round_off"))),
     ])
     summary_data = [
@@ -288,18 +310,18 @@ def render_invoice_pdf(invoice, for_customer=False):
         Spacer(1, 8),
         summary_wrap,
     ]
-    if not for_customer:
-        payment_code = str(snap.get("payment_status") or "").upper()
-        payment_label = PAYMENT_LABELS.get(payment_code, payment_code or "Unpaid")
-        method = snap.get("payment_method") or ""
-        payment_lines = [f"<b>Payment status</b>&nbsp;&nbsp;{_text(payment_label)}"]
-        if method:
-            payment_lines.append(f"<b>Payment method</b>&nbsp;&nbsp;{_text(method)}")
-        payment = Paragraph("<br/>".join(payment_lines), body)
-        closing_items.extend([
-            Spacer(1, 10),
-            payment,
-        ])
+
+    payment_code = str(snap.get("payment_status") or "").upper()
+    payment_label = PAYMENT_LABELS.get(payment_code, payment_code or "Unpaid")
+    method = snap.get("payment_method") or ""
+    payment_lines = [f"<b>Payment status</b>&nbsp;&nbsp;{_text(payment_label)}"]
+    if method:
+        payment_lines.append(f"<b>Payment method</b>&nbsp;&nbsp;{_text(method)}")
+    payment = Paragraph("<br/>".join(payment_lines), body)
+    closing_items.extend([
+        Spacer(1, 10),
+        payment,
+    ])
 
     closing_items.extend([
         Spacer(1, 12),

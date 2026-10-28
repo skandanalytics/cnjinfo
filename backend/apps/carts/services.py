@@ -128,17 +128,16 @@ def _branch_has_orderable_food(branch):
 def _table_for_dine_in(branch, qr_code=None, table_id=None):
     """Resolve a dine-in table by primary key or scanned QR. Occupied tables may take another order."""
     qs = DiningTable.objects.select_for_update().filter(branch=branch, is_active=True)
-    if qr_code is not None:
-        table = qs.filter(qr_code=qr_code, qr_is_active=True).first()
-        if table:
-            return table
-        if table_id is None:
-            raise CartError("Invalid or inactive QR code for this branch.", "qr_invalid")
     if table_id is not None:
         table = qs.filter(pk=table_id).first()
         if table is None:
             raise CartError("That table is not available for dine-in.", "table_unavailable")
         return table
+    if qr_code is not None:
+        table = qs.filter(qr_code=qr_code, qr_is_active=True).first()
+        if table:
+            return table
+        raise CartError("Invalid or inactive QR code for this branch.", "qr_invalid")
     return None
 
 

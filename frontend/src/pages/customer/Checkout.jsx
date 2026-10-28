@@ -90,12 +90,15 @@ export const Checkout = () => {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
 
-  const chooseType = async (type, tableId = null) => {
+  const chooseType = async (type, tableOrId = null) => {
     setError('');
     setNotice('');
 
+    const targetTableObj = (typeof tableOrId === 'object' && tableOrId !== null) ? tableOrId : null;
+    const directTableId = targetTableObj ? targetTableObj.id : (tableOrId && Number.isInteger(Number(tableOrId)) ? Number(tableOrId) : null);
+
     // Resolve target table ID for Dine-In (prefer passed tableId, then saved table ID, then current table from cartView)
-    let effectiveTableId = tableId || getSelectedTableId() || cartView?.table?.id;
+    let effectiveTableId = directTableId || getSelectedTableId() || cartView?.table?.id;
 
     if (type === DINE_IN && !hasScannedTable() && !effectiveTableId) {
       setBusy(true);
@@ -114,7 +117,8 @@ export const Checkout = () => {
           return;
         }
         effectiveTableId = open[0].id;
-        setSelectedTableId(effectiveTableId);
+        const autoTable = open[0];
+        setSelectedTableId(effectiveTableId, autoTable.table_number);
         rememberDineInTableId(effectiveTableId);
         if (open.length > 1) {
           setTableChoices(open);
@@ -126,25 +130,62 @@ export const Checkout = () => {
       }
     }
 
+    // Determine the canonical table number for display
+    let targetTableNum = targetTableObj?.table_number || '';
+    if (!targetTableNum && effectiveTableId) {
+      if (tableChoices) {
+        const match = tableChoices.find(t => Number(t.id) === Number(effectiveTableId));
+        if (match) targetTableNum = match.table_number;
+      }
+      if (!targetTableNum && cartView?.table && Number(cartView.table.id) === Number(effectiveTableId)) {
+        targetTableNum = cartView.table.table_number;
+      }
+      if (!targetTableNum && tableContext?.tableNumber && Number(tableContext?.tableId) === Number(effectiveTableId)) {
+        targetTableNum = tableContext.tableNumber;
+      }
+      if (!targetTableNum) {
+        targetTableNum = formatCompactTableLabel(String(effectiveTableId));
+      }
+    }
+
     if (type === DINE_IN && effectiveTableId) {
-      setSelectedTableId(effectiveTableId);
+      setSelectedTableId(effectiveTableId, targetTableNum);
       rememberDineInTableId(effectiveTableId);
+      // Clear any outdated scanned QR that does not belong to this newly selected table
+      if (directTableId) {
+        rememberScannedTableQr(targetTableObj?.qr_code || null);
+      }
     }
 
     setOrderType(type);
     setType(type);
 
-    // Optimistically and immediately update UI without waiting for network roundtrip
-    setCartView(prev => enforceCartPricing(prev, type, effectiveTableId ? { id: effectiveTableId, table_number: String(effectiveTableId) } : null));
+    // Optimistically and synchronously update both tableContext and cartView with the EXACT same table
+    if (type === TAKEAWAY) {
+      setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
+      setCartView(prev => enforceCartPricing(prev, type, null));
+    } else {
+      const tableInfo = {
+        id: effectiveTableId,
+        tableId: effectiveTableId,
+        table_number: targetTableNum,
+        tableNumber: targetTableNum,
+        location: targetTableObj?.location || '',
+        orderType: DINE_IN
+      };
+      setTable(tableInfo);
+      setCartView(prev => enforceCartPricing(prev, type, tableInfo));
+    }
 
     setBusy(true);
     try {
       const view = await applyOrderContext(type, effectiveTableId);
-      setCartView(enforceCartPricing(view, type, effectiveTableId ? { id: effectiveTableId, table_number: String(effectiveTableId) } : null));
+      const confirmedTable = view.table || (effectiveTableId ? { id: effectiveTableId, table_number: targetTableNum } : null);
+      setCartView(enforceCartPricing(view, type, confirmedTable));
       if (type === TAKEAWAY) {
         setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
       } else if (view.table) {
-        setSelectedTableId(view.table.id);
+        setSelectedTableId(view.table.id, view.table.table_number);
         rememberDineInTableId(view.table.id);
         setTable({ tableNumber: view.table.table_number, tableId: view.table.id, location: view.table.location, orderType: DINE_IN });
       }
@@ -165,13 +206,20 @@ export const Checkout = () => {
         if (currentType === DINE_IN && (hasScannedTable() || tableId)) {
           const view = await applyOrderContext(DINE_IN, tableId);
           if (!active) return;
-          setCartView(enforceCartPricing(view, DINE_IN, tableId ? { id: tableId, table_number: String(tableId) } : null));
+          const targetTable = view.table || (tableId ? { id: tableId, table_number: tableContext?.tableNumber || formatCompactTableLabel(String(tableId)) } : null);
+          setCartView(enforceCartPricing(view, DINE_IN, targetTable));
           setType(DINE_IN);
+          if (view.table) {
+            setSelectedTableId(view.table.id, view.table.table_number);
+            rememberDineInTableId(view.table.id);
+            setTable({ tableNumber: view.table.table_number, tableId: view.table.id, location: view.table.location, orderType: DINE_IN });
+          }
         } else if (currentType === TAKEAWAY) {
           const view = await applyOrderContext(TAKEAWAY);
           if (!active) return;
           setCartView(enforceCartPricing(view, TAKEAWAY));
           setType(TAKEAWAY);
+          setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
         } else {
           const view = await fetchCurrentCart();
           if (!active) return;
@@ -180,6 +228,10 @@ export const Checkout = () => {
           if (initialType) {
             setType(initialType);
             setOrderType(initialType);
+            if (initialType === DINE_IN && view?.table) {
+              setSelectedTableId(view.table.id, view.table.table_number);
+              setTable({ tableNumber: view.table.table_number, tableId: view.table.id, location: view.table.location, orderType: DINE_IN });
+            }
           }
         }
       } catch (err) {
@@ -246,9 +298,9 @@ export const Checkout = () => {
                       type="button"
                       className="btn btn-sm btn-outline-danger"
                       onClick={() => {
-                        setSelectedTableId(table.id);
+                        setSelectedTableId(table.id, table.table_number);
                         setTableChoices(null);
-                        chooseType(DINE_IN, table.id);
+                        chooseType(DINE_IN, table);
                       }}
                     >
                       {formatCompactTableLabel(table.table_number)}
@@ -257,9 +309,27 @@ export const Checkout = () => {
                 </div>
               )}
               {orderType === DINE_IN && cartView?.table && (
-                <div className="p-3 bg-light rounded-3 border border-light-subtle mt-3">
-                  <span className="small text-secondary fw-semibold">Table:</span>
-                  <h6 className="fw-bold text-dark mb-0">{formatCompactTableLabel(cartView.table.table_number)}{cartView.table.location ? ` · ${cartView.table.location}` : ''}</h6>
+                <div className="p-3 bg-light rounded-3 border border-light-subtle mt-3 d-flex align-items-center justify-content-between">
+                  <div>
+                    <span className="small text-secondary fw-semibold">Table:</span>
+                    <h6 className="fw-bold text-dark mb-0">{formatCompactTableLabel(cartView.table.table_number)}{cartView.table.location ? ` · ${cartView.table.location}` : ''}</h6>
+                  </div>
+                  {!hasScannedTable() && sessionStorage.getItem('foodie_staff_ordering') !== '1' && (
+                    <button
+                      type="button"
+                      className="btn btn-link btn-sm text-danger text-decoration-none p-0 fw-semibold"
+                      onClick={async () => {
+                        try {
+                          const branchId = await resolvePublicBranchId();
+                          const tables = branchId ? await availableTables(branchId) : [];
+                          const open = selectableTables(tables);
+                          if (open.length > 0) setTableChoices(open);
+                        } catch {}
+                      }}
+                    >
+                      Change Table
+                    </button>
+                  )}
                 </div>
               )}
               {!orderType && !error && (

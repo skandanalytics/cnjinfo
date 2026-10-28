@@ -26,8 +26,8 @@ function computeApiBaseUrl() {
 
     if (!isLoopback) {
       if (!rawEnvApi || /127\.0\.0\.1|localhost/i.test(rawEnvApi)) {
-        const backendPort = import.meta.env.VITE_BACKEND_PORT || '8000';
-        return `http://${hostname}:${backendPort}/api/`;
+        // Mobile testing over LAN: route through Vite dev server proxy at /api/
+        return `${window.location.origin.replace(/\/+$/, '')}/api/`;
       }
     }
   }

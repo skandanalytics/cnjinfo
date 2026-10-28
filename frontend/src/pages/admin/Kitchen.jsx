@@ -275,14 +275,12 @@ export const Kitchen = () => {
     const list = item?.customizations || item?.extraIngredients || item?.toppings || item?.options || [];
     if (!Array.isArray(list)) return [];
     return list.map((c) => {
-      if (typeof c === 'string') return c.trim();
+      if (typeof c === 'string') {
+        return c.replace(/\s*\(\+?₹[0-9.]+\)/gi, '').trim();
+      }
       if (c && typeof c === 'object') {
         const name = (c.name || c.title || c.option_name || '').trim();
-        const price = Number(c.extra_price ?? c.price ?? c.extraPrice ?? 0);
-        if (price > 0) {
-          return `${name} (+₹${price.toFixed(2)})`;
-        }
-        return name;
+        return name.replace(/\s*\(\+?₹[0-9.]+\)/gi, '').trim();
       }
       return '';
     }).filter(Boolean);

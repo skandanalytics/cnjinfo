@@ -46,9 +46,13 @@ export async function applyOrderContext(orderType, explicitTableId = null) {
     const staffOrdering = sessionStorage.getItem('foodie_staff_ordering') === '1';
     if (staffOrdering && tableId) {
       body.table = tableId;
-    } else if (qr || tableId) {
-      if (qr) body.qr = qr;
+    } else if (explicitTableId) {
+      body.table = explicitTableId;
+    } else if (qr) {
+      body.qr = qr;
       if (tableId) body.table = tableId;
+    } else if (tableId) {
+      body.table = tableId;
     } else {
       throw new Error(DINE_IN_NEEDS_QR);
     }

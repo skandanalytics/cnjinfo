@@ -138,8 +138,12 @@ export const EditDishModal = ({
   useEffect(() => {
     if (dish && isOpen) {
       setName(dish.name || '');
-      setPrice(dish.price !== undefined ? String(dish.price) : '');
-      setDiscountPrice(dish.discountPrice !== undefined && dish.discountPrice > 0 ? String(dish.discountPrice) : '');
+      const basePrice = dish.originalPrice ?? dish.price;
+      setPrice(basePrice !== undefined && basePrice !== null ? String(basePrice) : '');
+      const discPrice = (dish.hasDiscount || (dish.discountPercent && dish.discountPercent > 0))
+        ? (dish.discountPrice ?? dish.sellingPrice)
+        : '';
+      setDiscountPrice(discPrice && Number(discPrice) > 0 && Number(discPrice) < Number(basePrice) ? String(discPrice) : '');
       setDiscountPercent(dish.discountPercent !== undefined && dish.discountPercent > 0 ? String(dish.discountPercent) : '');
       setDescription(dish.description || '');
       setCategory(dish.category ? getFrontendCategoryName(dish.category) : '');

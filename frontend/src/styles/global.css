@@ -47,6 +47,14 @@ html, body {
   cursor: pointer;
 }
 
+/* Suppress native Edge/IE password reveal and clear icons so only custom toggle buttons render */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
 /* Bootstrap Overrides */
 .form-control:focus,
 .form-select:focus {

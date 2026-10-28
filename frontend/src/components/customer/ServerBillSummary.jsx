@@ -27,22 +27,26 @@ export const ServerBillSummary = ({ cart, children }) => {
           {Number(pricing.dish_discount_total) > 0 && (
             <Row label="Menu Discounts" value={`-${formatCurrency(Number(pricing.dish_discount_total))}`} className="text-success" />
           )}
-          {(pricing.coupons || []).map((c) => (
-            <Row key={c.code} label={`Coupon ${c.code}`} value={`-${formatCurrency(Number(c.discount))}`} className="text-success" />
-          ))}
           {isTakeaway && takeawayCharge > 0 && (
             <Row label="Packing Charge (Takeaway)" value={`+${formatCurrency(takeawayCharge)}`} className="text-dark" />
+          )}
+          {Number(pricing.service_charge_amount || 0) > 0 && (
+            <Row
+              label={`Service Charge (${Number(pricing.service_charge_rate) || 0}%)`}
+              value={formatCurrency(Number(pricing.service_charge_amount || 0))}
+              className="text-dark"
+            />
           )}
           {pricing.taxable_amount != null && (
             <Row label="Taxable Amount" value={formatCurrency(Number(pricing.taxable_amount))} className="text-dark" />
           )}
+          {(pricing.coupons || []).map((c) => (
+            <Row key={c.code} label={`Coupon Discount (${c.code})`} value={`-${formatCurrency(Number(c.discount))}`} className="text-success" />
+          ))}
           <Row label={`GST (${Number(pricing.gst_rate) || 0}%)`} value={formatCurrency(Number(pricing.gst_amount || 0))} className="text-dark" />
-          <Row
-            label={`Service Charge (${Number(pricing.service_charge_rate) || 0}%)`}
-            value={formatCurrency(Number(pricing.service_charge_amount || 0))}
-            className="text-dark"
-          />
-          <Row label="Round Off" value={formatCurrency(Number(pricing.round_off || 0))} className="text-dark" />
+          {Number(pricing.round_off || 0) !== 0 && (
+            <Row label="Round Off" value={formatCurrency(Number(pricing.round_off || 0))} className="text-dark" />
+          )}
           <div className="d-flex align-items-center justify-content-between my-3 pt-3 border-top fw-bold fs-5 text-dark">
             <span>Grand Total</span>
             <span className="text-danger fw-bold fs-4" data-testid="server-total">

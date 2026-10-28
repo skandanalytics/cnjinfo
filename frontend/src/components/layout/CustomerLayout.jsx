@@ -9,7 +9,7 @@ import { orderService, isOrderOwnedByCustomer } from '../../services/orderServic
 import formatCurrency from '../../utils/formatCurrency';
 import Toast from '../common/Toast';
 import { FiChevronRight } from 'react-icons/fi';
-import { getOrderType, hasDineInTable } from '../../utils/orderContext';
+import { getOrderType, hasDineInTable, getSelectedTableId } from '../../utils/orderContext';
 import { formatCompactTableLabel } from '../../utils/tableUtils';
 
 export const CustomerLayout = ({ children }) => {
@@ -18,6 +18,7 @@ export const CustomerLayout = ({ children }) => {
   const { tableContext, cartItems } = useCart();
   const [toast, setToast] = useState({ show: false, message: '', type: 'add' });
   const [activeOrder, setActiveOrder] = useState(null);
+  const [, setTableUpdateTick] = useState(0);
 
   useEffect(() => {
     const handleItemAdded = (e) => {
@@ -26,12 +27,23 @@ export const CustomerLayout = ({ children }) => {
     const handleItemRemoved = (e) => {
       setToast({ show: true, message: e.detail?.message || 'Item removed from cart', type: 'remove' });
     };
+    const handleTableUpdated = () => {
+      setTableUpdateTick(t => t + 1);
+    };
 
     window.addEventListener('foodie_item_added', handleItemAdded);
     window.addEventListener('foodie_item_removed', handleItemRemoved);
+    window.addEventListener('foodie_table_selected', handleTableUpdated);
+    window.addEventListener('foodie_table_changed', handleTableUpdated);
+    window.addEventListener('foodie_order_context_updated', handleTableUpdated);
+    window.addEventListener('storage', handleTableUpdated);
     return () => {
       window.removeEventListener('foodie_item_added', handleItemAdded);
       window.removeEventListener('foodie_item_removed', handleItemRemoved);
+      window.removeEventListener('foodie_table_selected', handleTableUpdated);
+      window.removeEventListener('foodie_table_changed', handleTableUpdated);
+      window.removeEventListener('foodie_order_context_updated', handleTableUpdated);
+      window.removeEventListener('storage', handleTableUpdated);
     };
   }, []);
 
@@ -102,9 +114,26 @@ export const CustomerLayout = ({ children }) => {
         }
 
         if (!hasDineInTable()) return null;
-        const rawTable = tableContext?.tableNumber && tableContext.tableNumber !== 'Takeaway'
+        let rawTable = tableContext?.tableNumber && tableContext.tableNumber !== 'Takeaway'
           ? tableContext.tableNumber
           : '';
+        if (!rawTable) {
+          try {
+            const tableRaw = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+            if (tableRaw) {
+              const parsed = JSON.parse(tableRaw);
+              if (parsed?.tableNumber && parsed.tableNumber !== 'Takeaway') {
+                rawTable = parsed.tableNumber;
+              }
+            }
+          } catch {}
+        }
+        if (!rawTable) {
+          const selectedId = getSelectedTableId();
+          if (selectedId) {
+            rawTable = `T${String(selectedId).padStart(2, '0')}`;
+          }
+        }
         const compactTable = formatCompactTableLabel(rawTable);
 
         return (
