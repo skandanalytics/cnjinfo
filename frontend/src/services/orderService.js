@@ -607,14 +607,24 @@ const formatOrderObject = (order, allItems = [], allFoods = [], allTables = [], 
   const rawBackendNumericId = order.id ?? order.order_id ?? order.orderId ?? (order.pk ? String(order.pk) : null);
   const backendNumericId = _isValidNumericId(rawBackendNumericId) ? Number(rawBackendNumericId) : null;
   const orderNumberDisplay = String(backendNumericId || orderId);
+  const displayNo = order.display_order_number || order.display_number || orderNumberDisplay;
 
   return {
     id: orderId,
     order_number: orderNumberDisplay,
-    orderNumber: orderNumberDisplay,
+    orderNumber: displayNo,
+    display_order_number: displayNo,
+    display_number: displayNo,
+    parent_order_id: order.parent_order_id || (typeof order.parent_order === 'object' ? order.parent_order?.id : order.parent_order) || null,
+    continuation_index: Number(order.continuation_index || 0),
+    has_continuations: Boolean(order.has_continuations),
     backendNumericId: backendNumericId,
     _backendId: backendNumericId,
     table: tableNumber,
+    table_number: tableNumber,
+    tableNumber: tableNumber,
+    table_id: tableObj?.id || (typeof tableVal === 'number' ? tableVal : (order.table?.id || order.table_id || null)),
+    tableId: tableObj?.id || (typeof tableVal === 'number' ? tableVal : (order.table?.id || order.table_id || null)),
     orderType,
     items: orderItems,
     subtotal,
@@ -628,10 +638,16 @@ const formatOrderObject = (order, allItems = [], allFoods = [], allTables = [], 
     coupon: voucher,
     total,
     paymentMethod,
+    payment_status: order.payment_status || order.paymentStatus || null,
+    paymentStatus: order.payment_status || order.paymentStatus || null,
     diners: (localTableData ? localTableData.diners : null) || order.diners || (tableObj ? tableObj.capacity : 2),
     source: orderType === 'Takeaway' ? 'Counter' : 'QR Code',
     status: frontendStatus,
-    user: order.user,
+    user: order.user || order.customer_phone || '',
+    customerPhone: order.customer_phone || order.customerPhone || order.user || '',
+    customer_phone: order.customer_phone || order.customerPhone || order.user || '',
+    customerName: order.customer_name || order.customerName || '',
+    customer_name: order.customer_name || order.customerName || '',
     takenBy: (localTableData ? localTableData.takenBy : null) || order.takenBy || order.employee || null,
     restaurant: Number(order.restaurant?.id || order.restaurant_id || order.restaurant || 1),
     restaurant_id: Number(order.restaurant_id || order.restaurant?.id || order.restaurant || 1),
@@ -964,6 +980,10 @@ export const orderService = {
     });
 
     return formattedList;
+  },
+
+  getOrder: async (id, includeDetails = true, bypassCache = true) => {
+    return orderService.getOrderById(id, includeDetails, bypassCache);
   },
 
   getOrderById: async (id, includeDetails = true, bypassCache = true) => {

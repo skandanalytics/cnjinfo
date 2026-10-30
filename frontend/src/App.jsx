@@ -6,6 +6,8 @@ import { AppProvider } from './context/AppContext';
 import AppRoutes from './routes/AppRoutes';
 import { orderService } from './services/orderService';
 
+import ErrorBoundary from './components/common/ErrorBoundary';
+
 function App() {
   useEffect(() => {
     const isReset = localStorage.getItem('foodie_fresh_start_v2');
@@ -16,15 +18,17 @@ function App() {
   }, []);
 
   return (
-    <AuthProvider>
-      <CartProvider>
-        <OrderProvider>
-          <AppProvider>
-            <AppRoutes />
-          </AppProvider>
-        </OrderProvider>
-      </CartProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <CartProvider>
+          <OrderProvider>
+            <AppProvider>
+              <AppRoutes />
+            </AppProvider>
+          </OrderProvider>
+        </CartProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

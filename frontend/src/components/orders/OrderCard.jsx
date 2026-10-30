@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import Badge from '../common/Badge';
 import formatCurrency from '../../utils/formatCurrency';
 import { FiClock, FiLayers, FiEye, FiShoppingBag } from 'react-icons/fi';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const OrderCard = ({
   order,
@@ -22,7 +23,7 @@ export const OrderCard = ({
     <div className="card rounded-3 shadow-sm p-4 bg-white foodie-card mb-3">
       <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center border-bottom pb-3 mb-3 gap-2">
         <div>
-          <span className="fw-bold text-dark fs-5">Order #{order.id}</span>
+          <span className="fw-bold text-dark fs-5">Order #{formatOrderDisplayNumber(order, order.id)}</span>
           <div className="text-muted small mt-1 d-flex align-items-center gap-1">
             <FiClock /> {order.date} at {order.time}
           </div>

@@ -5,8 +5,8 @@ import CustomerLayout from '../../components/layout/CustomerLayout';
 import ServerBillSummary from '../../components/customer/ServerBillSummary';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../hooks/useAuth';
-import Button from '../../components/common/Button';
 import BackButton from '../../components/common/BackButton';
+import CheckoutStepper from '../../components/customer/CheckoutStepper';
 import { applyOrderContext, payOrderOnline, validateCheckout } from '../../services/customerCheckout';
 import { TAKEAWAY, getOrderType, normalizeOrderType } from '../../utils/orderContext';
 
@@ -88,7 +88,10 @@ export const Payment = () => {
 
   return (
     <CustomerLayout>
-      <main className="pt-2">
+      <main className="pt-2 text-start">
+        {/* 4-Step Checkout Stepper (Step 3: Payment active) */}
+        <CheckoutStepper activeStep={3} />
+
         <div className="d-flex align-items-center gap-3 mb-4">
           <BackButton />
           <h4 className="fw-bold text-dark mb-0">Select Payment</h4>
@@ -97,7 +100,7 @@ export const Payment = () => {
         <form onSubmit={handlePaySubmit}>
           <div className="row g-4">
             <div className="col-12 col-lg-8">
-              <div className="card rounded-3 border-0 shadow-sm p-3 p-sm-4 bg-white">
+              <div className="card rounded-4 border-0 shadow-sm p-4 bg-white">
                 <h5 className="fw-bold text-dark mb-1">Payment Options</h5>
                 <p className="text-secondary small mb-3">
                   {orderType === TAKEAWAY ? 'Takeaway order' : `Dine-In${review?.cart?.table ? ` · Table ${review.cart.table.table_number}` : ''}`}
@@ -110,11 +113,11 @@ export const Payment = () => {
                     <label
                       key={code}
                       data-testid={`payment-method-${code}`}
-                      className={`d-flex align-items-center justify-content-between p-3 border rounded-3 mb-3 ${selected ? 'border-danger bg-light-subtle' : 'border-light'}`}
+                      className={`d-flex align-items-center justify-content-between p-3 border rounded-3 mb-3 transition-all ${selected ? 'border-danger bg-light-subtle shadow-xs' : 'border-light'}`}
                       style={{ cursor: loading ? 'not-allowed' : 'pointer' }}
                     >
                       <span className="d-flex align-items-center">
-                        <Icon size={20} className="text-secondary me-3 flex-shrink-0" />
+                        <Icon size={20} className={selected ? 'text-danger me-3 flex-shrink-0' : 'text-secondary me-3 flex-shrink-0'} />
                         <span>
                           <span className="fw-bold text-dark d-block">{title}</span>
                           <span className="text-muted small d-block" style={{ fontSize: '11px' }}>{hint}</span>
@@ -141,16 +144,21 @@ export const Payment = () => {
             <div className="col-12 col-lg-4">
               <ServerBillSummary cart={review?.cart}>
                 <div className="d-grid gap-2">
-                  <Button
+                  <button
                     type="submit"
                     data-testid="place-order"
-                    variant="primary"
-                    loading={loading}
-                    disabled={!ready}
-                    className="py-2.5 fw-bold shadow-sm"
+                    disabled={!ready || loading}
+                    className="btn btn-danger py-2.5 fw-bold shadow-sm rounded-pill d-flex align-items-center justify-content-center gap-2"
                   >
-                    {paymentMethod === 'COUNTER' ? 'Place Order' : 'Place Order & Pay'}
-                  </Button>
+                    {loading ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Processing...</span>
+                      </>
+                    ) : (
+                      paymentMethod === 'COUNTER' ? 'Place Order' : 'Place Order & Pay'
+                    )}
+                  </button>
                 </div>
               </ServerBillSummary>
             </div>

@@ -12,9 +12,12 @@ import { productService } from '../../services/productService';
 import { menuService } from '../../services/menuService';
 import { couponService } from '../../services/couponService';
 import { branchService } from '../../services/branchService';
-import { currentBranchId, createAssistedOrder, getPricingQuote } from '../../services/adminApi';
+import { currentBranchId, createAssistedOrder, getPricingQuote, staffJson } from '../../services/adminApi';
+import { orderService } from '../../services/orderService';
 import { normalizeFoodType } from '../../utils/filters';
 import EBillModal from '../../components/orders/EBillModal';
+import OrderDetailsModal from '../../components/orders/OrderDetailsModal';
+import TrackOrderModal from '../../components/orders/TrackOrderModal';
 import Toast from '../../components/common/Toast';
 import { 
   FiSearch, FiX, FiPlus, FiMinus, FiTrash2, FiShoppingBag, 
@@ -94,6 +97,9 @@ export const Pos = () => {
   const [placedOrder, setPlacedOrder] = useState(null);
   const [viewingEBill, setViewingEBill] = useState(null);
   const [mobilePosTab, setMobilePosTab] = useState('menu'); // 'menu' | 'order'
+  const [parentOrder, setParentOrder] = useState(null);
+  const [trackedOrder, setTrackedOrder] = useState(null);
+  const [showTrackedOrderModal, setShowTrackedOrderModal] = useState(false);
 
   // Initialize and load branches
   useEffect(() => {
@@ -122,6 +128,193 @@ export const Pos = () => {
     initBranches();
     return () => { isMounted = false; };
   }, [user]);
+
+  const getSelectedTableLabel = (tbl) => {
+    if (!tbl) return '';
+    const rawNum = tbl.number || tbl.table_number || (typeof tbl.table === 'string' ? tbl.table : tbl.table?.label);
+    if (rawNum) return tableService.getCanonicalTableNumber(rawNum);
+    const inList = tables.find(t => String(t.id) === String(tbl.id));
+    if (inList?.number || inList?.table_number) {
+      return tableService.getCanonicalTableNumber(inList.number || inList.table_number);
+    }
+    return '';
+  };
+
+  const handleTrackExistingOrder = async (orderId, tableInput) => {
+    let safeTable = tableInput || tables.find(t => String(t.id) === String(tableInput?.id || searchParams.get('table'))) || {};
+    try {
+      setLoading(true);
+      const { fetchBillPreview, staffJson } = await import('../../services/adminApi');
+      let orderData = null;
+      try {
+        orderData = await staffJson(`/orders/${orderId}/`);
+      } catch (err) {
+        try {
+          orderData = await orderService.getOrderById(orderId);
+        } catch (innerErr) {
+          orderData = safeTable?.active_order || null;
+        }
+      }
+      if (!orderData && safeTable?.active_order) {
+        orderData = safeTable.active_order;
+      }
+      let combined = null;
+      try {
+        combined = await fetchBillPreview(orderId);
+      } catch (e) {
+        console.warn('Could not fetch bill preview, falling back to order data', e);
+      }
+      const rawOrd = orderData || {};
+      const rawNum = safeTable.number || safeTable.table_number || rawOrd.table_number || rawOrd.tableNumber || (typeof rawOrd.table === 'string' ? rawOrd.table : rawOrd.table?.label);
+      const tableLabel = rawNum ? tableService.getCanonicalTableNumber(rawNum) : '';
+      const mapped = {
+        ...rawOrd,
+        id: rawOrd.id || orderId,
+        table: tableLabel,
+        tableId: safeTable.id || rawOrd.table_id || rawOrd.tableId,
+        table_id: safeTable.id || rawOrd.table_id || rawOrd.tableId,
+        tableLocation: safeTable.location || safeTable.area || rawOrd.table_location || rawOrd.location || '',
+        status: rawOrd.status || rawOrd.backendStatus || 'Pending',
+        display_order_number: rawOrd.display_order_number || rawOrd.display_number || String(orderId),
+        ...(combined ? {
+          combined_items: combined.items,
+          items: combined.items || rawOrd.items,
+          combined_total: combined.total_amount,
+          total: combined.total_amount || rawOrd.total,
+          total_amount: combined.total_amount || rawOrd.total_amount,
+          combined_items_subtotal: combined.items_subtotal,
+          paid_amount: combined.paid_amount,
+          balance_due: combined.balance_due,
+          has_continuations: combined.has_continuations,
+          display_order_number: combined.display_order_number || rawOrd.display_order_number || rawOrd.display_number || String(orderId),
+        } : {}),
+      };
+      setTrackedOrder(mapped);
+      setShowTrackedOrderModal(true);
+    } catch (err) {
+      console.error('Track order error:', err);
+      if (safeTable?.active_order) {
+        const fallbackRawNum = safeTable.number || safeTable.table_number || (typeof safeTable.table === 'string' ? safeTable.table : safeTable.table?.label);
+        setTrackedOrder({
+          ...safeTable.active_order,
+          id: orderId,
+          table: fallbackRawNum ? tableService.getCanonicalTableNumber(fallbackRawNum) : '',
+          tableId: safeTable.id,
+          table_id: safeTable.id,
+          tableLocation: safeTable.location || safeTable.area || '',
+          display_order_number: safeTable.active_order.display_order_number || String(orderId),
+        });
+        setShowTrackedOrderModal(true);
+      } else {
+        window.alert('Failed to load order details for this table.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleContinueOrderFromModal = async (ord, tablesListOverride = null) => {
+    setShowTrackedOrderModal(false);
+    setShowTablePicker(false);
+
+    const rawStatus = String(ord?.backendStatus || ord?.status || '').toUpperCase();
+    if (rawStatus === 'COMPLETED' || rawStatus === 'CANCELLED') {
+      window.alert('This order has proceeded to bill and cannot be continued.');
+      setParentOrder(null);
+      return;
+    }
+
+    const tableList = (tablesListOverride && tablesListOverride.length > 0)
+      ? tablesListOverride
+      : (tables && tables.length > 0 ? tables : []);
+
+    const targetTableId = ord?.tableId || ord?.table_id || (typeof ord?.table === 'object' ? ord?.table?.id : ord?.table);
+    const matchedTable = tableList.find(t => String(t.id) === String(targetTableId))
+      || (selectedTable && String(selectedTable.id) === String(targetTableId) ? selectedTable : null);
+
+    const fallbackNumber = ord?.tableNumber || ord?.table_number || (typeof ord?.table === 'string' ? ord?.table : ord?.table?.label) || '';
+
+    const table = matchedTable || {
+      id: targetTableId,
+      number: fallbackNumber,
+      table_number: fallbackNumber,
+      status: 'Occupied',
+      is_active: true,
+    };
+
+    setSelectedTable(table);
+    setOrderType('DINE_IN');
+
+    let rawPhone = 
+      ord?.customerPhone || 
+      ord?.customer_phone || 
+      ord?.customer?.phone || 
+      ord?.customer?.customer_phone || 
+      (table.active_order && (table.active_order.customer_phone || table.active_order.customerPhone)) || 
+      (selectedTable && selectedTable.active_order && (selectedTable.active_order.customer_phone || selectedTable.active_order.customerPhone)) || 
+      searchParams.get('phone') || 
+      '';
+    let rawName = 
+      ord?.customerName || 
+      ord?.customer_name || 
+      ord?.customer?.name || 
+      (table.active_order && (table.active_order.customer_name || table.active_order.customerName)) || 
+      (selectedTable && selectedTable.active_order && (selectedTable.active_order.customer_name || selectedTable.active_order.customerName)) || 
+      searchParams.get('name') || 
+      '';
+
+    if ((!rawPhone || String(rawPhone).replace(/\D/g, '').length < 7) && ord?.id) {
+      try {
+        const rootId = ord.parent_order_id || ord.parent_order || ord.id;
+        const fetched = await staffJson(`/orders/${rootId}/`);
+        if (fetched) {
+          rawPhone = rawPhone || fetched.customer_phone || fetched.customerPhone || fetched.customer?.phone || fetched.customer?.customer_phone || '';
+          rawName = rawName || fetched.customer_name || fetched.customerName || fetched.customer?.name || '';
+        }
+      } catch (e) {
+        console.warn('Could not fetch root order customer details:', e);
+      }
+    }
+
+    const cleanDigits = String(rawPhone || '').replace(/\D/g, '').slice(-10);
+    const resolvedPhone = cleanDigits || (rawPhone ? String(rawPhone).trim() : '');
+    const resolvedName = rawName ? String(rawName).trim() : '';
+
+    setParentOrder({
+      id: ord.id,
+      parent_order_id: ord.parent_order_id || ord.parent_order || ord.id,
+      display_order_number: ord.display_order_number || ord.display_number || String(ord.id),
+      customer_phone: resolvedPhone,
+      customer_name: resolvedName,
+    });
+    setCustomerPhone(resolvedPhone);
+    setCustomerName(resolvedName);
+    setCartItems([]);
+    setAppliedCoupon(null);
+    setOrderError('');
+  };
+
+  const handleProceedToBillFromModal = async (ord) => {
+    try {
+      setLoading(true);
+      const { proceedToBill, fetchBillPreview } = await import('../../services/adminApi');
+      const rootId = ord.parent_order_id || ord.parent_order || ord.id;
+      let preview;
+      try {
+        const res = await proceedToBill(rootId);
+        preview = res.bill;
+      } catch (e) {
+        preview = await fetchBillPreview(rootId);
+      }
+      setShowTrackedOrderModal(false);
+      setShowTablePicker(false);
+      setViewingEBill(preview || ord);
+    } catch (err) {
+      window.alert(err.message || 'Could not load bill preview.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Load Menu, Tables, and Coupons when selected branch changes
   const loadPosData = async (branchId, isSilent = false) => {
@@ -167,6 +360,46 @@ export const Pos = () => {
         if (found) {
           setSelectedTable(found);
           setOrderType('DINE_IN');
+          const queryOrderId = searchParams.get('order');
+          const activeOrderId = queryOrderId || found.active_order_id || (found.active_order && found.active_order.id);
+          const isTrack = searchParams.get('track') === '1';
+          const isContinue = searchParams.get('continue') === '1';
+          if (isTrack && activeOrderId) {
+            handleTrackExistingOrder(activeOrderId, found);
+          } else if (isContinue && activeOrderId) {
+            staffJson(`/orders/${activeOrderId}/`).then((ord) => {
+              if (ord) {
+                const rawStatus = String(ord.status || '').toUpperCase();
+                if (rawStatus === 'COMPLETED' || rawStatus === 'CANCELLED') {
+                  window.alert('This order has proceeded to bill and cannot be continued.');
+                  setParentOrder(null);
+                  return;
+                }
+                handleContinueOrderFromModal({
+                  ...ord,
+                  tableId: found.id,
+                  table_id: found.id,
+                  tableNumber: found.number,
+                  table_number: found.number,
+                  table: found,
+                }, filteredTables);
+                setSearchParams({ table: found.id }, { replace: true });
+              }
+            }).catch(() => {
+              if (found.active_order) {
+                handleContinueOrderFromModal({
+                  ...found.active_order,
+                  id: activeOrderId,
+                  tableId: found.id,
+                  table_id: found.id,
+                  tableNumber: found.number,
+                  table_number: found.number,
+                  table: found,
+                }, filteredTables);
+                setSearchParams({ table: found.id }, { replace: true });
+              }
+            });
+          }
         }
       }
     } catch (e) {
@@ -203,6 +436,63 @@ export const Pos = () => {
     }
   }, [selectedBranchId]);
 
+  // React to URL navigation with table / continue / track params
+  useEffect(() => {
+    const isContinue = searchParams.get('continue') === '1';
+    const isTrack = searchParams.get('track') === '1';
+    const queryTableId = searchParams.get('table');
+    const queryOrderId = searchParams.get('order');
+
+    if (!tables || tables.length === 0 || (!isContinue && !isTrack)) return;
+
+    if (queryTableId) {
+      const found = tables.find(t => String(t.id) === String(queryTableId));
+      if (found) {
+        setSelectedTable(found);
+        setOrderType('DINE_IN');
+        const activeOrderId = queryOrderId || found.active_order_id || (found.active_order && found.active_order.id);
+
+        if (isTrack && activeOrderId) {
+          handleTrackExistingOrder(activeOrderId, found);
+          setSearchParams({ table: found.id }, { replace: true });
+        } else if (isContinue && activeOrderId) {
+          staffJson(`/orders/${activeOrderId}/`).then((ord) => {
+            if (ord) {
+              const rawStatus = String(ord.status || '').toUpperCase();
+              if (rawStatus === 'COMPLETED' || rawStatus === 'CANCELLED') {
+                window.alert('This order has proceeded to bill and cannot be continued.');
+                setParentOrder(null);
+                return;
+              }
+              handleContinueOrderFromModal({
+                ...ord,
+                tableId: found.id,
+                table_id: found.id,
+                tableNumber: found.number,
+                table_number: found.number,
+                table: found,
+              }, tables);
+              setSearchParams({ table: found.id }, { replace: true });
+            }
+            }).catch(() => {
+              if (found.active_order) {
+                handleContinueOrderFromModal({
+                  ...found.active_order,
+                  id: activeOrderId,
+                  tableId: found.id,
+                  table_id: found.id,
+                  tableNumber: found.number,
+                  table_number: found.number,
+                  table: found,
+                }, tables);
+                setSearchParams({ table: found.id }, { replace: true });
+              }
+            });
+        }
+      }
+    }
+  }, [searchParams, tables]);
+
   // Listen to live realtime events
   useEffect(() => {
     const handleSync = () => {
@@ -232,6 +522,7 @@ export const Pos = () => {
     setOrderError('');
     if (type === 'TAKEAWAY') {
       setSelectedTable(null);
+      setParentOrder(null);
       setSearchParams({ type: 'takeaway' }, { replace: true });
     } else {
       setSearchParams({}, { replace: true });
@@ -244,8 +535,14 @@ export const Pos = () => {
       window.alert('This table is inactive.');
       return;
     }
-    if (table.status === 'Occupied' || table.is_occupied) {
-      window.alert('Table is occupied.');
+    const isOccupied = table.status === 'Occupied' || Boolean(table.is_occupied) || table.status === 'Reserved';
+    if (isOccupied) {
+      const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
+      if (activeOrderId) {
+        handleTrackExistingOrder(activeOrderId, table);
+        return;
+      }
+      window.alert(table.status === 'Reserved' ? 'Table is reserved.' : 'Table is occupied.');
       return;
     }
     setSelectedTable(table);
@@ -638,15 +935,26 @@ export const Pos = () => {
       return;
     }
 
-    const cleanPhone = customerPhone.trim();
-    if (!cleanPhone) {
-      setOrderError('Customer mobile number is required.');
-      return;
+    let effectivePhone = customerPhone.trim();
+    if (!effectivePhone || effectivePhone.replace(/\D/g, '').length < 7) {
+      if (parentOrder?.customer_phone) {
+        effectivePhone = parentOrder.customer_phone;
+      } else if (selectedTable?.active_order?.customer_phone) {
+        effectivePhone = selectedTable.active_order.customer_phone;
+      }
     }
-    const cleanDigits = cleanPhone.replace(/\D/g, '');
-    if (cleanDigits.length < 10) {
-      setOrderError('Please enter a valid 10-digit customer mobile number.');
-      return;
+
+    // Only validate phone when NOT continuing an existing order
+    if (!parentOrder) {
+      if (!effectivePhone) {
+        setOrderError('Customer mobile number is required.');
+        return;
+      }
+      const cleanDigits = effectivePhone.replace(/\D/g, '');
+      if (cleanDigits.length < 10) {
+        setOrderError('Please enter a valid 10-digit customer mobile number.');
+        return;
+      }
     }
 
     setSubmittingOrder(true);
@@ -659,6 +967,10 @@ export const Pos = () => {
       special_instructions: item.specialInstructions || '',
     }));
 
+    const cleanDigits = effectivePhone ? effectivePhone.replace(/\D/g, '').slice(-10) : '';
+    const resolvedPhone = cleanDigits || (effectivePhone ? effectivePhone.trim() : (parentOrder?.customer_phone ? String(parentOrder.customer_phone).trim() : ''));
+    const resolvedName = customerName.trim() || parentOrder?.customer_name || selectedTable?.active_order?.customer_name || '';
+
     const payload = {
       order_type: orderType,
       table: orderType === 'DINE_IN' ? Number(selectedTable?.id) : null,
@@ -666,12 +978,17 @@ export const Pos = () => {
       items: itemsPayload,
       idempotency_key: idempotencyKey,
       coupon_code: appliedCoupon ? appliedCoupon.code : '',
-      customer_phone: customerPhone.trim(),
-      customer_name: customerName.trim(),
+      customer_phone: resolvedPhone,
+      customer_name: resolvedName,
       payment_method: 'CASH',
       mark_paid: isPaid,
       service_tax_enabled: serviceTaxEnabled,
     };
+
+    if (parentOrder) {
+      payload.parent_order = Number(parentOrder.id);
+      payload.parent_order_id = Number(parentOrder.id);
+    }
 
     try {
       const order = await createAssistedOrder(payload);
@@ -685,6 +1002,7 @@ export const Pos = () => {
       setAppliedCoupon(null);
       setCustomerPhone('');
       setCustomerName('');
+      setParentOrder(null);
       if (orderType === 'DINE_IN') {
         setSelectedTable(null);
         setSearchParams({}, { replace: true });
@@ -707,6 +1025,7 @@ export const Pos = () => {
     }
     setCartItems([]);
     setAppliedCoupon(null);
+    setParentOrder(null);
     setOrderError('');
     setCouponError('');
   };
@@ -1054,11 +1373,16 @@ export const Pos = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleAddDish(dish)}
-                                  className="btn btn-sm btn-danger text-white rounded-pill px-3 py-1 fw-bold shadow-xs d-flex align-items-center gap-1"
-                                  style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '12px', height: '32px' }}
+                                  className="btn btn-danger text-white rounded-circle p-0 d-flex align-items-center justify-content-center shadow-sm"
+                                  style={{ 
+                                    width: '32px', 
+                                    height: '32px', 
+                                    backgroundColor: 'var(--primary-color, #C8102E)', 
+                                    borderColor: 'var(--primary-color, #C8102E)' 
+                                  }}
+                                  title={`Add ${dish.name}`}
                                 >
-                                  <FiPlus size={14} />
-                                  <span>Add</span>
+                                  <FiPlus size={16} />
                                 </button>
                               )}
                             </div>
@@ -1132,7 +1456,7 @@ export const Pos = () => {
                     <div className="d-flex align-items-center gap-2 mt-0.5">
                       {selectedTable ? (
                         <span className="fw-bold text-dark fs-6">
-                          Table {tableService.getCanonicalTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id)}
+                          Table {getSelectedTableLabel(selectedTable) || selectedTable.id}
                         </span>
                       ) : (
                         <span className="text-danger fw-semibold small">No Table Selected</span>
@@ -1175,24 +1499,34 @@ export const Pos = () => {
 
             {/* 3. Customer Information */}
             <div className="pos-order-section">
-              <span className="small text-muted fw-bold text-uppercase mb-1" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>Customer Info</span>
+              <div className="d-flex align-items-center justify-content-between mb-1">
+                <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>
+                  Customer Info
+                </span>
+                {parentOrder && (
+                  <span className="badge bg-success-subtle text-success border border-success-subtle fw-semibold" style={{ fontSize: '10px' }}>
+                    Linked to Order #{parentOrder.display_order_number}
+                  </span>
+                )}
+              </div>
               <div className="row g-2">
                 <div className="col-7">
                   <div className="input-group input-group-sm">
-                    <span className="input-group-text bg-light text-muted border-light-subtle px-2" style={{ height: '32px' }}>
+                    <span className={`input-group-text border-light-subtle px-2 ${parentOrder ? 'bg-secondary-subtle text-success' : 'bg-light text-muted'}`} style={{ height: '32px' }}>
                       <FiPhone size={12} />
                     </span>
                     <input
                       type="tel"
-                      className="form-control border-light-subtle"
-                      placeholder="Mobile Number *"
+                      className={`form-control border-light-subtle ${parentOrder ? 'bg-light text-dark fw-bold' : ''}`}
+                      placeholder={parentOrder ? (customerPhone || "Retained from Session") : "Mobile Number *"}
                       value={customerPhone}
                       onChange={(e) => {
                         setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
                         if (orderError && orderError.toLowerCase().includes('mobile')) setOrderError('');
                       }}
-                      style={{ fontSize: '11.5px', height: '32px' }}
-                      required
+                      style={{ fontSize: '12px', height: '32px' }}
+                      required={!parentOrder}
+                      title={parentOrder ? `Mobile number inherited from Order #${parentOrder.display_order_number}` : ''}
                     />
                   </div>
                 </div>
@@ -1203,19 +1537,50 @@ export const Pos = () => {
                     </span>
                     <input
                       type="text"
-                      className="form-control border-light-subtle"
+                      className={`form-control border-light-subtle ${parentOrder && customerName ? 'bg-light text-dark fw-bold' : ''}`}
                       placeholder="Name (Optional)"
                       value={customerName}
                       onChange={(e) => setCustomerName(e.target.value)}
-                      style={{ fontSize: '11.5px', height: '32px' }}
+                      style={{ fontSize: '12px', height: '32px' }}
                     />
                   </div>
                 </div>
               </div>
+              {parentOrder && (
+                <div className="text-success mt-1 fw-semibold d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
+                  <span>✓</span> Customer retained from Order #{parentOrder.display_order_number}: <strong>{customerPhone || parentOrder.customer_phone || 'Existing Diner'}</strong>
+                </div>
+              )}
             </div>
 
             {/* 4 & 5. Order Items */}
             <div className="pos-order-section">
+              {parentOrder && (
+                <div className="alert alert-warning py-2 px-3 small rounded-3 mb-2.5 d-flex align-items-center justify-content-between">
+                  <div>
+                    <div className="fw-bold text-dark" style={{ fontSize: '12px' }}>
+                      Continuation for #{parentOrder.display_order_number}
+                    </div>
+                    <div className="text-secondary" style={{ fontSize: '11px' }}>
+                      Table {selectedTable ? (getSelectedTableLabel(selectedTable) || selectedTable.id) : ''} · Additional dishes will be grouped into this session.
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setParentOrder(null);
+                      setSelectedTable(null);
+                      setCustomerPhone('');
+                      setCustomerName('');
+                    }}
+                    className="btn btn-xs btn-outline-secondary rounded-pill ms-2"
+                    style={{ fontSize: '10.5px' }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
               <div className="d-flex align-items-center justify-content-between mb-2">
                 <div className="d-flex align-items-center gap-2">
                   <span className="fw-bold text-dark text-uppercase" style={{ fontSize: '12px', letterSpacing: '0.6px' }}>
@@ -1467,10 +1832,10 @@ export const Pos = () => {
                   type="button"
                   disabled={!canSubmitOrder}
                   onClick={() => handleSubmitOrder(false)}
-                  className={`btn btn-danger text-white fw-bold rounded-pill py-2.5 shadow-sm d-flex align-items-center justify-content-center gap-2 ${
+                  className={`btn btn-foodie-primary text-white fw-bold rounded-pill py-2.5 shadow-sm d-flex align-items-center justify-content-center gap-2 ${
                     !canSubmitOrder ? 'opacity-50' : ''
                   }`}
-                  style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '13.5px', height: '44px' }}
+                  style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', fontSize: '13.5px', height: '44px' }}
                   title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
                 >
                   {submittingOrder ? (
@@ -1478,7 +1843,7 @@ export const Pos = () => {
                   ) : (
                     <>
                       <FiCheck size={18} />
-                      <span>Send to Kitchen (Unpaid)</span>
+                      <span>Save Order</span>
                     </>
                   )}
                 </button>
@@ -1487,14 +1852,19 @@ export const Pos = () => {
                   type="button"
                   disabled={!canSubmitOrder}
                   onClick={() => handleSubmitOrder(true)}
-                  className={`btn btn-outline-success fw-bold rounded-pill py-2 d-flex align-items-center justify-content-center gap-2 ${
+                  className={`btn btn-foodie-outline fw-bold rounded-pill py-2 d-flex align-items-center justify-content-center gap-2 ${
                     !canSubmitOrder ? 'opacity-50' : ''
                   }`}
-                  style={{ fontSize: '13px', height: '40px' }}
+                  style={{ 
+                    fontSize: '13px', 
+                    height: '42px',
+                    borderColor: 'var(--success-color, #198754)',
+                    color: 'var(--success-color, #198754)'
+                  }}
                   title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
                 >
                   <FiDollarSign size={17} />
-                  <span>Pay Cash / Counter Pay (Paid)</span>
+                  <span>Proceed to Payment</span>
                 </button>
               </div>
             </div>
@@ -1758,12 +2128,17 @@ export const Pos = () => {
                           const isSelected = selectedTable && String(selectedTable.id) === String(table.id);
                           const tableNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
                           const isOccupied = table.status === 'Occupied' || Boolean(table.is_occupied) || table.status === 'Reserved' || table.is_active === false;
+                          const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
 
                           return (
                             <div key={table.id} className="col">
                               <div
                                 onClick={() => {
                                   if (isOccupied) {
+                                    if (activeOrderId) {
+                                      handleTrackExistingOrder(activeOrderId, table);
+                                      return;
+                                    }
                                     window.alert(table.status === 'Reserved' ? 'Table is reserved.' : 'Table is occupied.');
                                     return;
                                   }
@@ -1771,14 +2146,14 @@ export const Pos = () => {
                                 }}
                                 className={`p-3 rounded-3 border text-center transition-all ${
                                   isOccupied 
-                                    ? 'border-secondary-subtle bg-light opacity-60'
+                                    ? 'border-secondary-subtle bg-light opacity-80'
                                     : isSelected 
                                     ? 'border-danger bg-danger-subtle shadow-xs cursor-pointer' 
                                     : table.status === 'Available'
                                     ? 'border-success-subtle bg-white hover-shadow cursor-pointer'
                                     : 'border-warning-subtle bg-light-subtle cursor-pointer'
                                 }`}
-                                style={{ cursor: isOccupied ? 'not-allowed' : 'pointer' }}
+                                style={{ cursor: isOccupied ? 'default' : 'pointer' }}
                                 title={isOccupied ? `Table ${tableNum} is ${table.status}` : `Select Table ${tableNum}`}
                               >
                                 <div className="fw-bold fs-6 text-dark mb-0.5">
@@ -1788,6 +2163,19 @@ export const Pos = () => {
                                   {table.capacity || 4} Diners
                                 </div>
                                 <Badge status={table.status} className="px-2 py-0.5" style={{ fontSize: '10px' }} />
+                                {isOccupied && activeOrderId && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleTrackExistingOrder(activeOrderId, table);
+                                    }}
+                                    className="btn btn-xs btn-outline-danger rounded-pill mt-2 w-100 fw-semibold"
+                                    style={{ fontSize: '10.5px', padding: '2px 6px' }}
+                                  >
+                                    Track Existing Order
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
@@ -1944,11 +2332,43 @@ export const Pos = () => {
           </Modal>
         )}
 
+        {/* Tracked Order Details Modal */}
+        {showTrackedOrderModal && trackedOrder && (
+          <TrackOrderModal
+            isOpen={showTrackedOrderModal}
+            order={trackedOrder}
+            table={selectedTable || tables.find(t => String(t.id) === String(trackedOrder.tableId || trackedOrder.table_id))}
+            onClose={() => setShowTrackedOrderModal(false)}
+            onContinueOrder={handleContinueOrderFromModal}
+            onProceedToBill={handleProceedToBillFromModal}
+            loading={loading}
+          />
+        )}
+
         {/* E-Bill Receipt Modal */}
         <EBillModal
           isOpen={!!viewingEBill}
           order={viewingEBill}
           onClose={() => setViewingEBill(null)}
+          onProceedToBill={async (ord) => {
+            const targetOrder = ord || viewingEBill;
+            if (!targetOrder) return;
+            const targetId = targetOrder.backendOrderId || targetOrder.id || targetOrder.order_id;
+            if (!targetId) return;
+            try {
+              const { proceedToBill } = await import('../../services/adminApi');
+              await proceedToBill(targetId);
+              window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: targetId, status: 'Completed' } }));
+              window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
+              setViewingEBill(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
+              window.alert(`Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`);
+            } catch (err) {
+              console.error('Failed to complete order on Proceed to Bill:', err);
+              const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
+              window.alert(msg);
+              throw err;
+            }
+          }}
         />
 
         {/* Toast Notification for Stock Availability */}

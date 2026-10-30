@@ -91,6 +91,26 @@ class TableViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, views
     filterset_fields = ["branch", "status", "is_active", "qr_is_active"]
     search_fields = ["table_number", "location"]
 
+    def get_queryset(self):
+        # Auto-reconcile idle occupied tables: any occupied table with no active orders becomes AVAILABLE
+        try:
+            active_table_ids = Order.objects.filter(
+                Q(status__in=Order.ACTIVE_STATUSES),
+                Q(table__isnull=False) | Q(parent_order__table__isnull=False)
+            ).values_list("table_id", flat=True)
+            idle_occupied = DiningTable.objects.filter(
+                status=DiningTable.Status.OCCUPIED
+            ).exclude(id__in=active_table_ids)
+            idle_ids = list(idle_occupied.values_list("id", flat=True))
+            if idle_ids:
+                DiningTable.objects.filter(id__in=idle_ids).update(status=DiningTable.Status.AVAILABLE)
+                from apps.realtime.publish import publish_catalog_event
+                for b_id in DiningTable.objects.filter(id__in=idle_ids).values_list("branch_id", flat=True).distinct():
+                    publish_catalog_event(b_id, "table", "updated")
+        except Exception:
+            pass
+        return super().get_queryset()
+
     def _active_orders(self, table):
         return Order.objects.filter(table=table, status__in=Order.ACTIVE_STATUSES).exists()
 
@@ -251,12 +271,24 @@ class PublicAvailableTablesView(APIView):
         branch = Branch.objects.filter(pk=branch_id, is_active=True).first()
         if branch is None:
             return Response({"detail": "Branch not found."}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            active_table_ids = Order.objects.filter(
+                branch_id=branch_id,
+                status__in=Order.ACTIVE_STATUSES,
+                table__isnull=False
+            ).values_list("table_id", flat=True)
+            idle_ids = list(branch.tables.filter(status=DiningTable.Status.OCCUPIED).exclude(id__in=active_table_ids).values_list("id", flat=True))
+            if idle_ids:
+                branch.tables.filter(id__in=idle_ids).update(status=DiningTable.Status.AVAILABLE)
+        except Exception:
+            pass
         tables = branch.tables.filter(is_active=True).order_by("table_number")
         return Response([{
             "id": t.id, "table_number": t.table_number, "location": t.location, "capacity": t.capacity,
             "status": t.status,
             "available": t.status == DiningTable.Status.AVAILABLE and t.qr_is_active,
         } for t in tables])
+
 
 
 class PublicRestaurantSettingsView(APIView):

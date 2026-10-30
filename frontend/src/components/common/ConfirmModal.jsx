@@ -13,14 +13,37 @@ export const ConfirmModal = ({
   loading = false
 }) => {
   const footerActions = (
-    <>
-      <Button variant="light" onClick={onClose} disabled={loading}>
+    <div className="d-flex align-items-center justify-content-end gap-3 w-100">
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={loading}
+        className="btn rounded-pill px-4 fw-bold"
+        style={{
+          height: '40px',
+          backgroundColor: '#FFFFFF',
+          color: 'var(--primary-color, #C8102E)',
+          border: '1.5px solid var(--primary-color, #C8102E)',
+          fontSize: '13px'
+        }}
+      >
         {cancelText}
-      </Button>
-      <Button variant="danger" onClick={onConfirm} loading={loading}>
-        {confirmText}
-      </Button>
-    </>
+      </button>
+      <button
+        type="button"
+        onClick={onConfirm}
+        disabled={loading}
+        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm"
+        style={{
+          height: '40px',
+          backgroundColor: 'var(--primary-color, #C8102E)',
+          borderColor: 'var(--primary-color, #C8102E)',
+          fontSize: '13px'
+        }}
+      >
+        {loading ? 'Please wait...' : confirmText}
+      </button>
+    </div>
   );
 
   return (

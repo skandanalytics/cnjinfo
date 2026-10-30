@@ -9,7 +9,7 @@ import {
 import { classifyStock } from '../utils/stockStatus';
 import api from '../config/api';
 
-export { isStaffScreen };
+export { isStaffScreen, staffJson, staffFetch };
 
 const STATUS_LABEL = {
   PENDING: 'Pending',
@@ -206,6 +206,8 @@ function mapTable(t) {
     qr_url: t.qr_url,
     qr_is_active: t.qr_is_active !== false,
     is_active: t.is_active,
+    active_order_id: t.active_order_id || null,
+    active_order: t.active_order || null,
   };
 }
 
@@ -831,9 +833,18 @@ export function mapOrder(o) {
     ? Number(override.round_off)
     : Number(o.round_off || 0);
 
+  const displayNo = o.display_order_number || o.display_number || (o.parent_order_id && Number(o.continuation_index) > 0 ? `${o.parent_order_id}.${o.continuation_index}` : String(o.id));
+
   return {
     id: o.id,
-    orderNumber: o.order_number,
+    orderNumber: displayNo,
+    backendOrderNumber: o.order_number,
+    display_order_number: displayNo,
+    display_number: displayNo,
+    displayOrderNumber: displayNo,
+    parent_order_id: o.parent_order_id || (typeof o.parent_order === 'object' ? o.parent_order?.id : o.parent_order) || null,
+    continuation_index: Number(o.continuation_index || 0),
+    has_continuations: Boolean(o.has_continuations),
     status: STATUS_LABEL[o.status] || o.status,
     backendStatus: o.status,
     date: created.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -877,7 +888,10 @@ export function mapOrder(o) {
     branchCity: o.branch_city || '',
     branchEmail: o.branch_email || '',
     customerName: o.customer_name || '',
-    tableId: o.table?.id || null,
+    tableId: o.table?.id || o.table_id || null,
+    table_id: o.table?.id || o.table_id || null,
+    tableNumber: o.table_number || o.table?.label || tableLabel,
+    table_number: o.table_number || o.table?.label || tableLabel,
     order_type: o.order_type,
     placedById: o.placed_by || null,
     placedByName: o.placed_by_name || '',
@@ -948,6 +962,19 @@ export async function transitionOrder(id, status, reason) {
     }
     throw err;
   }
+}
+
+export async function proceedToBill(orderId) {
+  const data = await staffJson(`/orders/${orderId}/proceed-to-bill/`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId, status: 'Completed' } }));
+  window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId } }));
+  try {
+    localStorage.setItem('foodie_orders_sync_trigger', String(Date.now()));
+  } catch {}
+  return data;
 }
 
 export async function recordCounterPayment(orderId) {
@@ -1060,4 +1087,8 @@ export async function getPricingQuote(payload) {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function fetchBillPreview(orderId) {
+  return await staffJson(`/billing/preview/${orderId}/`);
 }

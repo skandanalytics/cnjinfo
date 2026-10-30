@@ -358,9 +358,11 @@ export const Offers = () => {
               required
               error={couponError}
             />
-            {couponError && <div className="text-danger small fw-semibold mb-2">{couponError}</div>}
-            <div className="d-grid mt-3">
-              <Button type="submit" variant="primary">
+            <div className="d-flex align-items-center justify-content-end gap-2 mt-4 pt-3 border-top">
+              <Button variant="outline" type="button" onClick={() => setIsAddOpen(false)} className="rounded-pill px-4">
+                Cancel
+              </Button>
+              <Button type="submit" variant="primary" className="rounded-pill px-4 fw-bold">
                 Create Coupon
               </Button>
             </div>
@@ -743,8 +745,11 @@ export const Offers = () => {
               Apply automatically when the order qualifies
             </label>
           </div>
-          <div className="d-grid mt-3">
-            <Button type="submit" variant="primary">
+          <div className="d-flex align-items-center justify-content-end gap-2 mt-4 pt-3 border-top">
+            <Button variant="outline" type="button" onClick={() => setIsAddOpen(false)} className="rounded-pill px-4">
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" className="rounded-pill px-4 fw-bold">
               Create Coupon
             </Button>
           </div>

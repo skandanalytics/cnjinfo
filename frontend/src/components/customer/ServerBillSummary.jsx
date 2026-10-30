@@ -14,8 +14,8 @@ export const ServerBillSummary = ({ cart, children }) => {
   const pricing = cart?.pricing;
   const takeawayCharge = isTakeaway ? Number(pricing?.takeaway_charge || 0) : 0;
   return (
-    <div className="card rounded-3 border-0 shadow-sm p-3 p-sm-4 bg-white mb-4 text-start" data-testid="server-bill">
-      <h5 className="fw-bold text-dark mb-3 border-bottom pb-2">Order Bill Summary</h5>
+    <div className="card rounded-4 border-0 shadow-sm p-4 bg-white mb-4 text-start" data-testid="server-bill">
+      <h5 className="fw-bold text-dark mb-3 border-bottom pb-2" style={{ fontSize: '18px' }}>Order Summary</h5>
       {!pricing ? (
         <p className="text-secondary small mb-0">The bill appears once your cart has items that can be ordered.</p>
       ) : (

@@ -78,18 +78,32 @@ class CreateAuthorizedAdminView(APIView):
     throttle_scope = "db_setup"
 
     def post(self, request):
-        actor = get_active_employee(request.user)
+        actor = get_active_employee(request.user) if request.user.is_authenticated else None
+        if not actor:
+            authorizing_code = str(request.data.get("authorizing_code") or request.data.get("authorizing_admin_id") or "").strip().upper()
+            authorizing_password = str(request.data.get("authorizing_password") or "")
+            if authorizing_code and authorizing_password:
+                candidate = Employee.objects.select_related("user").filter(employee_code=authorizing_code, status=Employee.Status.ACTIVE).first()
+                if not candidate or not candidate.user.check_password(authorizing_password):
+                    return Response({"detail": "Invalid authorizing administrator credentials."}, status=401)
+                if candidate.role not in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
+                    return Response({"detail": "Only an authorized administrator can create administrator accounts."}, status=403)
+                actor = candidate
+
         if actor and actor.role in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
             try:
                 return Response(create_administrator(actor, request.data), status=201)
             except MaintenanceError as exc:
                 return fail(exc)
 
-        # Allow unauthenticated administrator creation and recovery workflow
-        try:
-            return Response(recover_administrator(request.data, bypass_secret=True), status=201)
-        except MaintenanceError as exc:
-            return fail(exc)
+        # Unauthenticated recovery workflow requires valid setup_key
+        if request.data.get("setup_key"):
+            try:
+                return Response(recover_administrator(request.data, bypass_secret=False), status=201)
+            except MaintenanceError as exc:
+                return fail(exc)
+
+        return Response({"detail": "Authentication or authorization credentials required."}, status=401)
 
 
 class OverviewView(ConsoleView):

@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { FiDownload, FiPrinter } from 'react-icons/fi';
 import { isStaffScreen } from '../../services/staffClient';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 const PAYMENT_STATUS_LABEL = {
   PAID: 'Paid',
@@ -30,13 +31,20 @@ const Row = ({ label, value, emphasis = false }) => (
   </div>
 );
 
-export const EBillModal = ({ isOpen, order, onClose }) => {
+export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [completingOrder, setCompletingOrder] = useState(false);
+  const [finalizedSuccess, setFinalizedSuccess] = useState(false);
+
+  useEffect(() => {
+    setFinalizedSuccess(false);
+  }, [order?.id, isOpen]);
 
   if (!order) return null;
 
   const statusText = String(order.backendStatus || order.status || '');
   const isCompleted = ['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(statusText.toUpperCase());
+  const isFinalized = isCompleted || finalizedSuccess;
   const isConfirmedPaid = Boolean(
     order.is_paid ||
     order.isPaid ||
@@ -82,12 +90,51 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
   const grandTotal = Number(order.total ?? order.total_amount ?? 0);
   const restaurantName = order.branchName || order.branch_name || 'Foodie';
   const addressParts = [order.branchAddress, order.branchCity].filter(Boolean);
-  const orderNo = order.orderNumber || order.order_number || '';
-  const invoiceNo = (isCompleted && orderNo) ? `INV-${orderNo}` : (order.invoice_number || '');
+  const orderNo = formatOrderDisplayNumber(order, order.id || '');
+  const invoiceNo = (isFinalized && orderNo) ? `INV-${orderNo}` : (order.invoice_number || '');
   const when = [order.date, order.time].filter(Boolean).join(' · ')
     || (order.created_at ? new Date(order.created_at).toLocaleString('en-IN') : '');
   const customerName = order.customerName || order.customer_name || '';
   const customerPhone = order.customerPhone || order.customer_phone || '';
+
+  const handleProceedToBill = async () => {
+    if (completingOrder || isFinalized) return;
+    try {
+      setCompletingOrder(true);
+      if (onProceedToBill) {
+        await onProceedToBill(order);
+        setFinalizedSuccess(true);
+        return;
+      }
+
+      const targetId = order.backendOrderId || order.id || order.order_id;
+      if (!targetId) return;
+
+      const { isStaffScreen } = await import('../../services/staffClient');
+      if (isStaffScreen()) {
+        const { proceedToBill } = await import('../../services/adminApi');
+        await proceedToBill(targetId);
+        setFinalizedSuccess(true);
+        window.alert(`Order #${orderNo || targetId} marked as Completed.`);
+        return;
+      } else {
+        const { proceedOrderToBill } = await import('../../services/customerCheckout');
+        await proceedOrderToBill(targetId);
+        setFinalizedSuccess(true);
+        if (typeof window !== 'undefined') {
+          window.location.href = `/customer/order-confirmation?order=${targetId}&proceedToBill=1`;
+        }
+        return;
+      }
+    } catch (err) {
+      console.error('Could not complete order on Proceed to Bill:', err);
+      const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
+      window.alert(msg);
+      return;
+    } finally {
+      setCompletingOrder(false);
+    }
+  };
 
   const printInvoice = () => {
     const source = document.getElementById('foodie-invoice-sheet');
@@ -119,21 +166,48 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
       size="lg"
       footerActions={
         <div className="d-flex align-items-center justify-content-between w-100 gap-2 flex-wrap">
-          <Button variant="light" onClick={onClose} className="rounded-pill px-4">Close</Button>
-          <div className="d-flex gap-2">
-            {isStaffScreen() && (
-              <Button variant="light" onClick={printInvoice} className="rounded-pill px-3 d-flex align-items-center gap-2 foodie-no-print">
-                <FiPrinter /> Print Bill
-              </Button>
-            )}
-            {isCompleted && (
+          <Button variant="outline" onClick={onClose} className="rounded-pill px-4">Close</Button>
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <Button variant="outline" onClick={printInvoice} className="rounded-pill px-3 d-flex align-items-center gap-2 foodie-no-print">
+              <FiPrinter /> Print Bill
+            </Button>
+            {isFinalized && (
               <Button
-                variant="primary"
+                variant="outline"
                 onClick={handleDownloadPDF}
                 loading={downloadingPdf}
                 className="rounded-pill px-3 d-flex align-items-center gap-2"
               >
                 <FiDownload /> Download Bill
+              </Button>
+            )}
+            {isFinalized ? (
+              <Button
+                variant="secondary"
+                disabled={true}
+                className="rounded-pill px-4 py-2 fw-semibold d-flex align-items-center gap-2"
+                style={{ opacity: 0.7, cursor: 'not-allowed', backgroundColor: '#6c757d', borderColor: '#6c757d', color: '#fff' }}
+              >
+                <span>Bill Processed</span>
+              </Button>
+            ) : completingOrder ? (
+              <Button
+                variant="primary"
+                disabled={true}
+                loading={true}
+                className="rounded-pill px-4 py-2 fw-bold d-flex align-items-center gap-2 shadow-sm"
+                style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)' }}
+              >
+                <span>Processing...</span>
+              </Button>
+            ) : (
+              <Button
+                variant="primary"
+                onClick={handleProceedToBill}
+                className="rounded-pill px-4 py-2 fw-bold d-flex align-items-center gap-2 shadow-sm"
+                style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)' }}
+              >
+                <span>Proceed to Bill</span>
               </Button>
             )}
           </div>
@@ -155,13 +229,20 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
           </div>
           <div className="text-end">
             {invoiceNo ? <div className="fw-bold">{invoiceNo}</div> : null}
-            {orderNo ? <div>{invoiceNo ? `Order ${orderNo}` : orderNo}</div> : null}
+            {orderNo ? <div>{invoiceNo ? `Order ${orderNo}` : `Order #${orderNo}`}</div> : null}
             {when ? <div>{when}</div> : null}
-            <div>{isTakeaway ? 'Takeaway' : `Table ${order.table || order.tableNumber || '—'}`}</div>
+            <div>{isTakeaway ? 'Takeaway' : `Table ${order.table || order.tableNumber || order.table_label || '—'}`}</div>
             {customerName ? <div>{customerName}</div> : null}
             {customerPhone ? <div>{customerPhone}</div> : null}
           </div>
         </div>
+
+        {Boolean(order.has_continuations || (order.combined_items && order.combined_items.length > (order.items?.length || 0)) || order.combined_items?.some(it => it.order_display_number && String(it.order_display_number) !== String(orderNo))) && (
+          <div className="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2 small rounded-3" style={{ fontSize: '12px' }}>
+            <i className="bi bi-info-circle-fill text-primary" />
+            <span><strong>Combined Dine-In Bill</strong> — includes initial order and all additional dish orders for this table.</span>
+          </div>
+        )}
 
         <table className="foodie-invoice-items">
           <thead>
@@ -173,10 +254,17 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
             </tr>
           </thead>
           <tbody>
-            {(order.items || []).map((item, index) => (
+            {((order.combined_items && order.combined_items.length > 0) ? order.combined_items : (order.items || [])).map((item, index) => (
               <tr key={item.id || index}>
                 <td>
-                  <div className="fw-semibold">{item.name || 'Dish'}</div>
+                  <div className="fw-semibold">
+                    {item.order_display_number && (
+                      <span className="badge bg-light text-dark border me-1.5 px-1.5 py-0.5" style={{ fontSize: '10px' }}>
+                        #{item.order_display_number}
+                      </span>
+                    )}
+                    {item.name || 'Dish'}
+                  </div>
                   {Array.isArray(item.customizations) && item.customizations.length > 0 && (
                     <div className="foodie-invoice-extra">
                       {item.customizations.map((extra) => (
@@ -186,8 +274,8 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
                   )}
                 </td>
                 <td className="text-center">{item.quantity || 1}</td>
-                <td className="text-end">{money(item.price || 0)}</td>
-                <td className="text-end">{money(item.lineTotal != null ? item.lineTotal : (item.price || 0) * (item.quantity || 1))}</td>
+                <td className="text-end">{money(item.price != null ? item.price : item.unit_price || 0)}</td>
+                <td className="text-end">{money(item.lineTotal != null ? item.lineTotal : item.line_total != null ? item.line_total : ((item.price || item.unit_price || 0) * (item.quantity || 1)))}</td>
               </tr>
             ))}
           </tbody>
@@ -208,6 +296,12 @@ export const EBillModal = ({ isOpen, order, onClose }) => {
           {couponDiscount > 0 && <Row label="Coupon discounts" value={discount(couponDiscount)} />}
           <Row label={order.gst_rate != null && order.gst_rate !== '' ? `GST (${order.gst_rate}%)` : 'GST'} value={money(tax)} />
           {roundOff !== 0 && <Row label="Round-off" value={money(roundOff)} />}
+          {Number(order.paid_amount || 0) > 0 && (
+            <Row label="Paid amount" value={money(order.paid_amount)} />
+          )}
+          {order.balance_due != null && Number(order.balance_due) > 0 && (
+            <Row label="Balance due" value={money(order.balance_due)} emphasis />
+          )}
           <Row label="Grand total" value={money(grandTotal)} emphasis />
         </div>
 

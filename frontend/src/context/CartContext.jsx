@@ -1161,18 +1161,6 @@ export const CartProvider = ({ children }) => {
 
 
 
-  // Places the order from the customer's server cart. The server prices it, enforces the Dine-In table rule
-  // and marks that cart CONVERTED; the local mirror is reset only after the server confirms the order.
-  const submitOrder = async (paymentMethod = 'COUNTER', explicitOrderType = null) => {
-    const order = await placeCustomerOrder(explicitOrderType || getOrderType(), paymentMethod);
-    setOrderLogs((prev) => [order, ...prev]);
-    resetLocalCart();
-    try {
-      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: order.id } }));
-    } catch (e) { }
-    return order;
-  };
-
   const resetLocalCart = () => {
     sessionStorage.setItem('foodie_checkout_in_progress', '1');
     setCartItems([]);
@@ -1184,6 +1172,18 @@ export const CartProvider = ({ children }) => {
     }
     if (user) sessionStorage.removeItem(getCartStorageKey(user));
     setTimeout(() => sessionStorage.removeItem('foodie_checkout_in_progress'), 3000);
+  };
+
+  // Places the order from the customer's server cart. The server prices it, enforces the Dine-In table rule
+  // and marks that cart CONVERTED; the local mirror is reset only after the server confirms the order.
+  const submitOrder = async (paymentMethod = 'COUNTER', explicitOrderType = null) => {
+    const order = await placeCustomerOrder(explicitOrderType || getOrderType(), paymentMethod);
+    setOrderLogs((prev) => [order, ...prev]);
+    resetLocalCart();
+    try {
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: order.id } }));
+    } catch (e) { }
+    return order;
   };
 
   const loadOrderIntoCart = (items) => {

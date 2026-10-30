@@ -6,7 +6,7 @@ only when no other unfinished order still uses it. Completing an order does not 
 """
 from uuid import uuid4
 
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, models, transaction
 from django.utils import timezone
 
 from apps.accounts.models import User
@@ -23,9 +23,9 @@ from .realtime import publish_order_event
 
 # status -> statuses it may move to
 TRANSITIONS = {
-    Order.Status.PENDING: {Order.Status.PREPARING, Order.Status.CANCELLED},
-    Order.Status.PREPARING: {Order.Status.READY, Order.Status.SERVED, Order.Status.CANCELLED},
-    Order.Status.READY: {Order.Status.SERVED},
+    Order.Status.PENDING: {Order.Status.PREPARING, Order.Status.COMPLETED, Order.Status.CANCELLED},
+    Order.Status.PREPARING: {Order.Status.READY, Order.Status.SERVED, Order.Status.COMPLETED, Order.Status.CANCELLED},
+    Order.Status.READY: {Order.Status.SERVED, Order.Status.COMPLETED},
     Order.Status.SERVED: {Order.Status.COMPLETED},
 }
 TERMINAL = {Order.Status.COMPLETED, Order.Status.CANCELLED}
@@ -55,7 +55,10 @@ def _release_if_idle(table):
     if table is None:
         return
     table = DiningTable.objects.select_for_update().get(pk=table.pk)
-    still = Order.objects.filter(table=table, status__in=Order.ACTIVE_STATUSES).exists()
+    still = Order.objects.filter(
+        models.Q(table=table) | models.Q(parent_order__table=table),
+        status__in=Order.ACTIVE_STATUSES,
+    ).exists()
     if not still and table.status == DiningTable.Status.OCCUPIED:
         table.status = DiningTable.Status.AVAILABLE
         table.save(update_fields=["status", "updated_at"])
@@ -73,19 +76,50 @@ def _invoice_contact(order):
     customer_name = ""
     if order.customer_id and getattr(order, "customer", None):
         customer_name = order.customer.name or ""
+    elif order.parent_order_id and getattr(order, "parent_order", None) and order.parent_order.customer:
+        customer_name = order.parent_order.customer.name or ""
+
+    customer_phone = order.customer_phone or (order.customer.phone if order.customer_id and getattr(order, "customer", None) else "") or (order.parent_order.customer_phone if order.parent_order_id and getattr(order, "parent_order", None) else "")
+
+    if not customer_phone and order.parent_order_id:
+        from django.db.models import Q
+        sibling = Order.objects.filter(
+            Q(id=order.parent_order_id) | Q(parent_order_id=order.parent_order_id)
+        ).exclude(customer_phone="").order_by("-id").first()
+        if sibling:
+            customer_phone = sibling.customer_phone
+            if not customer_name and sibling.customer:
+                customer_name = sibling.customer.name or ""
+    elif not customer_phone:
+        child = Order.objects.filter(parent_order=order).exclude(customer_phone="").order_by("-id").first()
+        if child:
+            customer_phone = child.customer_phone
+            if not customer_name and child.customer:
+                customer_name = child.customer.name or ""
+
+    if not customer_name and customer_phone:
+        user_match = User.objects.filter(phone=customer_phone).first()
+        if user_match:
+            customer_name = user_match.name or ""
+    if not customer_name and order.parent_order_id and getattr(order, "parent_order", None) and order.parent_order.customer_phone:
+        user_match = User.objects.filter(phone=order.parent_order.customer_phone).first()
+        if user_match:
+            customer_name = user_match.name or ""
     return {
         "branch_address": branch.address if branch else "",
         "branch_phone": branch.contact_number if branch else "",
         "branch_city": branch.city if branch else "",
         "branch_email": branch.email if branch else "",
         "customer_name": customer_name,
+        "customer_phone": customer_phone,
         "payment_method": method,
     }
 
 
 def serialize_order(order):
     items = [{
-        "id": i.id, "food_id": i.food_id, "name": i.food_name, "quantity": i.quantity,
+        "id": i.id, "order_id": order.id, "order_display_number": order.display_number,
+        "food_id": i.food_id, "name": i.food_name, "quantity": i.quantity,
         "unit_price": str(i.unit_price), "customizations": i.customizations,
         "customization_per_unit": str(i.customization_per_unit),
         "dish_discount_per_unit": str(i.dish_discount_per_unit), "line_total": str(i.line_total),
@@ -94,15 +128,59 @@ def serialize_order(order):
     history = [{"from": h.from_status, "to": h.to_status, "note": h.note, "at": h.created_at}
                for h in order.status_history.all()]
     diner_count = order.number_of_diners or (order.table.capacity if order.table else None)
+
+    continuations_data = []
+    combined_items = list(items)
+    combined_total = order.total_amount
+    combined_items_subtotal = order.items_subtotal
+    has_continuations = False
+
+    if order.parent_order_id is None:
+        continuations_qs = order.continuations.exclude(status=Order.Status.CANCELLED).order_by("continuation_index", "id").prefetch_related("items")
+        for cont in continuations_qs:
+            has_continuations = True
+            c_items = [{
+                "id": i.id, "order_id": cont.id, "order_display_number": cont.display_number,
+                "food_id": i.food_id, "name": i.food_name, "quantity": i.quantity,
+                "unit_price": str(i.unit_price), "customizations": i.customizations,
+                "customization_per_unit": str(i.customization_per_unit),
+                "dish_discount_per_unit": str(i.dish_discount_per_unit), "line_total": str(i.line_total),
+                "special_instructions": i.special_instructions,
+            } for i in cont.items.all()]
+            combined_items.extend(c_items)
+            combined_total += cont.total_amount
+            combined_items_subtotal += cont.items_subtotal
+            continuations_data.append({
+                "id": cont.id,
+                "order_number": cont.order_number,
+                "display_order_number": cont.display_number,
+                "status": cont.status,
+                "payment_status": cont.payment_status,
+                "total_amount": str(cont.total_amount),
+                "items_count": cont.items.count(),
+                "created_at": cont.created_at,
+            })
+
     return {
-        "id": order.id, "order_number": order.order_number, "branch_id": order.branch_id,
+        "id": order.id, "order_number": order.order_number,
+        "display_order_number": order.display_number,
+        "parent_order_id": order.parent_order_id,
+        "continuation_index": order.continuation_index,
+        "has_continuations": has_continuations,
+        "continuations": continuations_data,
+        "combined_items": combined_items,
+        "combined_total": str(combined_total),
+        "combined_items_subtotal": str(combined_items_subtotal),
+        "branch_id": order.branch_id,
         "branch_name": order.branch_name,
         "order_type": order.order_type, "status": order.status, "payment_status": order.payment_status,
         "table": ({"id": order.table_id, "label": order.table_label, "capacity": order.table.capacity if order.table else None}
                   if order.table_id or order.table_label else None),
+        "table_id": order.table_id,
+        "table_number": order.table_label,
         "number_of_diners": diner_count,
         "diners": diner_count,
-        "customer_phone": order.customer_phone,
+        "customer_phone": order.customer_phone or (order.customer.phone if order.customer_id and getattr(order, "customer", None) else "") or (order.parent_order.customer_phone if order.parent_order_id and getattr(order, "parent_order", None) else ""),
         "placed_by": order.placed_by_id,
         "placed_by_name": order.placed_by_name or (order.placed_by.name if order.placed_by_id else None),
         "items": items, "history": history,
@@ -123,7 +201,7 @@ def _owns_order(order, user):
 
 
 @transaction.atomic
-def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True):
+def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True, parent_order_id=None):
     from apps.accounts.permissions import get_active_employee
     from apps.accounts.scoping import can_access_branch
 
@@ -140,14 +218,69 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
         user=user, branch=branch, status=Cart.Status.ACTIVE).first()
     if cart is None or not cart.items.exists():
         raise OrderError("Your cart is empty.", "cart_empty")
+
+    parent_order = None
+    continuation_idx = 0
+    if parent_order_id:
+        parent_order = Order.objects.select_for_update().filter(pk=parent_order_id).first()
+        if parent_order:
+            if parent_order.status in (Order.Status.CANCELLED, Order.Status.COMPLETED):
+                if not assisted:
+                    parent_order = None
+                else:
+                    raise OrderError("This order has proceeded to bill and cannot be continued.", "continuation_closed", 400)
+            elif parent_order.branch_id != branch.id or parent_order.order_type != Order.Type.DINE_IN:
+                parent_order = None
+            else:
+                root = parent_order.parent_order if parent_order.parent_order_id else parent_order
+                if root.id != parent_order.id:
+                    root = Order.objects.select_for_update().get(pk=root.id)
+                if root.status in (Order.Status.CANCELLED, Order.Status.COMPLETED):
+                    if not assisted:
+                        parent_order = None
+                    else:
+                        raise OrderError("This order has proceeded to bill and cannot be continued.", "continuation_closed", 400)
+                else:
+                    parent_order = root
+                    last_idx = Order.objects.filter(parent_order=parent_order).aggregate(models.Max('continuation_index'))['continuation_index__max'] or 0
+                    continuation_idx = last_idx + 1
+                    if parent_order.table_id and cart.table_id != parent_order.table_id:
+                        cart.table = parent_order.table
+                        cart.save(update_fields=['table'])
+
     if cart.order_type == Order.Type.TAKEAWAY:
+        if parent_order:
+            raise OrderError("Continuation orders must be Dine-In.", "invalid_order_type", 400)
         from apps.carts.services import _branch_has_orderable_food
         if not _branch_has_orderable_food(branch):
             raise OrderError("Takeaway ordering is unavailable because no dishes are currently available.",
                              "no_dishes", 409)
     elif cart.order_type == Order.Type.DINE_IN:
-        if cart.table_id is None:
+        if cart.table_id is None and parent_order and parent_order.table_id:
+            cart.table = parent_order.table
+            cart.save(update_fields=['table'])
+        elif cart.table_id is None:
             raise OrderError("Please select an available table for Dine-In.", "table_required", 400)
+
+        # Automatic continuation detection: if no parent_order was specified, but there is an active
+        # Dine-In order for this table/branch that is not completed/cancelled, chain onto it
+        if parent_order is None and cart.table_id:
+            active_root = (
+                Order.objects.select_for_update()
+                .filter(
+                    branch=branch,
+                    table_id=cart.table_id,
+                    order_type=Order.Type.DINE_IN,
+                    parent_order__isnull=True,
+                )
+                .exclude(status__in=[Order.Status.CANCELLED, Order.Status.COMPLETED])
+                .order_by("-id")
+                .first()
+            )
+            if active_root:
+                parent_order = active_root
+                last_idx = Order.objects.filter(parent_order=parent_order).aggregate(models.Max('continuation_index'))['continuation_index__max'] or 0
+                continuation_idx = last_idx + 1
     view = evaluate(cart)
     if not view["can_checkout"]:
         raise OrderError("Your cart needs attention before checkout.", "cart_invalid", 409)
@@ -158,12 +291,19 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
     except PricingError as exc:
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
 
+    order_customer = (user if not assisted and getattr(user, 'is_authenticated', False) and getattr(user, 'user_type', None) == User.UserType.CUSTOMER else None) or (parent_order.customer if parent_order else None)
+    order_customer_phone = (getattr(user, 'phone', '') if not assisted and getattr(user, 'user_type', None) == User.UserType.CUSTOMER else '') or (parent_order.customer_phone if parent_order else '')
+
     order = Order(
         order_number=f"TMP{uuid4().hex[:12]}",
         branch=branch, branch_name=branch.name,
-        customer=None if assisted else user, customer_phone="" if assisted else user.phone,
-        table=cart.table, table_label=(f"{cart.table.table_number}" if cart.table_id else ""),
+        customer=order_customer, customer_phone=order_customer_phone,
+        table=cart.table or (parent_order.table if parent_order else None),
+        table_label=(f"{cart.table.table_number}" if cart.table_id else (parent_order.table_label if parent_order else "")),
         order_type=cart.order_type,
+        parent_order=parent_order,
+        continuation_index=continuation_idx,
+        display_order_number=f"{parent_order.id}.{continuation_idx}" if parent_order else "",
         source=Order.Source.EMPLOYEE if assisted else Order.Source.CUSTOMER,
         placed_by=user if assisted else None, placed_by_name=(user.name or user.phone) if assisted else "",
         status=Order.Status.PENDING,
@@ -189,7 +329,11 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
             return existing, False
         raise
     order.order_number = f"FD{order.id:06d}"
-    order.save(update_fields=["order_number"])
+    update_fields = ["order_number"]
+    if not parent_order:
+        order.display_order_number = str(order.id)
+        update_fields.append("display_order_number")
+    order.save(update_fields=update_fields)
     for line in priced["items"]:
         OrderItem.objects.create(
             order=order, food_id=line["food_id"], food_name=line["name"], unit_price=line["unit_price"],
@@ -244,7 +388,7 @@ def _write_items(order, priced):
 
 
 @transaction.atomic
-def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=None, order_type=Order.Type.DINE_IN, coupon_code="", customer_phone="", customer_name="", mark_paid=False, payment_method="CASH", service_tax_enabled=True):
+def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=None, order_type=Order.Type.DINE_IN, coupon_code="", customer_phone="", customer_name="", mark_paid=False, payment_method="CASH", service_tax_enabled=True, parent_order_id=None):
     """Staff places a dine-in or takeaway order. The creator is the logged-in staff member."""
     from apps.accounts.permissions import get_active_employee
     from apps.accounts.scoping import can_access_branch
@@ -262,6 +406,26 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
                 raise OrderError("This checkout key was already used.", "idempotency_conflict", 409)
             return existing, False
 
+    parent_order = None
+    continuation_idx = 0
+    if parent_order_id:
+        parent_order = Order.objects.select_for_update().filter(pk=parent_order_id).first()
+        if parent_order:
+            if parent_order.status in (Order.Status.CANCELLED, Order.Status.COMPLETED):
+                raise OrderError("This order has proceeded to bill and cannot be continued.", "continuation_closed", 400)
+            if table_id and parent_order.table_id and parent_order.table_id != table_id:
+                raise OrderError("Cannot continue order on a different table.", "invalid_table", 400)
+            root = parent_order.parent_order if parent_order.parent_order_id else parent_order
+            if root.id != parent_order.id:
+                root = Order.objects.select_for_update().get(pk=root.id)
+            if root.status in (Order.Status.CANCELLED, Order.Status.COMPLETED):
+                raise OrderError("This order has proceeded to bill and cannot be continued.", "continuation_closed", 400)
+            parent_order = root
+            last_idx = Order.objects.filter(parent_order=parent_order).aggregate(models.Max('continuation_index'))['continuation_index__max'] or 0
+            continuation_idx = last_idx + 1
+            if not table_id and parent_order.table_id:
+                table_id = parent_order.table_id
+
     table = None
     if order_type == Order.Type.DINE_IN:
         if not table_id:
@@ -271,11 +435,30 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
             raise OrderError("Table not found or unauthorized.", "not_found", 404)
         if not table.is_active:
             raise OrderError("This table is not available for a new order.", "table_unavailable", 409)
-        if table.status == DiningTable.Status.OCCUPIED:
-            raise OrderError("Table is occupied.", "table_occupied", 409)
+        if not parent_order and table.status == DiningTable.Status.OCCUPIED:
+            active_root = (
+                Order.objects.select_for_update()
+                .filter(
+                    branch=table.branch,
+                    table=table,
+                    order_type=Order.Type.DINE_IN,
+                    parent_order__isnull=True,
+                )
+                .exclude(status__in=[Order.Status.CANCELLED, Order.Status.COMPLETED])
+                .order_by("-id")
+                .first()
+            )
+            if active_root:
+                parent_order = active_root
+                last_idx = Order.objects.filter(parent_order=parent_order).aggregate(models.Max('continuation_index'))['continuation_index__max'] or 0
+                continuation_idx = last_idx + 1
+            else:
+                raise OrderError("Table is occupied.", "table_occupied", 409)
         branch = table.branch
     else:
         order_type = Order.Type.TAKEAWAY
+        if parent_order:
+            raise OrderError("Continuation orders must be Dine-In.", "invalid_order_type", 400)
         resolved_branch_id = branch_id or (emp.branch_id if emp else None)
         if not resolved_branch_id:
             first_b = Branch.objects.filter(is_active=True).first()
@@ -285,9 +468,44 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
             raise OrderError("Branch not found or unauthorized.", "not_found", 404)
 
     # Customer lookup/association
+    if parent_order:
+        if not customer_phone or len(str(customer_phone).strip()) < 7:
+            cand = parent_order.customer_phone or (parent_order.customer.phone if parent_order.customer else "")
+            if not cand:
+                from django.db.models import Q
+                sibling = Order.objects.filter(
+                    Q(id=parent_order.id) | Q(parent_order=parent_order)
+                ).exclude(customer_phone="").order_by("-id").first()
+                if sibling:
+                    cand = sibling.customer_phone
+            customer_phone = cand or ""
+
+        if not customer_name:
+            cand_name = (parent_order.customer.name if parent_order.customer else "")
+            if not cand_name:
+                from django.db.models import Q
+                sibling_cust = Order.objects.filter(
+                    Q(id=parent_order.id) | Q(parent_order=parent_order),
+                    customer__isnull=False
+                ).order_by("-id").first()
+                if sibling_cust and sibling_cust.customer and sibling_cust.customer.name:
+                    cand_name = sibling_cust.customer.name
+            customer_name = cand_name or ""
+
     customer = None
+    if parent_order and parent_order.customer:
+        customer = parent_order.customer
+        if not customer_phone and customer.phone:
+            customer_phone = customer.phone
+
     if customer_phone:
-        customer_phone = customer_phone.strip()
+        clean_phone = "".join(filter(str.isdigit, str(customer_phone)))[-10:]
+        if len(clean_phone) >= 7:
+            customer_phone = clean_phone
+        else:
+            customer_phone = str(customer_phone).strip()
+
+    if customer_phone and not customer:
         customer = User.objects.filter(phone=customer_phone, user_type=User.UserType.CUSTOMER).first()
         if customer is None and not User.objects.filter(phone=customer_phone).exists():
             customer = User.objects.create(
@@ -298,6 +516,9 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
         elif customer and customer_name and customer_name.strip() and not customer.name:
             customer.name = customer_name.strip()
             customer.save(update_fields=["name"])
+
+    if not customer_phone and customer and customer.phone:
+        customer_phone = customer.phone
 
     lines = [Line(row["food"], row["quantity"], row.get("options", []), row.get("special_instructions", "")) for row in item_rows]
     coupon_codes = [coupon_code.strip()] if coupon_code and coupon_code.strip() else []
@@ -310,11 +531,14 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
         order_number=f"TMP{uuid4().hex[:12]}",
         branch=branch,
         branch_name=branch.name,
-        customer=customer,
-        customer_phone=customer_phone or "",
+        customer=customer or (parent_order.customer if parent_order else None),
+        customer_phone=customer_phone or (customer.phone if customer else "") or (parent_order.customer_phone if parent_order else "") or "",
         table=table,
         table_label=table.table_number if table else "Takeaway",
         order_type=order_type,
+        parent_order=parent_order,
+        continuation_index=continuation_idx,
+        display_order_number=f"{parent_order.id}.{continuation_idx}" if parent_order else "",
         source=Order.Source.EMPLOYEE,
         placed_by=staff_user,
         placed_by_name=staff_user.name or staff_user.phone,
@@ -334,7 +558,11 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
             return existing, False
         raise
     order.order_number = f"FD{order.id:06d}"
-    order.save(update_fields=["order_number"])
+    update_fields = ["order_number"]
+    if not parent_order:
+        order.display_order_number = str(order.id)
+        update_fields.append("display_order_number")
+    order.save(update_fields=update_fields)
     _write_items(order, priced)
     try:
         deduct_for_order(order)
@@ -392,13 +620,37 @@ def change_status(order_id, new_status, actor, reason=""):
     if new_status == Order.Status.COMPLETED or (order.order_type == Order.Type.TAKEAWAY and new_status == Order.Status.SERVED):
         if not order.completed_at:
             order.completed_at = timezone.now()
+        # Complete all related session orders (root and active continuations) for dine-in tables
+        root = order.parent_order if order.parent_order_id else order
+        related_orders = [root] if root.id != order.id and root.status in Order.ACTIVE_STATUSES else []
+        for sibling in root.continuations.filter(status__in=Order.ACTIVE_STATUSES):
+            if sibling.id != order.id and sibling not in related_orders:
+                related_orders.append(sibling)
+        for rel in related_orders:
+            rel.status = Order.Status.COMPLETED
+            if not rel.completed_at:
+                rel.completed_at = timezone.now()
+            rel.save(update_fields=["status", "completed_at", "updated_at"])
+            OrderStatusHistory.objects.create(
+                order=rel,
+                from_status=rel.status,
+                to_status=Order.Status.COMPLETED,
+                changed_by=actor,
+                note=f"Completed together with order {order.id} upon Proceed to Bill",
+            )
+            publish_order_event(rel)
     order.save()
     OrderStatusHistory.objects.create(order=order, from_status=previous, to_status=new_status, changed_by=actor,
-                                      note=reason.strip())
+                                      note=reason.strip() or "Status updated via Proceed to Bill")
     if new_status in (Order.Status.CANCELLED, Order.Status.COMPLETED):
-        # Free the table only when no other unfinished order still uses it. A reservation is left alone
-        # because _release_if_idle only changes OCCUPIED tables. Payment status is not changed here.
-        _release_if_idle(order.table)
+        # Automatically make the table AVAILABLE when all orders on it are completed or cancelled
+        target_table = order.table or (order.parent_order.table if order.parent_order else None)
+        if target_table:
+            _release_if_idle(target_table)
+        root = order.parent_order if order.parent_order_id else order
+        if root and root.table and (not target_table or root.table_id != target_table.id):
+            _release_if_idle(root.table)
+
     if new_status == Order.Status.COMPLETED or (order.order_type == Order.Type.TAKEAWAY and new_status == Order.Status.SERVED):
         # E-bill after completion or takeaway serving.
         from apps.billing.services import ensure_final_invoice

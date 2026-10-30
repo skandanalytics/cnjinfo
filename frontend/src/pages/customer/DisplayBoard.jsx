@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { orderService } from '../../services/orderService';
 import { FiCheckCircle, FiClock, FiShoppingBag } from 'react-icons/fi';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const DisplayBoard = () => {
   const [preparingOrders, setPreparingOrders] = useState([]);
@@ -81,7 +82,7 @@ export const DisplayBoard = () => {
                       className="bg-dark text-warning border border-warning border-opacity-50 rounded-3 px-4 py-3 shadow-sm font-monospace fs-3 fw-bold"
                       style={{ minWidth: '130px' }}
                     >
-                      #{o.backendNumericId || o.id}
+                      #{formatOrderDisplayNumber(o, o.backendNumericId || o.id)}
                     </div>
                   ))
                 )}
@@ -107,7 +108,7 @@ export const DisplayBoard = () => {
                       className="bg-success text-white border border-success rounded-3 px-4 py-3 shadow-lg font-monospace fs-2 fw-bold animate-pulse"
                       style={{ minWidth: '140px' }}
                     >
-                      #{o.backendNumericId || o.id}
+                      #{formatOrderDisplayNumber(o, o.backendNumericId || o.id)}
                     </div>
                   ))
                 )}

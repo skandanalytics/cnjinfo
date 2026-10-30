@@ -91,7 +91,7 @@ export const Settings = () => {
 
         <div className="mb-4">
           <h6 className="fw-bold text-dark mb-3">Account</h6>
-          <Button variant="outline" onClick={() => { setShowPassword(true); setPasswordNotice(''); setPasswordErrors({}); }}>
+          <Button variant="outline" onClick={() => { setShowPassword(true); setPasswordNotice(''); setPasswordErrors({}); }} className="rounded-pill px-4">
             Change Password
           </Button>
         </div>
@@ -100,7 +100,7 @@ export const Settings = () => {
 
         {showPassword && (
           <form
-            className="border rounded-3 p-3 mb-3"
+            className="border rounded-4 p-4 mb-3 bg-light-subtle shadow-xs"
             onSubmit={async (event) => {
               event.preventDefault();
               setPasswordErrors({});
@@ -126,25 +126,25 @@ export const Settings = () => {
             }}
           >
             <label className="form-label small fw-semibold">Current Password</label>
-            <input type="password" className="form-control mb-1" value={passwords.current_password} onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })} required />
+            <input type="password" className="form-control rounded-3 mb-2" value={passwords.current_password} onChange={(e) => setPasswords({ ...passwords, current_password: e.target.value })} required />
             {passwordErrors.current_password && <div className="text-danger small mb-2">{passwordErrors.current_password}</div>}
             <label className="form-label small fw-semibold">New Password</label>
-            <input type="password" className="form-control mb-1" value={passwords.new_password} onChange={(e) => setPasswords({ ...passwords, new_password: e.target.value })} required />
+            <input type="password" className="form-control rounded-3 mb-2" value={passwords.new_password} onChange={(e) => setPasswords({ ...passwords, new_password: e.target.value })} required />
             {passwordErrors.new_password && <div className="text-danger small mb-2">{passwordErrors.new_password}</div>}
             <label className="form-label small fw-semibold">Confirm New Password</label>
-            <input type="password" className="form-control mb-1" value={passwords.confirm_password} onChange={(e) => setPasswords({ ...passwords, confirm_password: e.target.value })} required />
+            <input type="password" className="form-control rounded-3 mb-2" value={passwords.confirm_password} onChange={(e) => setPasswords({ ...passwords, confirm_password: e.target.value })} required />
             {passwordErrors.confirm_password && <div className="text-danger small mb-2">{passwordErrors.confirm_password}</div>}
             {passwordErrors.form && <div className="text-danger small mb-2">{passwordErrors.form}</div>}
             {passwordNotice && <div className="alert alert-success py-2 small">{passwordNotice}</div>}
-            <div className="d-flex gap-2 mt-2">
-              <Button type="submit" variant="primary">Save Changes</Button>
-              <Button type="button" variant="light" onClick={() => setShowPassword(false)}>Cancel</Button>
+            <div className="d-flex gap-2 mt-3">
+              <Button type="submit" variant="primary" className="rounded-pill px-4 fw-bold">Save Changes</Button>
+              <Button type="button" variant="outline" onClick={() => setShowPassword(false)} className="rounded-pill px-4">Cancel</Button>
             </div>
           </form>
         )}
 
         <div className="d-grid mt-4 pt-3 border-top">
-          <Button onClick={handleSave} variant="primary" loading={saving}>
+          <Button onClick={handleSave} variant="primary" loading={saving} className="rounded-pill py-2.5 fw-bold shadow-sm">
             Save Settings Configuration
           </Button>
         </div>

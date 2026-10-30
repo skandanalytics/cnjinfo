@@ -53,14 +53,14 @@ export const RenameCategoryModal = ({
   };
 
   const footerActions = (
-    <>
-      <Button variant="light" onClick={onClose} disabled={loading}>
+    <div className="d-flex align-items-center justify-content-end gap-2 w-100">
+      <Button variant="outline" onClick={onClose} disabled={loading} className="rounded-pill px-4">
         Cancel
       </Button>
-      <Button variant="primary" onClick={handleSubmit} loading={loading}>
+      <Button variant="primary" onClick={handleSubmit} loading={loading} className="rounded-pill px-4">
         Save Changes
       </Button>
-    </>
+    </div>
   );
 
   return (

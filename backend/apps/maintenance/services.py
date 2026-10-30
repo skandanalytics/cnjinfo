@@ -38,7 +38,23 @@ def setup_key_configured():
 
 
 def administrator_exists():
-    return Employee.objects.filter(role__in=ADMIN_ROLES).exists()
+    if Employee.objects.filter(role__in=ADMIN_ROLES, status=Employee.Status.ACTIVE).exists():
+        return True
+    from apps.accounts.models import User
+    superusers = User.objects.filter(is_superuser=True)
+    if superusers.exists():
+        for su in superusers:
+            code = "ADMIN" if not Employee.objects.filter(employee_code__iexact="ADMIN").exists() else f"ADMIN_{su.id}"
+            Employee.objects.get_or_create(
+                user=su,
+                defaults={
+                    "employee_code": code,
+                    "role": Employee.Role.SUPER_ADMIN,
+                    "status": Employee.Status.ACTIVE,
+                },
+            )
+        return Employee.objects.filter(role__in=ADMIN_ROLES, status=Employee.Status.ACTIVE).exists()
+    return False
 
 
 def setup_status():
@@ -159,19 +175,19 @@ def recover_administrator(payload, bypass_secret=False):
 
     Existing administrator accounts are updated/recovered if already present.
     """
+    expected = os.environ.get("DB_SETUP_SECRET", "").strip()
     unrestricted = getattr(settings, "ALLOW_UNRESTRICTED_ADMIN_CREATION", True)
-    if not (bypass_secret or unrestricted):
-        expected = os.environ.get("DB_SETUP_SECRET", "").strip()
-        if expected:
-            provided = str(payload.get("setup_key") or "")
-            if not provided or not hmac.compare_digest(expected, provided):
-                logger.warning("Administrator recovery failed: unauthorized attempt")
-                raise MaintenanceError("Recovery could not be authorized.", 403)
-        else:
-            raise MaintenanceError(
-                "Administrator recovery is not enabled. Sign in as an existing administrator, or set the server setup key.",
-                403,
-            )
+    if expected and not bypass_secret:
+        provided = str(payload.get("setup_key") or "")
+        if not provided or not hmac.compare_digest(expected, provided):
+            logger.warning("Administrator recovery failed: unauthorized attempt")
+            raise MaintenanceError("Recovery could not be authorized.", 403)
+    elif not (bypass_secret or unrestricted):
+        raise MaintenanceError(
+            "Administrator recovery is not enabled. Sign in as an existing administrator, or set the server setup key.",
+            403,
+        )
+
     if not cache.add("foodie-db-recover-lock", "1", timeout=30):
         raise MaintenanceError("Administrator recovery is already in progress.", 409)
     try:

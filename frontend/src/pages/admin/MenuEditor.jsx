@@ -18,7 +18,7 @@ import Pagination from '../../components/common/Pagination';
 import { productService, clearStaticProductCache } from '../../services/productService';
 import { menuService } from '../../services/menuService';
 import { useAuth } from '../../hooks/useAuth';
-import { FiPlus, FiArrowLeft, FiGrid, FiLayers, FiEdit2, FiTrash2, FiCheckCircle } from 'react-icons/fi';
+import { FiPlus, FiArrowLeft, FiGrid, FiLayers, FiEdit2, FiTrash2, FiCheckCircle, FiSearch, FiX } from 'react-icons/fi';
 import { getFrontendCategoryName, normalizeCategoryName, isDishInCategory } from '../../utils/categoryUtils';
 
 const ITEMS_PER_PAGE = 8;
@@ -37,6 +37,7 @@ export const MenuEditor = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedFoodTypes, setSelectedFoodTypes] = useState([]); // array of 'veg' | 'non-veg' | 'vegan'
+  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'in_stock' | 'low_stock' | 'out_of_stock'
   const [offersOnly, setOffersOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -57,7 +58,7 @@ export const MenuEditor = () => {
   // Reset to page 1 on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, selectedFoodTypes, offersOnly, selectedCategory]);
+  }, [search, selectedFoodTypes, statusFilter, offersOnly, selectedCategory]);
 
   const fetchDetails = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -315,8 +316,13 @@ export const MenuEditor = () => {
     if (selectedFoodTypes.length > 0) {
       matchesFoodType = selectedFoodTypes.includes(dishFoodType);
     }
-    if (offersOnly) {
-      matchesFoodType = matchesFoodType && Boolean(dish.hasDiscount || dish.discountPercent > 0 || (dish.discountPrice > 0 && dish.discountPrice < dish.price));
+    let matchesStatus = true;
+    if (statusFilter === 'in_stock') {
+      matchesStatus = Number(dish.stock) >= 6 && !dish.is_sold_out && dish.status !== 'Out of Stock';
+    } else if (statusFilter === 'low_stock') {
+      matchesStatus = Number(dish.stock) > 0 && Number(dish.stock) < 6 && !dish.is_sold_out;
+    } else if (statusFilter === 'out_of_stock') {
+      matchesStatus = Number(dish.stock) <= 0 || dish.status === 'Out of Stock' || Boolean(dish.is_sold_out);
     }
 
     const term = search.trim().toLowerCase();
@@ -324,7 +330,7 @@ export const MenuEditor = () => {
       (dish.name && dish.name.toLowerCase().includes(term)) ||
       (dish.description && dish.description.toLowerCase().includes(term));
 
-    return matchesFoodType && matchesSearch;
+    return matchesFoodType && matchesStatus && matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredDishes.length / ITEMS_PER_PAGE);
@@ -368,7 +374,8 @@ export const MenuEditor = () => {
   return (
     <AdminLayout>
       <PageHeader
-        title={!hasCategories ? 'Add Category' : isAllSelected || !currentCategoryObj ? 'Add Menu' : `Add Menu — ${currentCategoryName}`}
+        title="Menu Management"
+        subtitle="Manage your dishes, categories and offers."
         showBackButton
         backUrl="/admin/dashboard"
         actions={
@@ -381,25 +388,112 @@ export const MenuEditor = () => {
               >
                 <FiPlus /> Add Category
               </Button>
-
-              {hasCategories && (
-                <>
-                  <Button
-                    onClick={() => {
-                      setIsAddOpen(true);
-                      setComboMode(false);
-                    }}
-                    variant="outline"
-                    className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold"
-                  >
-                    <FiPlus /> Add Dish
-                  </Button>
-                </>
-              )}
             </div>
           )
         }
       />
+
+      {/* Unified Filter Bar Matching Reference Panel 5 */}
+      <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white">
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
+          {/* Search Box */}
+          <div className="flex-grow-1" style={{ minWidth: '240px', maxWidth: '420px' }}>
+            <div className="position-relative">
+              <FiSearch className="position-absolute top-50 start-0 translate-middle-y ms-3 text-secondary" />
+              <input
+                type="text"
+                className="form-control rounded-pill ps-5 bg-light border-light-subtle shadow-xs"
+                style={{ height: '42px', fontSize: '13px' }}
+                placeholder="Search dishes (e.g. roll, pizza, burger...)"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              {search && (
+                <button
+                  type="button"
+                  className="btn btn-sm position-absolute top-50 end-0 translate-middle-y me-2 text-secondary p-0"
+                  onClick={() => setSearch('')}
+                >
+                  <FiX />
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            {/* Category Dropdown */}
+            <select
+              aria-label="Filter dishes by category"
+              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
+              style={{ width: 'auto', minWidth: '150px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
+              value={selectedCategory}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === 'all') {
+                  handleCategorySelect('all');
+                } else {
+                  const targetCat = categoriesList.find(c => String(c.id) === val || c.name === val) || { name: val };
+                  handleCategorySelect(targetCat);
+                }
+              }}
+            >
+              <option value="all">All Categories</option>
+              {categoriesList.map((cat) => (
+                <option key={cat.id || cat.name} value={cat.name}>
+                  {cat.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Food Type Dropdown */}
+            <select
+              aria-label="Filter dishes by food type"
+              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
+              style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
+              value={selectedFoodTypes.length === 1 ? selectedFoodTypes[0] : 'all'}
+              onChange={(e) => {
+                if (e.target.value === 'all') setSelectedFoodTypes([]);
+                else setSelectedFoodTypes([e.target.value]);
+              }}
+            >
+              <option value="all">All Food Types</option>
+              <option value="veg">Veg</option>
+              <option value="non-veg">Non-Veg</option>
+              <option value="vegan">Vegan</option>
+            </select>
+
+            {/* Status Dropdown */}
+            <select
+              aria-label="Filter dishes by stock status"
+              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
+              style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">All States</option>
+              <option value="in_stock">In Stock</option>
+              <option value="low_stock">Low Stock</option>
+              <option value="out_of_stock">Out of Stock</option>
+            </select>
+
+            {/* Add Menu Button */}
+            {isAdmin && hasBranches && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddOpen(true);
+                  setComboMode(false);
+                }}
+                className="btn btn-danger rounded-pill px-4 fw-bold d-flex align-items-center gap-2 shadow-sm"
+                style={{ height: '42px', backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)' }}
+              >
+                <FiPlus size={16} />
+                <span>+ Add Menu</span>
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Categories Selector Bar: Only Text, Highlighted When Active */}
       {hasCategories && (
@@ -514,127 +608,7 @@ export const MenuEditor = () => {
         </div>
       )}
 
-      {/* Search and Food Type Filter Section */}
-      {hasCategories && (dishes || []).length > 0 && menuDishes.length > 0 && (
-        <div className="row g-3 align-items-center mb-4">
-          <div className="col-12 col-md-6 col-lg-5">
-            <SearchBar
-              placeholder={`Search dishes in ${currentCategoryName}...`}
-              value={search}
-              onChange={setSearch}
-              records={(dishes || []).map((dish) => ({
-                id: dish.id,
-                label: dish.name,
-                title: dish.name,
-                subtitle: [dish.category, Number(dish.stock) <= 0 ? 'Out of Stock' : `${dish.stock ?? 0} in stock`].filter(Boolean).join(' · '),
-                price: dish.price,
-                image: dish.image,
-                searchText: [dish.name, dish.category, dish.foodType].filter(Boolean).join(' '),
-              }))}
-              onSelectSuggestion={(item) => {
-                const dish = (dishes || []).find((row) => String(row.id) === String(item?.id));
-                if (!dish) return;
-                setSelectedCategory(dish.category || 'all');
-                setSearch(dish.name);
-              }}
-            />
-          </div>
-          <div className="col-12 col-md-6 col-lg-7 d-flex align-items-center gap-2">
-            <span className="small fw-semibold text-secondary me-1 flex-shrink-0" style={{ fontSize: '13px' }}>Food Type:</span>
 
-            <div className="d-flex align-items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => { setSelectedFoodTypes([]); setOffersOnly(false); }}
-                className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${selectedFoodTypes.length === 0 && !offersOnly
-                  ? 'bg-danger text-white border-danger shadow-sm'
-                  : 'bg-white text-secondary border-light-subtle shadow-sm'
-                  }`}
-                style={{ fontSize: '12px', cursor: 'pointer' }}
-              >
-                All ({menuDishes.length})
-              </button>
-
-              {hasVegDishes && (
-                <label
-                  htmlFor="admin-food-filter-veg"
-                  className={`food-type-control food-type-control-veg ${
-                    selectedFoodTypes.includes('veg') ? 'is-selected-veg' : ''
-                  }`}
-                  style={{ fontSize: '12px' }}
-                >
-                  <input
-                    type="checkbox"
-                    id="admin-food-filter-veg"
-                    checked={selectedFoodTypes.includes('veg')}
-                    onChange={() => handleFoodTypeToggle('veg')}
-                    className="food-type-checkbox checkbox-veg"
-                    aria-label="Filter Vegetarian"
-                  />
-                  <span className="veg-badge ms-0.5"></span>
-                  <span className="ms-0.5">Veg</span>
-                </label>
-              )}
-
-              {hasNonVegDishes && (
-                <label
-                  htmlFor="admin-food-filter-non-veg"
-                  className={`food-type-control food-type-control-non-veg ${
-                    selectedFoodTypes.includes('non-veg') ? 'is-selected-non-veg' : ''
-                  }`}
-                  style={{ fontSize: '12px' }}
-                >
-                  <input
-                    type="checkbox"
-                    id="admin-food-filter-non-veg"
-                    checked={selectedFoodTypes.includes('non-veg')}
-                    onChange={() => handleFoodTypeToggle('non-veg')}
-                    className="food-type-checkbox checkbox-non-veg"
-                    aria-label="Filter Non-Vegetarian"
-                  />
-                  <span className="non-veg-badge ms-0.5"></span>
-                  <span className="ms-0.5">Non-Veg</span>
-                </label>
-              )}
-
-              {hasVeganDishes && (
-                <label
-                  htmlFor="admin-food-filter-vegan"
-                  className={`food-type-control food-type-control-vegan ${
-                    selectedFoodTypes.includes('vegan') ? 'is-selected-vegan' : ''
-                  }`}
-                  style={{ fontSize: '12px' }}
-                >
-                  <input
-                    type="checkbox"
-                    id="admin-food-filter-vegan"
-                    checked={selectedFoodTypes.includes('vegan')}
-                    onChange={() => handleFoodTypeToggle('vegan')}
-                    className="food-type-checkbox checkbox-vegan"
-                    aria-label="Filter Vegan"
-                  />
-                  <span className="vegan-badge ms-0.5"></span>
-                  <span className="ms-0.5">Vegan</span>
-                </label>
-              )}
-
-              {hasOffersDishes && (
-                <button
-                  type="button"
-                  onClick={() => setOffersOnly((prev) => !prev)}
-                  className={`btn btn-sm d-flex align-items-center gap-1 rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${offersOnly
-                    ? 'bg-danger text-white border-danger shadow-sm'
-                    : 'bg-white text-danger border-danger-subtle shadow-sm'
-                    }`}
-                  style={{ fontSize: '12px', cursor: 'pointer' }}
-                >
-                  <span>🔥 Offers</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Grid */}
       {filteredDishes.length === 0 ? (

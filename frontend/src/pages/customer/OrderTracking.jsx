@@ -7,11 +7,12 @@ import { useCart } from '../../hooks/useCart';
 import Loader from '../../components/common/Loader';
 import BackButton from '../../components/common/BackButton';
 import formatCurrency from '../../utils/formatCurrency';
-import { FiClock, FiCheck, FiXCircle } from 'react-icons/fi';
+import { FiClock, FiCheck, FiXCircle, FiFileText } from 'react-icons/fi';
 import { fetchCustomerOrder } from '../../services/customerCheckout';
 import { mapOrder } from '../../services/adminApi';
 import { normalizeFoodType } from '../../utils/filters';
 import EBillModal from '../../components/orders/EBillModal';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const OrderTracking = () => {
   const { orderId } = useParams();
@@ -146,6 +147,10 @@ export const OrderTracking = () => {
     if (orderId && orderId !== 'undefined' && orderId !== 'null') {
       fetchTrackingData(!order);
 
+      const interval = setInterval(() => {
+        fetchTrackingData(false);
+      }, 3000);
+
       const handleSync = () => {
         fetchTrackingData(false);
       };
@@ -159,6 +164,7 @@ export const OrderTracking = () => {
       document.addEventListener('visibilitychange', handleVisibility);
 
       return () => {
+        clearInterval(interval);
         window.removeEventListener('foodie_orders_updated', handleSync);
         window.removeEventListener('focus', handleSync);
         window.removeEventListener('online', handleSync);
@@ -214,18 +220,24 @@ export const OrderTracking = () => {
     order?.table === 'Takeaway' ||
     String(order?.table || '').toLowerCase() === 'takeaway';
 
+  const isPaid = Boolean(
+    order?.is_paid ||
+    order?.isPaid ||
+    String(order?.payment_status || order?.paymentStatus || '').toUpperCase() === 'PAID'
+  );
+
   // Pipeline order stages mapping (Takeaway orders omit the Dine-in only Serving stage)
   const stages = isTakeawayOrder ? [
     { key: 'Pending', label: 'Order Confirmed', sub: 'We received your food ticket' },
     { key: 'Preparing', label: 'Preparing', sub: 'Our Chef is preparing your dish' },
     { key: 'Ready', label: 'Ready for Pickup', sub: 'Packed & ready for counter pickup' },
-    { key: 'Completed', label: 'Completed', sub: 'Order handed over successfully' }
+    { key: 'Completed', label: 'Completed', sub: isPaid ? 'Order fulfilled & bill settled' : 'Order fulfilled · payment pending' }
   ] : [
     { key: 'Pending', label: 'Order Confirmed', sub: 'We received your food ticket' },
     { key: 'Preparing', label: 'Preparing', sub: 'Our Chef is preparing your dish' },
     { key: 'Ready', label: 'Ready', sub: 'Food packaged at counter' },
     { key: 'Serving', label: 'Serving', sub: `Delivered to Table ${order.table || ''}` },
-    { key: 'Completed', label: 'Completed', sub: 'Bill settled successfully' }
+    { key: 'Completed', label: 'Completed', sub: isPaid ? 'Bill settled successfully' : 'Dishes completed · payment pending' }
   ];
 
   const resolveCurrentStatus = () => {
@@ -261,7 +273,7 @@ export const OrderTracking = () => {
             <div>
               <span className="small text-secondary fw-semibold">ORDER ID</span>
               <h4 className="fw-extrabold text-dark mb-0 font-monospace">
-                #{order?.id || orderId}
+                #{formatOrderDisplayNumber(order, orderId)}
               </h4>
             </div>
             <div className="text-end">
@@ -283,19 +295,117 @@ export const OrderTracking = () => {
             <div>
               <span>Table Context: <strong>{order.table || 'Takeaway'}</strong></span>
             </div>
+            <div>
+              <span>Payment: <strong className={isPaid ? 'text-success' : 'text-warning-emphasis'}>{isPaid ? 'PAID' : 'UNPAID'}</strong></span>
+            </div>
           </div>
 
-          <div className="pt-3 mt-3 border-top border-light d-flex gap-2">
-            <button
-              type="button"
-              onClick={() => setShowReceiptModal(true)}
-              className="btn btn-outline-danger w-100 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 rounded-3 shadow-xs"
-            >
-              <i className="bi bi-receipt"></i>
-              <span>View E-Bill / Receipt</span>
-            </button>
+          <div className="pt-3 mt-3 border-top border-light d-flex flex-column gap-2">
+            <div className="d-flex gap-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { fetchCustomerBillPreview } = await import('../../services/customerCheckout');
+                    const preview = await fetchCustomerBillPreview(order.id || orderId);
+                    setOrder(prev => ({
+                      ...prev,
+                      ...preview,
+                      items: preview.items || prev.items,
+                      combined_items: preview.items,
+                      total: preview.total_amount || prev.total,
+                      total_amount: preview.total_amount || prev.total_amount,
+                    }));
+                  } catch (e) {
+                    console.warn('Could not fetch bill preview', e);
+                  }
+                  setShowReceiptModal(true);
+                }}
+                className="btn btn-outline-danger w-50 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-xs"
+              >
+                <i className="bi bi-receipt"></i>
+                <span>View Bill</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    const { proceedOrderToBill } = await import('../../services/customerCheckout');
+                    const targetId = order?.id || orderId;
+                    const data = await proceedOrderToBill(targetId);
+                    const updatedOrder = data.order || data;
+                    const preview = data.bill || {};
+                    statusRef.current = 'Completed';
+                    setOrder(prev => ({
+                      ...prev,
+                      ...updatedOrder,
+                      ...preview,
+                      status: 'Completed',
+                      backendStatus: 'COMPLETED',
+                      items: preview.items || prev.items,
+                      combined_items: preview.items,
+                      total: preview.total_amount || prev.total,
+                      total_amount: preview.total_amount || prev.total_amount,
+                    }));
+                  } catch (e) {
+                    console.warn('Could not proceed to bill directly:', e);
+                  }
+                  setShowReceiptModal(true);
+                }}
+                className="btn btn-danger w-50 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-xs"
+                style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)' }}
+              >
+                <i className="bi bi-arrow-right-circle"></i>
+                <span>{currentStatus === 'Completed' ? 'Show E-Bill' : 'Proceed to Bill'}</span>
+              </button>
+            </div>
+
+            {order.orderType !== 'Takeaway' && String(order.table).toLowerCase() !== 'takeaway' && String(order.status || '').toUpperCase() !== 'CANCELLED' && String(order.status || '').toUpperCase() !== 'COMPLETED' && currentStatus !== 'Completed' && String(order.payment_status || order.paymentStatus || '').toUpperCase() !== 'PAID' && (
+              <button
+                type="button"
+                onClick={() => {
+                  const rootId = order.parent_order_id || order.id || orderId;
+                  sessionStorage.setItem('foodie_parent_order_id', String(rootId));
+                  localStorage.setItem('foodie_parent_order_id', String(rootId));
+                  const tid = order.table_id || order.tableId;
+                  if (tid) {
+                    sessionStorage.setItem('foodie_selected_table', String(tid));
+                    localStorage.setItem('foodie_selected_table', String(tid));
+                    sessionStorage.setItem('foodie_order_type', 'DINE_IN');
+                    localStorage.setItem('foodie_order_type', 'DINE_IN');
+                  }
+                  navigate('/customer/home');
+                }}
+                className="btn btn-outline-danger w-100 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-xs mt-2"
+              >
+                <i className="bi bi-plus-circle"></i>
+                <span>Order More Dishes (Continue Order)</span>
+              </button>
+            )}
           </div>
         </div>
+
+        {isPaid && (
+          <div className="alert alert-success rounded-4 p-3 small text-start mb-4 shadow-sm d-flex align-items-center gap-2">
+            <FiCheck size={18} className="text-success flex-shrink-0" />
+            <div>
+              <strong>Payment Received!</strong> Your bill has been settled successfully.
+            </div>
+          </div>
+        )}
+
+        {!isPaid && currentStatus === 'Completed' && (
+          <div className="alert alert-warning rounded-4 p-3 small text-start mb-4 shadow-sm d-flex align-items-center justify-content-between">
+            <div className="d-flex align-items-center gap-2">
+              <FiClock size={18} className="text-warning-emphasis flex-shrink-0" />
+              <div>
+                <strong>Order Completed · Payment Pending.</strong> Please settle your bill below or at the counter.
+              </div>
+            </div>
+            <span className="badge bg-warning text-dark fw-bold">UNPAID</span>
+          </div>
+        )}
 
         {/* Tracking Stages Flow */}
         <div className="card rounded-4 border-0 shadow-sm p-4 bg-white mb-4">
@@ -360,7 +470,7 @@ export const OrderTracking = () => {
 
         {/* Items Summary Card for Current Order */}
         <div className="card rounded-4 border-0 shadow-sm p-4 bg-white mb-4">
-          <h5 className="fw-bold text-dark mb-3">Items in Order #{order.id}</h5>
+          <h5 className="fw-bold text-dark mb-3">Items in Order #{formatOrderDisplayNumber(order, order.id)}</h5>
           <div className="d-flex flex-column gap-2">
             {Array.isArray(order.items) && order.items.length > 0 ? (
               order.items.map((i, idx) => (
@@ -396,6 +506,17 @@ export const OrderTracking = () => {
         isOpen={showReceiptModal}
         order={order}
         onClose={() => setShowReceiptModal(false)}
+        onProceedToBill={async (ord) => {
+          const targetId = ord?.id || order?.id || orderId;
+          try {
+            const { proceedOrderToBill } = await import('../../services/customerCheckout');
+            await proceedOrderToBill(targetId);
+          } catch (e) {
+            console.warn('Could not proceed to bill in modal', e);
+          }
+          setShowReceiptModal(false);
+          navigate(`/customer/order-confirmation?order=${targetId}&proceedToBill=1`);
+        }}
       />
     </CustomerLayout>
   );

@@ -140,14 +140,37 @@ export const EditTableModal = ({
   };
 
   const footerActions = (
-    <>
-      <Button variant="light" onClick={onClose} disabled={loading}>
+    <div className="d-flex align-items-center justify-content-end gap-3 w-100">
+      <button
+        type="button"
+        onClick={onClose}
+        disabled={loading}
+        className="btn rounded-pill px-4 fw-bold"
+        style={{
+          height: '42px',
+          backgroundColor: '#FFFFFF',
+          color: 'var(--primary-color, #C8102E)',
+          border: '1.5px solid var(--primary-color, #C8102E)',
+          fontSize: '13px'
+        }}
+      >
         Cancel
-      </Button>
-      <Button variant="primary" onClick={handleSubmit} loading={loading}>
-        Save Changes
-      </Button>
-    </>
+      </button>
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={loading}
+        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm"
+        style={{
+          height: '42px',
+          backgroundColor: 'var(--primary-color, #C8102E)',
+          borderColor: 'var(--primary-color, #C8102E)',
+          fontSize: '13px'
+        }}
+      >
+        {loading ? 'Saving...' : 'Save Changes'}
+      </button>
+    </div>
   );
 
   return (

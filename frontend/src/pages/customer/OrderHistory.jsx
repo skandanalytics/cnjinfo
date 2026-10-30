@@ -12,6 +12,7 @@ import Modal from '../../components/common/Modal';
 import BackButton from '../../components/common/BackButton';
 import { normalizeFoodType } from '../../utils/filters';
 import { EBillModal } from '../../components/orders/EBillModal';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const OrderHistory = () => {
   const navigate = useNavigate();
@@ -118,7 +119,7 @@ export const OrderHistory = () => {
                     style={{ cursor: 'pointer' }}
                   >
                     <div className="d-flex align-items-center justify-content-between mb-2">
-                      <span className="fw-bold text-dark">Order #{ord.id || ord.order_id || ord.orderId}</span>
+                      <span className="fw-bold text-dark">Order #{formatOrderDisplayNumber(ord, ord.id || ord.order_id || ord.orderId)}</span>
                       <Badge status={ord.status} />
                     </div>
                     
@@ -148,7 +149,7 @@ export const OrderHistory = () => {
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setViewingBillOrder(ord); }}
-                              className="btn btn-xs btn-outline-dark rounded-pill px-2 py-0.5 d-flex align-items-center gap-1"
+                              className="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-1 d-flex align-items-center gap-1"
                               style={{ fontSize: '11px' }}
                               title="View Bill"
                             >
@@ -178,7 +179,7 @@ export const OrderHistory = () => {
           return (
             <Modal 
               isOpen={!!selectedOrder} 
-              title={`Track Order #${selectedOrder.id || selectedOrder.order_id || selectedOrder.orderId}`} 
+              title={`Track Order #${formatOrderDisplayNumber(selectedOrder, selectedOrder.id || selectedOrder.order_id || selectedOrder.orderId)}`} 
               onClose={() => setSelectedOrder(null)}
             >
               <div className="p-2">
@@ -258,7 +259,7 @@ export const OrderHistory = () => {
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); setViewingBillOrder(selectedOrder); setSelectedOrder(null); }}
-                        className="btn btn-sm btn-outline-dark fw-bold rounded-pill px-3 py-1.5 d-flex align-items-center gap-1"
+                        className="btn btn-sm btn-outline-danger fw-bold rounded-pill px-3 py-1.5 d-flex align-items-center gap-1"
                         style={{ fontSize: '12px' }}
                       >
                         <FiEye size={13} />
@@ -290,6 +291,11 @@ export const OrderHistory = () => {
           isOpen={!!viewingBillOrder} 
           order={viewingBillOrder} 
           onClose={() => setViewingBillOrder(null)} 
+          onProceedToBill={(ord) => {
+            const id = ord?.id || viewingBillOrder?.id;
+            setViewingBillOrder(null);
+            navigate(`/customer/order-confirmation?order=${id}&proceedToBill=1`);
+          }}
         />
       </main>
     </CustomerLayout>

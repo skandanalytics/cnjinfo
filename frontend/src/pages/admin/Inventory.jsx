@@ -505,14 +505,14 @@ export const Inventory = () => {
           title="Restock Item" 
           onClose={() => setRestockingItem(null)}
           footerActions={
-            <>
-              <Button variant="light" onClick={() => setRestockingItem(null)} disabled={saveLoading}>
+            <div className="d-flex align-items-center justify-content-end gap-2 w-100">
+              <Button variant="outline" onClick={() => setRestockingItem(null)} disabled={saveLoading} className="rounded-pill px-4">
                 Cancel
               </Button>
-              <Button variant="primary" onClick={handleSaveRestock} loading={saveLoading}>
+              <Button variant="primary" onClick={handleSaveRestock} loading={saveLoading} className="rounded-pill px-4 fw-bold">
                 Restock
               </Button>
-            </>
+            </div>
           }
         >
           <form onSubmit={handleSaveRestock}>

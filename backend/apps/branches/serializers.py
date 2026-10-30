@@ -123,17 +123,82 @@ class TableSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
     branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all(), required=False)
     branch_name = serializers.CharField(source="branch.name", read_only=True)
     qr_url = serializers.SerializerMethodField()
+    active_order_id = serializers.SerializerMethodField()
+    active_order = serializers.SerializerMethodField()
 
     class Meta:
         model = DiningTable
         fields = ["id", "branch", "branch_name", "table_number", "capacity", "location", "table_view", "status",
-                  "is_active", "qr_code", "qr_is_active", "qr_url", "created_at"]
+                  "is_active", "qr_code", "qr_is_active", "qr_url", "active_order_id", "active_order", "created_at"]
         # Status changes go through the dedicated set-status action so lifecycle rules are always applied.
         read_only_fields = ["id", "status", "qr_code", "created_at"]
         validators = []
 
     def get_qr_url(self, obj):
         return qr_url(obj)
+
+    def get_active_order_id(self, obj):
+        from apps.orders.models import Order
+        active = Order.objects.filter(
+            table=obj,
+            status__in=Order.ACTIVE_STATUSES,
+            parent_order__isnull=True
+        ).order_by("-id").first()
+        if active:
+            return active.id
+        any_active = Order.objects.filter(table=obj, status__in=Order.ACTIVE_STATUSES).order_by("-id").first()
+        if any_active:
+            return any_active.parent_order_id or any_active.id
+        return None
+
+    def get_active_order(self, obj):
+        from apps.orders.models import Order
+        active = Order.objects.filter(
+            table=obj,
+            status__in=Order.ACTIVE_STATUSES,
+            parent_order__isnull=True
+        ).order_by("-id").first()
+        if not active:
+            any_active = Order.objects.filter(table=obj, status__in=Order.ACTIVE_STATUSES).order_by("-id").first()
+            if any_active and any_active.parent_order_id:
+                active = any_active.parent_order
+            elif any_active:
+                active = any_active
+        if not active:
+            return None
+        c_name = active.customer.name if active.customer and getattr(active.customer, "name", None) else ""
+        c_phone = active.customer_phone or (active.customer.phone if active.customer and getattr(active.customer, "phone", None) else "")
+        if not c_phone and active.parent_order_id:
+            from django.db.models import Q
+            sibling = Order.objects.filter(
+                Q(id=active.parent_order_id) | Q(parent_order_id=active.parent_order_id)
+            ).exclude(customer_phone="").order_by("-id").first()
+            if sibling:
+                c_phone = sibling.customer_phone
+                if not c_name and sibling.customer:
+                    c_name = sibling.customer.name or ""
+        elif not c_phone:
+            child = Order.objects.filter(parent_order=active).exclude(customer_phone="").order_by("-id").first()
+            if child:
+                c_phone = child.customer_phone
+                if not c_name and child.customer:
+                    c_name = child.customer.name or ""
+        if not c_name and c_phone:
+            from apps.accounts.models import User
+            user_match = User.objects.filter(phone=c_phone).first()
+            if user_match:
+                c_name = user_match.name or ""
+        return {
+            "id": active.id,
+            "order_number": active.order_number,
+            "display_order_number": active.display_number,
+            "status": active.status,
+            "payment_status": active.payment_status,
+            "customer_name": c_name,
+            "customer_phone": c_phone,
+            "total_amount": str(active.total_amount),
+            "created_at": active.created_at,
+        }
 
     def validate_table_number(self, value):
         return value.strip()

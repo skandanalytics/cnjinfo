@@ -36,6 +36,11 @@ class Order(models.Model):
         EMPLOYEE = "EMPLOYEE", "Employee-assisted"
 
     order_number = models.CharField(max_length=30, unique=True)
+    # Continuation relationships for dine-in orders:
+    parent_order = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True,
+                                     related_name="continuations")
+    continuation_index = models.PositiveIntegerField(default=0)
+    display_order_number = models.CharField(max_length=30, blank=True, default="")
     # Branch, table and staff references become NULL when that record is deleted; the snapshots keep the history.
     branch = models.ForeignKey("branches.Branch", on_delete=models.SET_NULL, null=True, blank=True,
                                related_name="orders")
@@ -97,8 +102,16 @@ class Order(models.Model):
                 name="ck_order_table_matches_type"),
         ]
 
+    @property
+    def display_number(self):
+        if self.display_order_number:
+            return self.display_order_number
+        if self.parent_order_id and self.continuation_index > 0:
+            return f"{self.parent_order_id}.{self.continuation_index}"
+        return str(self.id)
+
     def __str__(self):
-        return self.order_number
+        return f"{self.order_number} (#{self.display_number})"
 
 
 class OrderItem(models.Model):

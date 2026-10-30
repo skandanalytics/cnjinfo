@@ -21,10 +21,11 @@ import { useSearchParams } from 'react-router-dom';
 import { tableService } from '../../services/tableService';
 import { couponService } from '../../services/couponService';
 import OrderTypeModal from '../../components/customer/OrderTypeModal';
-import { getOrderType, hasDineInTable, hasScannedTable, setOrderType } from '../../utils/orderContext';
+import { getOrderType, hasDineInTable, hasScannedTable, setOrderType, setSelectedTableId, rememberDineInTableId } from '../../utils/orderContext';
 import SearchBar from '../../components/common/SearchBar';
 import formatCurrency from '../../utils/formatCurrency';
 import { formatCompactTableLabel } from '../../utils/tableUtils';
+import EBillModal from '../../components/orders/EBillModal';
 
 const ITEMS_PER_PAGE = 12;
 
@@ -258,6 +259,121 @@ export const Home = () => {
     setCurrentPage(1);
   }, [selectedCategories, sortBy, selectedFoodTypes, search]);
 
+  const fetchActiveOrdersRef = useRef(null);
+  const [proceedingBillId, setProceedingBillId] = useState(null);
+
+  const formatOrderItemsSummary = (items) => {
+    if (!Array.isArray(items) || items.length === 0) return '';
+    const itemMap = new Map();
+    for (const item of items) {
+      const key = item.food_id || item.foodId || item.id || item.name;
+      const name = item.name || item.food_name || item.dish_name || 'Item';
+      const qty = Number(item.quantity || 1);
+      if (itemMap.has(key)) {
+        itemMap.get(key).quantity += qty;
+      } else {
+        itemMap.set(key, { name, quantity: qty });
+      }
+    }
+    const aggregated = Array.from(itemMap.values());
+    const summary = aggregated.slice(0, 3).map(i => `${i.name} × ${i.quantity}`).join(', ');
+    return aggregated.length > 3 ? `${summary}…` : summary;
+  };
+
+  const consolidateActiveOrders = (rawList) => {
+    if (!Array.isArray(rawList) || rawList.length === 0) return [];
+
+    const groups = new Map();
+
+    for (const ord of rawList) {
+      const rootId = String(ord.parent_order_id || (typeof ord.parent_order === 'object' ? ord.parent_order?.id : ord.parent_order) || ord.id);
+      if (!groups.has(rootId)) {
+        groups.set(rootId, []);
+      }
+      groups.get(rootId).push(ord);
+    }
+
+    const result = [];
+    for (const [rootId, group] of groups.entries()) {
+      group.sort((a, b) => {
+        const idxA = Number(a.continuation_index || 0);
+        const idxB = Number(b.continuation_index || 0);
+        if (idxA !== idxB) return idxA - idxB;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+
+      const rootOrd = group.find(o => !o.parent_order_id && !o.parent_order) || group[0];
+      const latestOrd = group[group.length - 1];
+
+      const combinedItems = [];
+      let grandTotal = 0;
+      let anyCompleted = false;
+      let allPaid = true;
+
+      for (const o of group) {
+        const items = Array.isArray(o.items) ? o.items : [];
+        combinedItems.push(...items);
+        const totalNum = Number(o.total || o.total_amount || 0);
+        grandTotal += totalNum;
+        const st = String(o.backendStatus || o.status || '').toUpperCase();
+        if (['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(st)) {
+          anyCompleted = true;
+        }
+        const paySt = String(o.payment_status || o.paymentStatus || '').toUpperCase();
+        if (paySt !== 'PAID') {
+          allPaid = false;
+        }
+      }
+
+      const effectiveItems = (rootOrd.combined_items && rootOrd.combined_items.length > 0)
+        ? rootOrd.combined_items
+        : combinedItems;
+
+      const effectiveTotal = (rootOrd.combined_total && Number(rootOrd.combined_total) > 0)
+        ? Number(rootOrd.combined_total)
+        : (grandTotal > 0 ? grandTotal : rootOrd.total);
+
+      const effectiveStatus = anyCompleted ? 'Completed' : (latestOrd.status || rootOrd.status);
+      const effectiveBackendStatus = anyCompleted ? 'COMPLETED' : (latestOrd.backendStatus || rootOrd.backendStatus || latestOrd.status);
+      const effectiveDisplayNo = latestOrd.display_order_number || latestOrd.display_number || rootOrd.display_order_number || String(rootId);
+
+      result.push({
+        ...rootOrd,
+        id: Number(rootId) || rootId,
+        backendNumericId: Number(rootId) || rootId,
+        parent_order_id: null,
+        display_order_number: effectiveDisplayNo,
+        display_number: effectiveDisplayNo,
+        displayOrderNumber: effectiveDisplayNo,
+        status: effectiveStatus,
+        backendStatus: effectiveBackendStatus,
+        items: effectiveItems,
+        total: effectiveTotal,
+        total_amount: String(effectiveTotal),
+        payment_status: allPaid ? 'PAID' : 'UNPAID',
+        paymentStatus: allPaid ? 'PAID' : 'UNPAID',
+        is_paid: allPaid,
+        has_continuations: group.length > 1,
+        continuations_count: group.length - 1,
+        all_session_order_ids: group.map(o => o.id),
+        created_at: rootOrd.created_at || latestOrd.created_at,
+        placedAt: rootOrd.placedAt || latestOrd.placedAt,
+        rawCreatedAt: rootOrd.rawCreatedAt || latestOrd.rawCreatedAt,
+      });
+    }
+
+    result.sort((a, b) => {
+      const timeA = Number(a.placedAt || a.rawCreatedAt) || (a.created_at ? new Date(a.created_at).getTime() : 0) || 0;
+      const timeB = Number(b.placedAt || b.rawCreatedAt) || (b.created_at ? new Date(b.created_at).getTime() : 0) || 0;
+      if (timeA && timeB && timeA !== timeB) return timeB - timeA;
+      const idA = parseInt(String(a.backendNumericId || a.id).replace(/\D/g, ''), 10) || 0;
+      const idB = parseInt(String(b.backendNumericId || b.id).replace(/\D/g, ''), 10) || 0;
+      return idB - idA;
+    });
+
+    return result;
+  };
+
   useEffect(() => {
     let isMounted = true;
 
@@ -267,7 +383,16 @@ export const Home = () => {
         return;
       }
       try {
-        const INACTIVE_STATUSES = ['completed', 'cancelled', 'canceled', 'cancel', 'done', 'settled', 'delivered', 'rejected', 'void', 'voided'];
+        const isOrderLive = (ord) => {
+          if (!ord || (!ord.id && !ord.order_id)) return false;
+          const st = String(ord.status || ord.backendStatus || '').toLowerCase().trim();
+          const paySt = String(ord.payment_status || ord.paymentStatus || '').toLowerCase().trim();
+          if (['cancelled', 'canceled', 'cancel', 'rejected', 'void', 'voided'].includes(st)) return false;
+          if (paySt === 'paid') return false;
+          if (['completed', 'done', 'settled', 'delivered'].includes(st) && paySt === 'paid') return false;
+          return true;
+        };
+
         const token = sessionStorage.getItem('foodie_token_customer') || localStorage.getItem('foodie_token_customer');
         if (token) {
           const api = (await import('../../services/api')).default;
@@ -276,8 +401,9 @@ export const Home = () => {
           const rows = Array.isArray(res.data) ? res.data : (res.data?.results || []);
           const activeList = rows
             .map(mapOrder)
-            .filter((ord) => !INACTIVE_STATUSES.includes(String(ord.status || ord.backendStatus || '').toLowerCase()));
-          if (isMounted) setActiveOrders(activeList);
+            .filter(isOrderLive);
+          const consolidated = consolidateActiveOrders(activeList);
+          if (isMounted) setActiveOrders(consolidated);
           return;
         }
 
@@ -287,29 +413,19 @@ export const Home = () => {
         const orders = await orderService.getOrders(activePhone || 'GUEST', false).catch(() => []);
 
         const activeList = (orders || []).filter(ord => {
-          if (!ord || (!ord.id && !ord.order_id)) return false;
-          const st = String(ord.status || '').toLowerCase().trim();
-          return !INACTIVE_STATUSES.includes(st) && isOrderOwnedByCustomer(ord, currentCustomer);
+          return isOrderLive(ord) && isOrderOwnedByCustomer(ord, currentCustomer);
         });
 
-        // Sort active orders newest first
-        activeList.sort((a, b) => {
-          const timeA = Number(a.placedAt || a.rawCreatedAt) || (a.created_at ? new Date(a.created_at).getTime() : 0) || (a.createdAt ? new Date(a.createdAt).getTime() : 0);
-          const timeB = Number(b.placedAt || b.rawCreatedAt) || (b.created_at ? new Date(b.created_at).getTime() : 0) || (b.createdAt ? new Date(b.createdAt).getTime() : 0);
-          if (timeA && timeB && timeA !== timeB) return timeB - timeA;
-          const idA = parseInt(String(a.backendNumericId || a.id).replace(/\D/g, ''), 10) || 0;
-          const idB = parseInt(String(b.backendNumericId || b.id).replace(/\D/g, ''), 10) || 0;
-          return idB - idA;
-        });
-
+        const consolidated = consolidateActiveOrders(activeList);
         if (isMounted) {
-          setActiveOrders(activeList);
+          setActiveOrders(consolidated);
         }
       } catch (err) {
         if (isMounted) setActiveOrders([]);
       }
     };
 
+    fetchActiveOrdersRef.current = fetchActiveOrders;
     fetchActiveOrders();
     const handleSync = () => fetchActiveOrders();
     window.addEventListener('foodie_orders_updated', handleSync);
@@ -329,7 +445,112 @@ export const Home = () => {
     setCurrentPage(1);
   };
 
-  const handleOrderAgain = () => {
+  const [viewingBillOrder, setViewingBillOrder] = useState(null);
+
+  const handleViewBill = async (ord) => {
+    try {
+      const { fetchCustomerBillPreview } = await import('../../services/customerCheckout');
+      const rootId = ord.parent_order_id || (typeof ord.parent_order === 'object' ? ord.parent_order?.id : ord.parent_order) || ord.id;
+      const preview = await fetchCustomerBillPreview(rootId);
+      setViewingBillOrder({
+        ...ord,
+        ...preview,
+        id: rootId,
+        items: preview.items || ord.items,
+        combined_items: preview.items,
+        total: preview.total_amount || ord.total,
+        total_amount: preview.total_amount || ord.total_amount,
+        display_order_number: preview.display_order_number || ord.display_order_number,
+      });
+    } catch (e) {
+      console.warn('Could not fetch bill preview, falling back to ord', e);
+      setViewingBillOrder(ord);
+    }
+  };
+
+  const handleProceedToBill = async (ord) => {
+    if (!ord) return;
+    const rootId = ord.parent_order_id || (typeof ord.parent_order === 'object' ? ord.parent_order?.id : ord.parent_order) || ord.id;
+    const isCompleted = String(ord.status || ord.backendStatus || '').toUpperCase() === 'COMPLETED';
+    if (isCompleted) {
+      await handleViewBill(ord);
+      return;
+    }
+    setProceedingBillId(ord.id);
+    try {
+      const { proceedOrderToBill } = await import('../../services/customerCheckout');
+      await proceedOrderToBill(rootId);
+      if (fetchActiveOrdersRef.current) {
+        await fetchActiveOrdersRef.current();
+      }
+      await handleViewBill({
+        ...ord,
+        id: rootId,
+        status: 'Completed',
+        backendStatus: 'COMPLETED'
+      });
+    } catch (err) {
+      console.warn('Could not proceed to bill directly, navigating to confirmation', err);
+      navigate(`/customer/order-confirmation?order=${rootId}&proceedToBill=1`);
+    } finally {
+      setProceedingBillId(null);
+    }
+  };
+
+  const handleContinueOrder = async (ord) => {
+    if (!ord) return;
+    const rootId = ord.parent_order_id || ord.parent_order || ord.id;
+    sessionStorage.setItem('foodie_parent_order_id', String(rootId));
+    localStorage.setItem('foodie_parent_order_id', String(rootId));
+
+    let tableId = ord.table_id || ord.tableId || (typeof ord.table === 'object' ? ord.table?.id : null);
+    const tableNumber = ord.table_number || ord.tableNumber || (typeof ord.table === 'object' ? ord.table?.table_number || ord.table?.label : ord.table);
+
+    // If tableId is still missing, resolve it by matching tableNumber against branch tables
+    if (!tableId && tableNumber) {
+      try {
+        const { resolvePublicBranchId, availableTables } = await import('../../services/customerCheckout');
+        const branchId = await resolvePublicBranchId();
+        if (branchId) {
+          const tables = await availableTables(branchId);
+          const cleanTarget = String(tableNumber).toUpperCase().trim();
+          const matched = tables.find(t =>
+            String(t.table_number).toUpperCase().trim() === cleanTarget ||
+            String(t.table_number).toUpperCase().trim() === cleanTarget.replace(/^TABLE\s*/i, '') ||
+            `T${String(t.table_number).replace(/\D/g, '').padStart(2, '0')}` === cleanTarget
+          );
+          if (matched) tableId = matched.id;
+        }
+      } catch (e) {
+        console.warn('Could not resolve table id by number:', e);
+      }
+    }
+
+    if (tableId) {
+      sessionStorage.setItem('foodie_selected_table', String(tableId));
+      localStorage.setItem('foodie_selected_table', String(tableId));
+      setSelectedTableId(tableId, tableNumber);
+      rememberDineInTableId(tableId);
+      setTable({
+        id: tableId,
+        tableId: tableId,
+        tableNumber: tableNumber,
+        table_number: tableNumber,
+        location: ord.location || '',
+        orderType: 'DINE_IN',
+      });
+    }
+    setOrderType('DINE_IN');
+    sessionStorage.setItem('foodie_order_type', 'DINE_IN');
+    localStorage.setItem('foodie_order_type', 'DINE_IN');
+
+    try {
+      const { applyOrderContext } = await import('../../services/customerCheckout');
+      await applyOrderContext('DINE_IN', tableId);
+    } catch (e) {
+      console.warn('Could not apply context on continue order:', e);
+    }
+
     document.getElementById('customer-menu')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
@@ -466,32 +687,61 @@ export const Home = () => {
           </div>
         )}
 
-        {/* Top Campaign Banner (Flat ₹50 OFF) */}
-        {activeBanner && (
-          <div
-            className="rounded-4 p-3 p-sm-4 mb-4 text-white text-start position-relative overflow-hidden shadow-sm"
-            style={{
-              background: 'linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%)',
-            }}
-          >
-            <span
-              className="badge bg-white text-danger fw-bold rounded-pill px-3 py-1.5 mb-3"
-              style={{ fontSize: '10px', color: 'var(--primary-color)' }}
-            >
-              OFFER OF THE DAY
-            </span>
-            <h2 className="fw-bold mb-1">{activeBanner.type === 'percentage' ? `Flat ${activeBanner.discount}% OFF` : `Flat ${formatCurrency(activeBanner.discount)} OFF`}</h2>
-            <p className="small mb-0 opacity-90">
-              Use code: <strong className="text-white">{activeBanner.code}</strong> | {activeBanner.description}
+        {/* Hero Banner: Delicious Food For Every Mood (Matches Reference 13) */}
+        <div
+          className="rounded-4 p-4 p-md-5 mb-4 text-start position-relative overflow-hidden shadow-sm d-flex flex-column flex-md-row align-items-md-center justify-content-between"
+          style={{
+            background: 'linear-gradient(135deg, #FFF9F5 0%, #FFF3EC 50%, #FFEBE0 100%)',
+            border: '1px solid #FFE4D6'
+          }}
+        >
+          <div style={{ maxWidth: '480px', zIndex: 2 }}>
+            <h1 className="fw-bold mb-1" style={{ color: '#C8102E', fontSize: 'clamp(28px, 4vw, 38px)', letterSpacing: '-0.8px', lineHeight: 1.15 }}>
+              Delicious Food
+            </h1>
+            <h1 className="fw-bold mb-2" style={{ color: '#C8102E', fontSize: 'clamp(28px, 4vw, 38px)', letterSpacing: '-0.8px', lineHeight: 1.15 }}>
+              For Every Mood
+            </h1>
+            <p className="text-secondary small mb-3" style={{ fontSize: '13px' }}>
+              Fresh ingredients, tasty dishes, great moments.
             </p>
+            {/* Search for dishes pill inside hero */}
+            <div className="position-relative" style={{ maxWidth: '380px' }}>
+              <input 
+                type="text"
+                placeholder="Search for dishes..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
+                className="form-control rounded-pill ps-4 py-2 border shadow-xs"
+                style={{ fontSize: '13px', backgroundColor: '#FFFFFF', borderColor: '#CBD5E1' }}
+              />
+            </div>
           </div>
-        )}
+
+          <div className="d-none d-md-flex align-items-center gap-3 mt-3 mt-md-0 position-relative" style={{ zIndex: 1 }}>
+            <img 
+              src="https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=320&auto=format&fit=crop&q=80" 
+              alt="Delicious Biryani"
+              className="rounded-circle shadow-md"
+              style={{ width: '130px', height: '130px', objectFit: 'cover', border: '4px solid #fff' }}
+            />
+            <img 
+              src="https://images.unsplash.com/photo-1601050690597-df0568f70950?w=320&auto=format&fit=crop&q=80" 
+              alt="Crispy Pani Puri"
+              className="rounded-circle shadow-md"
+              style={{ width: '150px', height: '150px', objectFit: 'cover', border: '4px solid #fff' }}
+            />
+          </div>
+        </div>
 
         {/* Active Live Orders List Section (shows right AFTER Flat ₹50 OFF banner) */}
         {!isEmployee && activeOrders && activeOrders.length > 0 && (
           <div className="d-flex flex-column gap-3 mb-4">
             {activeOrders.map((ord) => {
               const st = String(ord.status || '').toLowerCase().trim();
+              const isCompleted = ['completed', 'delivered', 'done', 'settled'].includes(st) ||
+                ['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(String(ord.backendStatus || '').toUpperCase());
+
               let stText = 'Order Placed';
               let stBg = 'bg-danger text-white';
 
@@ -504,7 +754,15 @@ export const Home = () => {
               } else if (['serving', 'served'].includes(st)) {
                 stText = 'Serving to Table';
                 stBg = 'bg-primary text-white';
+              } else if (isCompleted) {
+                stText = 'Bill Ready · Settlement Pending';
+                stBg = 'bg-info text-dark';
               }
+
+              const isPaid = String(ord.payment_status || ord.paymentStatus || '').toUpperCase() === 'PAID';
+              const totalItemCount = (ord.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+              const itemsSummary = formatOrderItemsSummary(ord.items);
+              const isProcessingThisBill = proceedingBillId === ord.id;
 
               return (
                 <div
@@ -516,23 +774,27 @@ export const Home = () => {
                     <div>
                       <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
                         <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1" style={{ fontSize: '10px' }}>
-                          Live Order #{ord.id}
+                          Live Order #{ord.display_order_number || ord.display_number || ord.id}
                         </span>
                         <span className={`badge rounded-pill px-2.5 py-1 fw-bold ${stBg}`} style={{ fontSize: '10px' }}>
                           {stText}
                         </span>
+                        {isPaid ? (
+                          <span className="badge rounded-pill px-2 py-0.5 fw-bold bg-success text-white" style={{ fontSize: '10px' }}>PAID</span>
+                        ) : (
+                          <span className="badge rounded-pill px-2 py-0.5 fw-bold bg-warning text-dark" style={{ fontSize: '10px' }}>UNPAID</span>
+                        )}
                         <span className="small text-white opacity-90 fw-semibold" style={{ fontSize: '12px' }}>
                           {formatCompactTableLabel(ord.table) || 'Takeaway'}
                         </span>
-                        {ord.items && ord.items.length > 0 && (
+                        {totalItemCount > 0 && (
                           <span className="small text-white opacity-80" style={{ fontSize: '11px' }}>
-                            • {ord.items.length} {ord.items.length === 1 ? 'item' : 'items'}
+                            • {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}
                           </span>
                         )}
                       </div>
                       <div className="small text-white-50">
-                        {(ord.items || []).slice(0, 3).map((item) => `${item.name} × ${item.quantity}`).join(', ')}
-                        {(ord.items || []).length > 3 ? '…' : ''}
+                        {itemsSummary}
                       </div>
                       <div className="small text-white-50">
                         Total: <strong className="text-white">{formatCurrency(ord.total || ord.total_amount)}</strong>
@@ -548,14 +810,49 @@ export const Home = () => {
                       >
                         Track Order →
                       </button>
-                      <button
-                        type="button"
-                        onClick={handleOrderAgain}
-                        className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold"
-                        style={{ fontSize: '12px' }}
-                      >
-                        Order Again
-                      </button>
+
+                      {isCompleted ? (
+                        <button
+                          type="button"
+                          onClick={() => handleViewBill(ord)}
+                          className="btn btn-sm btn-danger rounded-pill px-3.5 py-1.5 fw-bold shadow-sm d-flex align-items-center gap-1.5"
+                          style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '12px' }}
+                        >
+                          <i className="bi bi-receipt"></i>
+                          <span>View Bill</span>
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleProceedToBill(ord)}
+                            disabled={isProcessingThisBill}
+                            className="btn btn-sm btn-danger rounded-pill px-3.5 py-1.5 fw-bold shadow-sm"
+                            style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '12px' }}
+                          >
+                            {isProcessingThisBill ? 'Processing...' : 'Proceed to Bill'}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleViewBill(ord)}
+                            className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold"
+                            style={{ fontSize: '12px' }}
+                          >
+                            View Bill
+                          </button>
+                          {ord.orderType !== 'Takeaway' && String(ord.table).toLowerCase() !== 'takeaway' && String(ord.status || '').toUpperCase() !== 'CANCELLED' && !isPaid && (
+                            <button
+                              type="button"
+                              onClick={() => handleContinueOrder(ord)}
+                              className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
+                              style={{ fontSize: '12px' }}
+                            >
+                              <i className="bi bi-plus-circle"></i>
+                              <span>Continue Order</span>
+                            </button>
+                          )}
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -787,6 +1084,14 @@ export const Home = () => {
         </div>
       </main>
       <OrderTypeModal isOpen={showOrderTypeModal} onSelectType={handleSelectOrderType} dineInAvailable />
+      {viewingBillOrder && (
+        <EBillModal
+          isOpen={!!viewingBillOrder}
+          order={viewingBillOrder}
+          onClose={() => setViewingBillOrder(null)}
+          onProceedToBill={handleProceedToBill}
+        />
+      )}
     </CustomerLayout>
   );
 };

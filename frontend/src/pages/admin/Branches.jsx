@@ -40,6 +40,7 @@ export const Branches = () => {
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingBranch, setEditingBranch] = useState(null);
+  const [createdSuccessBranch, setCreatedSuccessBranch] = useState(null);
   const [deletingBranch, setDeletingBranch] = useState(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState('');
@@ -86,15 +87,6 @@ export const Branches = () => {
     };
   }, []);
 
-  useEffect(() => {
-    if (searchParams.get('add') === '1' && isAdmin && !loading) {
-      handleOpenAdd();
-      const next = new URLSearchParams(searchParams);
-      next.delete('add');
-      setSearchParams(next, { replace: true });
-    }
-  }, [searchParams, isAdmin, loading]);
-
   const handleOpenAdd = () => {
     setEditingBranch(null);
     setFormData({
@@ -113,6 +105,15 @@ export const Branches = () => {
     setErrorMessage('');
     setIsModalOpen(true);
   };
+
+  useEffect(() => {
+    if (searchParams.get('add') === '1' && isAdmin && !loading) {
+      handleOpenAdd();
+      const next = new URLSearchParams(searchParams);
+      next.delete('add');
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, isAdmin, loading]);
 
   const handleOpenEdit = (branch) => {
     setEditingBranch(branch);
@@ -167,7 +168,10 @@ export const Branches = () => {
       if (editingBranch) {
         await branchService.updateBranch(editingBranch.id, formData);
       } else {
-        await branchService.createBranch(formData);
+        const created = await branchService.createBranch(formData);
+        if (created) {
+          setCreatedSuccessBranch(created);
+        }
       }
       await fetchBranches(false);
       setIsModalOpen(false);
@@ -236,13 +240,36 @@ export const Branches = () => {
   };
 
   const modalFooter = (
-    <div className="d-flex justify-content-end gap-2">
-      <Button variant="light" onClick={() => setIsModalOpen(false)} disabled={saveLoading}>
+    <div className="d-flex align-items-center gap-3 w-100 pt-2">
+      <button
+        type="button"
+        onClick={() => setIsModalOpen(false)}
+        disabled={saveLoading}
+        className="btn rounded-pill fw-bold flex-grow-1"
+        style={{ 
+          height: '44px', 
+          backgroundColor: '#FFFFFF', 
+          color: 'var(--primary-color, #C8102E)', 
+          border: '1.5px solid var(--primary-color, #C8102E)',
+          fontSize: '14px'
+        }}
+      >
         Cancel
-      </Button>
-      <Button variant="primary" onClick={handleSubmit} loading={saveLoading}>
-        {editingBranch ? 'Update Branch' : 'Create Branch'}
-      </Button>
+      </button>
+      <button
+        type="button"
+        onClick={handleSubmit}
+        disabled={saveLoading}
+        className="btn btn-danger rounded-pill fw-bold flex-grow-1 shadow-sm"
+        style={{ 
+          height: '44px', 
+          backgroundColor: 'var(--primary-color, #C8102E)', 
+          borderColor: 'var(--primary-color, #C8102E)',
+          fontSize: '14px'
+        }}
+      >
+        {saveLoading ? 'Saving...' : editingBranch ? 'Update Branch' : 'Create Branch'}
+      </button>
     </div>
   );
 
@@ -250,10 +277,10 @@ export const Branches = () => {
     isModalOpen && (
       <Modal
         isOpen={isModalOpen}
-        title={editingBranch ? `Edit Branch: ${editingBranch.name}` : "Add New Restaurant Branch"}
+        title={editingBranch ? `Edit Branch: ${editingBranch.name}` : "Add New Branch"}
         onClose={() => setIsModalOpen(false)}
         footerActions={modalFooter}
-        size="lg"
+        size="md"
       >
         <form onSubmit={handleSubmit}>
           {errorMessage && (
@@ -263,47 +290,64 @@ export const Branches = () => {
           )}
 
           <div className="row g-3">
-            <div className={editingBranch ? "col-12 col-md-8" : "col-12"}>
-              <Input 
-                label="Branch Name"
+            {/* Row 1: Branch Name * | Restaurant * */}
+            <div className="col-12 col-md-6">
+              <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+                Branch Name <span className="text-danger">*</span>
+              </label>
+              <input 
+                type="text"
                 name="name"
-                placeholder="e.g. Foodie CyberCity Hub"
+                className="form-control rounded-3"
+                style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
+                placeholder="Tumakuru Main"
                 value={formData.name}
                 onChange={handleFormChange}
                 required
               />
             </div>
 
-            {editingBranch && (
-              <div className="col-12 col-md-4">
-                <Input 
-                  label="Branch Code"
-                  name="code"
-                  placeholder="e.g. BR001"
-                  value={formData.code}
-                  disabled
-                  readOnly
-                  helpText="Assigned by system"
-                />
-              </div>
-            )}
-
             <div className="col-12 col-md-6">
-              <Input 
-                label="City"
+              <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+                Restaurant <span className="text-danger">*</span>
+              </label>
+              <select 
+                className="form-select rounded-3"
+                style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
+                value="Foodie Restaurant"
+                disabled
+              >
+                <option value="Foodie Restaurant">Foodie Restaurant</option>
+              </select>
+            </div>
+
+            {/* Row 2: Location * | Status * */}
+            <div className="col-12 col-md-6">
+              <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+                Location <span className="text-danger">*</span>
+              </label>
+              <input 
+                type="text"
                 name="city"
-                placeholder="e.g. Bangalore, Hyderabad, Mumbai"
-                value={formData.city}
-                onChange={handleFormChange}
+                className="form-control rounded-3"
+                style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
+                placeholder="Tumakuru, Karnataka"
+                value={formData.city || formData.address}
+                onChange={(e) => {
+                  handleFormChange(e);
+                  setFormData(prev => ({ ...prev, city: e.target.value, address: prev.address || e.target.value }));
+                }}
+                required
               />
             </div>
 
             <div className="col-12 col-md-6">
-              <label className="form-label text-secondary fw-semibold small">
-                Branch Status <span className="text-danger">*</span>
+              <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+                Status <span className="text-danger">*</span>
               </label>
               <select 
-                className="form-select rounded-3 py-2"
+                className="form-select rounded-3"
+                style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
                 name="status"
                 value={formData.status}
                 onChange={handleFormChange}
@@ -314,6 +358,22 @@ export const Branches = () => {
                 <option value="Under Renovation">Under Renovation</option>
               </select>
             </div>
+
+            {editingBranch && (
+              <div className="col-12">
+                <label className="form-label text-secondary small mb-1">
+                  Branch Code (System Generated)
+                </label>
+                <input 
+                  type="text"
+                  className="form-control bg-light rounded-3"
+                  value={formData.code}
+                  disabled
+                  readOnly
+                  style={{ height: '38px', fontSize: '13px' }}
+                />
+              </div>
+            )}
 
             <div className="col-12">
               <label className="form-label text-secondary fw-semibold small">
@@ -665,6 +725,64 @@ export const Branches = () => {
 
       {/* Add / Edit Branch Modal */}
       {renderBranchModal()}
+
+      {/* Success Modal Showing Generated Branch Code (Matches Screenshot 04) */}
+      {createdSuccessBranch && (
+        <Modal
+          isOpen={!!createdSuccessBranch}
+          title=""
+          onClose={() => setCreatedSuccessBranch(null)}
+          size="md"
+          footerActions={
+            <Button variant="primary" onClick={() => setCreatedSuccessBranch(null)} className="rounded-pill px-4 fw-bold">
+              Done
+            </Button>
+          }
+        >
+          <div className="p-2">
+            {/* Top Green Banner */}
+            <div 
+              className="d-flex align-items-center gap-3 p-3 rounded-4 mb-4" 
+              style={{ backgroundColor: '#ECFDF5', border: '1px solid #A7F3D0' }}
+            >
+              <div 
+                className="rounded-circle d-flex align-items-center justify-content-center text-white flex-shrink-0 shadow-xs"
+                style={{ width: '44px', height: '44px', backgroundColor: '#10B981' }}
+              >
+                <FiCheckCircle size={26} />
+              </div>
+              <div>
+                <h6 className="fw-bold mb-0" style={{ color: '#065F46', fontSize: '16px' }}>
+                  Branch Created Successfully!
+                </h6>
+                <p className="mb-0 small" style={{ color: '#047857', fontSize: '13px' }}>
+                  The new branch has been added to your system.
+                </p>
+              </div>
+            </div>
+
+            {/* 2-Column Metrics Grid */}
+            <div className="row g-3 px-2 py-2">
+              <div className="col-6">
+                <span className="text-secondary small d-block mb-1" style={{ fontSize: '13px', color: '#64748B' }}>
+                  Branch Code
+                </span>
+                <span className="fw-bold text-dark d-block" style={{ fontSize: '24px', letterSpacing: '-0.5px' }}>
+                  {createdSuccessBranch.code || 'BR-003'}
+                </span>
+              </div>
+              <div className="col-6">
+                <span className="text-secondary small d-block mb-1" style={{ fontSize: '13px', color: '#64748B' }}>
+                  Branch Name
+                </span>
+                <span className="fw-bold text-dark d-block" style={{ fontSize: '18px' }}>
+                  {createdSuccessBranch.name || 'Tumakuru Main'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       {deletingBranch && (
         <Modal

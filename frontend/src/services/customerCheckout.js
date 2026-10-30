@@ -1,7 +1,7 @@
 import api from './api';
 import { extractApiErrorMessage } from '../utils/errorUtils';
 import {
-  DINE_IN, DINE_IN_NEEDS_QR, getOrderType, getScannedTableQr, getSelectedTableId, normalizeOrderType,
+  DINE_IN, DINE_IN_NEEDS_QR, getOrderType, getScannedTableQr, getSelectedTableId, getLastDineInTableId, normalizeOrderType,
 } from '../utils/orderContext';
 
 const CHECKOUT_KEY = 'foodie_checkout_key';
@@ -91,16 +91,31 @@ function checkoutKeyFor(cartId) {
 }
 
 export async function placeOrder(orderType, paymentMethod) {
-  await applyOrderContext(orderType);
+  const currentTableId = getSelectedTableId() || getLastDineInTableId() || sessionStorage.getItem('foodie_selected_table');
+  await applyOrderContext(orderType, currentTableId);
   const review = await validateCheckout();
   const branch = customerBranchId();
   const key = checkoutKeyFor(review.cart?.id ?? null);
+  const parentOrderId = sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id');
+  const payload = {
+    branch, idempotency_key: key, payment_method: toApiPaymentMethod(paymentMethod),
+  };
+  if (parentOrderId && String(orderType).toLowerCase() !== 'takeaway') {
+    payload.parent_order = Number(parentOrderId);
+    payload.parent_order_id = Number(parentOrderId);
+  }
   try {
-    const res = await api.post('/orders/', {
-      branch, idempotency_key: key, payment_method: toApiPaymentMethod(paymentMethod),
-    });
+    const res = await api.post('/orders/', payload);
     sessionStorage.removeItem(CHECKOUT_KEY);
     if (!res.data?.id) throw new Error('The server did not return an order id.');
+    if (String(orderType).toLowerCase() !== 'takeaway') {
+      const rootId = res.data.parent_order || res.data.parent_order_id || parentOrderId || res.data.id;
+      sessionStorage.setItem('foodie_parent_order_id', String(rootId));
+      localStorage.setItem('foodie_parent_order_id', String(rootId));
+    } else {
+      sessionStorage.removeItem('foodie_parent_order_id');
+      localStorage.removeItem('foodie_parent_order_id');
+    }
     try {
       window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: res.data.id } }));
       window.dispatchEvent(new CustomEvent('foodie_inventory_updated', { detail: { orderId: res.data.id } }));
@@ -110,8 +125,53 @@ export async function placeOrder(orderType, paymentMethod) {
     } catch { /* same-tab listeners still received the custom events */ }
     return res.data;
   } catch (err) {
+    const errCode = err?.response?.data?.code || '';
+    const errDetail = err?.response?.data?.detail || err?.message || '';
+    if (errCode === 'continuation_closed' || errDetail.includes('proceeded to bill') || errDetail.includes('cannot be continued')) {
+      sessionStorage.removeItem('foodie_parent_order_id');
+      localStorage.removeItem('foodie_parent_order_id');
+      delete payload.parent_order;
+      delete payload.parent_order_id;
+      try {
+        const retryRes = await api.post('/orders/', payload);
+        sessionStorage.removeItem(CHECKOUT_KEY);
+        if (!retryRes.data?.id) throw new Error('The server did not return an order id.');
+        if (String(orderType).toLowerCase() !== 'takeaway') {
+          const rootId = retryRes.data.parent_order || retryRes.data.parent_order_id || retryRes.data.id;
+          sessionStorage.setItem('foodie_parent_order_id', String(rootId));
+          localStorage.setItem('foodie_parent_order_id', String(rootId));
+        }
+        try {
+          window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: retryRes.data.id } }));
+          window.dispatchEvent(new CustomEvent('foodie_inventory_updated', { detail: { orderId: retryRes.data.id } }));
+          window.dispatchEvent(new CustomEvent('foodie_products_updated', { detail: { orderId: retryRes.data.id } }));
+          window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: retryRes.data.id } }));
+          localStorage.setItem('foodie_data_sync', String(Date.now()));
+        } catch {}
+        return retryRes.data;
+      } catch (retryErr) {
+        throw new Error(checkoutErrorMessage(retryErr));
+      }
+    }
     throw new Error(checkoutErrorMessage(err));
   }
+}
+
+export async function fetchCustomerBillPreview(orderId) {
+  const res = await api.get(`/billing/preview/${orderId}/`, { bypassCache: true });
+  return res.data;
+}
+
+export async function proceedOrderToBill(orderId) {
+  const res = await api.post(`/orders/${orderId}/proceed-to-bill/`);
+  try {
+    sessionStorage.removeItem('foodie_parent_order_id');
+    localStorage.removeItem('foodie_parent_order_id');
+    window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId, status: 'Completed' } }));
+    window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId } }));
+    localStorage.setItem('foodie_data_sync', String(Date.now()));
+  } catch {}
+  return res.data;
 }
 
 export async function availableTables(branchId) {
@@ -143,8 +203,13 @@ export async function resolvePublicBranchId() {
   return String(pick.id);
 }
 
-export function selectableTables(tables) {
-  return (tables || []).filter((table) => table.available === true || table.status === 'AVAILABLE');
+export function selectableTables(tables, activeTableId = null) {
+  const activeIdNum = activeTableId ? Number(activeTableId) : null;
+  return (tables || []).filter((table) =>
+    table.available === true ||
+    table.status === 'AVAILABLE' ||
+    (activeIdNum && Number(table.id) === activeIdNum)
+  );
 }
 
 export async function fetchCustomerOrder(orderId) {

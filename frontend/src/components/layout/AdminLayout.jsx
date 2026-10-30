@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { FiAlignLeft, FiBell, FiChevronDown, FiLogOut, FiShoppingBag, FiX } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { orderService } from '../../services/orderService';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const AdminLayout = ({ children, fullHeight = false, contentClassName = "" }) => {
   const { toggleSidebar, notifications, markAllRead, markAsRead, clearAll } = useContext(AppContext);
@@ -51,6 +52,26 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
     navigate('/login', { replace: true });
   };
 
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return localStorage.getItem('foodie_theme') === 'dark';
+  });
+
+  useEffect(() => {
+    if (isDarkMode) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+      document.documentElement.setAttribute('data-bs-theme', 'dark');
+      localStorage.setItem('foodie_theme', 'dark');
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      document.documentElement.removeAttribute('data-bs-theme');
+      localStorage.setItem('foodie_theme', 'light');
+    }
+  }, [isDarkMode]);
+
+  const toggleTheme = () => {
+    setIsDarkMode(prev => !prev);
+  };
+
   return (
     <div className="admin-wrapper bg-light position-relative">
       <Sidebar />
@@ -66,7 +87,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
               <FiShoppingBag size={20} />
             </div>
             <div>
-              <div className="fw-bold fs-6">New Order #{toastOrder.id}!</div>
+              <div className="fw-bold fs-6">New Order #{formatOrderDisplayNumber(toastOrder, toastOrder.id)}!</div>
               <div className="small text-white-50" style={{ fontSize: '11px' }}>
                 Table: {toastOrder.table || 'N/A'} | Total: ₹{toastOrder.totalAmount || toastOrder.total_amount || 0}
               </div>
@@ -103,18 +124,50 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
         }}
       >
         {/* Admin Header */}
-        <header className="admin-header shadow-sm position-relative flex-shrink-0">
+        <header className="admin-header shadow-sm position-relative flex-shrink-0 d-flex align-items-center justify-content-between px-3 px-md-4 py-2" style={{ minHeight: '64px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)' }}>
           <div className="d-flex align-items-center gap-3">
-            <button className="btn border-0 text-dark p-0" onClick={toggleSidebar}>
+            <button className="btn border-0 text-secondary p-1 d-flex align-items-center" onClick={toggleSidebar} title="Toggle Sidebar">
               <FiAlignLeft size={22} />
             </button>
-            <h5 className="fw-bold mb-0 text-dark">Store Management</h5>
-            {user?.backendRole === 'MANAGER' && (
-              <span className="badge bg-danger text-white fw-bold rounded-pill px-3 py-2">Manager</span>
-            )}
+
+            {/* Header Search Input */}
+            <div className="d-none d-md-flex align-items-center position-relative" style={{ width: '280px' }}>
+              <input 
+                type="text" 
+                placeholder="Search anything..." 
+                className="form-control rounded-pill ps-4 pe-3 border-0"
+                style={{ 
+                  backgroundColor: isDarkMode ? '#182234' : '#F1F5F9', 
+                  fontSize: '13px', 
+                  height: '38px',
+                  color: 'var(--text-primary)'
+                }}
+              />
+            </div>
           </div>
 
-          <div className="d-flex align-items-center gap-3 gap-md-4">
+          <div className="d-flex align-items-center gap-2 gap-md-3">
+            {/* Dark Mode Toggle Button */}
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="btn p-2 rounded-circle border-0 d-flex align-items-center justify-content-center"
+              style={{
+                width: '38px',
+                height: '38px',
+                backgroundColor: isDarkMode ? '#182234' : '#F1F5F9',
+                color: isDarkMode ? '#F59E0B' : '#64748B',
+                transition: 'all 0.2s ease'
+              }}
+              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {isDarkMode ? (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+              ) : (
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+              )}
+            </button>
+
             {/* Notification Badge & Dropdown */}
             {user?.role !== 'employee' && (
               <div className="position-relative">
@@ -124,12 +177,21 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                     setShowNotifDropdown(!showNotifDropdown);
                     setShowProfileDropdown(false);
                   }}
-                  className="btn border-0 p-1 position-relative cursor-pointer bg-transparent"
+                  className="btn p-2 rounded-circle border-0 position-relative d-flex align-items-center justify-content-center"
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    backgroundColor: isDarkMode ? '#182234' : '#F1F5F9',
+                    color: 'var(--text-secondary)'
+                  }}
                   title="Notifications"
                 >
-                  <FiBell size={20} className="text-secondary animate-bounce" />
+                  <FiBell size={18} />
                   {unreadCount > 0 && (
-                    <span className="position-absolute top-0 start-100 translate-middle badge rounded-circle bg-danger p-1">
+                    <span 
+                      className="position-absolute top-0 start-100 translate-middle badge rounded-circle bg-danger p-1"
+                      style={{ transform: 'translate(-30%, 30%) !important' }}
+                    >
                       <span className="visually-hidden">unread messages</span>
                     </span>
                   )}
@@ -145,7 +207,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                   />
                   <div 
                     className="dropdown-menu show position-absolute end-0 mt-2 shadow-lg border-0 p-3 rounded-4 bg-white text-start" 
-                    style={{ minWidth: '320px', maxWidth: '360px', zIndex: 1000, top: '100%' }}
+                    style={{ minWidth: '320px', maxWidth: '360px', zIndex: 1000, top: '100%', backgroundColor: 'var(--surface-color)' }}
                   >
                     <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
                       <div className="fw-bold text-dark fs-6 d-flex align-items-center gap-2">
@@ -196,9 +258,9 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                               navigate('/admin/orders');
                             }}
                             className={`p-2.5 mb-1.5 rounded-3 border transition-all cursor-pointer ${
-                              !n.read ? 'bg-light-subtle border-danger-subtle' : 'bg-white border-light-subtle opacity-75'
+                              !n.read ? 'bg-light-subtle border-danger-subtle' : 'border-light-subtle opacity-75'
                             }`}
-                            style={{ cursor: 'pointer' }}
+                            style={{ cursor: 'pointer', backgroundColor: !n.read ? 'var(--primary-subtle)' : 'transparent' }}
                           >
                             <div className="d-flex align-items-start gap-2">
                               <div className={`p-1.5 rounded-circle mt-0.5 ${!n.read ? 'bg-danger-subtle text-danger' : 'bg-secondary-subtle text-secondary'}`}>
@@ -226,26 +288,28 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
             </div>
             )}
 
-            {/* User Profile Info & Dropdown (Same pattern as Customer Profile) */}
-            <div className="position-relative border-start ps-3">
+            {/* User Profile Pill & Dropdown */}
+            <div className="position-relative">
               <div 
-                className="d-flex align-items-center gap-2 cursor-pointer"
-                style={{ cursor: 'pointer' }}
+                className="d-flex align-items-center gap-2 p-1 pe-2 rounded-pill cursor-pointer"
+                style={{ cursor: 'pointer', backgroundColor: isDarkMode ? '#182234' : '#F8FAFC' }}
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
               >
                 <div 
                   className="text-white rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-sm"
-                  style={{ width: '36px', height: '36px', fontSize: '14px', backgroundColor: 'var(--primary-color)' }}
+                  style={{ width: '32px', height: '32px', fontSize: '13px', backgroundColor: 'var(--primary-color)' }}
                 >
                   {user?.name?.charAt(0).toUpperCase() || (user?.role === 'admin' ? 'A' : 'E')}
                 </div>
-                <div className="d-none d-md-flex align-items-center gap-1 cursor-pointer">
-                  <div>
-                    <div className="small fw-bold text-dark text-start" style={{ lineHeight: '1.2' }}>{user?.name || (user?.role === 'admin' ? 'Admin' : 'Staff')}</div>
-                    <div className="text-secondary text-start text-uppercase" style={{ fontSize: '10px', letterSpacing: '0.4px' }}>{user?.role || 'Staff'}</div>
+                <div className="d-none d-sm-block text-start">
+                  <div className="small fw-bold text-dark" style={{ lineHeight: '1.2', fontSize: '12px' }}>
+                    {user?.name || (user?.role === 'admin' ? 'foodieadmin' : 'Staff')}
                   </div>
-                  <FiChevronDown size={14} className="text-muted ms-1" />
+                  <div className="text-secondary" style={{ fontSize: '10px', lineHeight: '1' }}>
+                    {user?.backendRole === 'MANAGER' ? 'Manager' : (user?.role === 'admin' ? 'Admin' : 'Staff')}
+                  </div>
                 </div>
+                <FiChevronDown size={14} className="text-muted ms-1" />
               </div>
 
               {/* Profile Dropdown Popup Menu */}
@@ -257,12 +321,12 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                     onClick={() => setShowProfileDropdown(false)}
                   />
                   <div 
-                    className="dropdown-menu show position-absolute end-0 mt-2 shadow border-0 p-3 rounded-3 bg-white" 
-                    style={{ minWidth: '230px', zIndex: 1000, top: '100%' }}
+                    className="dropdown-menu show position-absolute end-0 mt-2 shadow border-0 p-3 rounded-3" 
+                    style={{ minWidth: '230px', zIndex: 1000, top: '100%', backgroundColor: 'var(--surface-color)' }}
                   >
                     {/* User details header */}
                     <div className="border-bottom pb-2 mb-2">
-                      <div className="fw-bold text-dark small">{user?.name || (user?.role === 'admin' ? 'Administrator' : 'Staff Member')}</div>
+                      <div className="fw-bold text-dark small">{user?.name || (user?.role === 'admin' ? 'foodieadmin' : 'Staff Member')}</div>
                       <div className="text-muted" style={{ fontSize: '11px' }}>{user?.email || (user?.role === 'admin' ? 'admin@foodie.com' : 'staff@foodie.com')}</div>
                       <span className="badge bg-danger-subtle text-danger fw-semibold mt-1.5 text-uppercase" style={{ fontSize: '9.5px' }}>
                         {user?.role || 'Admin'} Account

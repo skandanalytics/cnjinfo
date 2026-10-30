@@ -20,6 +20,9 @@ import { FiPlus, FiShoppingCart, FiAlertTriangle } from 'react-icons/fi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
 import { OrderContext } from '../../context/OrderContext';
+import TrackOrderModal from '../../components/orders/TrackOrderModal';
+import EBillModal from '../../components/orders/EBillModal';
+import { orderService } from '../../services/orderService';
 
 export const Tables = () => {
   const navigate = useNavigate();
@@ -46,6 +49,10 @@ export const Tables = () => {
   const [qrEnabled, setQrEnabled] = useState(true);
   const [tablesLoadError, setTablesLoadError] = useState('');
   const [vacateNotice, setVacateNotice] = useState(null);
+  const [trackingTable, setTrackingTable] = useState(null);
+  const [trackingOrder, setTrackingOrder] = useState(null);
+  const [trackingLoading, setTrackingLoading] = useState(false);
+  const [viewingBillOrder, setViewingBillOrder] = useState(null);
 
   useEffect(() => {
     const loadQr = () => {
@@ -199,24 +206,189 @@ export const Tables = () => {
     }
   };
 
+  const loadTrackingForTable = async (orderId, table) => {
+    setTrackingLoading(true);
+    setTrackingTable(table);
+    try {
+      const { fetchBillPreview, staffJson } = await import('../../services/adminApi');
+      let orderData = null;
+      try {
+        orderData = await staffJson(`/orders/${orderId}/`);
+      } catch (e) {
+        try {
+          orderData = await orderService.getOrderById(orderId);
+        } catch (innerErr) {
+          orderData = table?.active_order || (orders || []).find(o => String(o.id) === String(orderId)) || null;
+        }
+      }
+      if (!orderData && table?.active_order) {
+        orderData = table.active_order;
+      }
+      let combined = null;
+      try {
+        combined = await fetchBillPreview(orderId);
+      } catch (e) {}
+
+      const rawOrd = orderData || {};
+      const mapped = {
+        ...rawOrd,
+        id: rawOrd.id || orderId,
+        table: tableService.getCanonicalTableNumber(table?.number || table?.table_number || table?.id || rawOrd.table),
+        tableNumber: tableService.getCanonicalTableNumber(table?.number || table?.table_number || table?.id || rawOrd.table),
+        tableLocation: table?.location || table?.area || rawOrd.location || '',
+        tableId: table?.id || rawOrd.table_id || rawOrd.tableId || null,
+        table_id: table?.id || rawOrd.table_id || rawOrd.tableId || null,
+        status: rawOrd.status || rawOrd.backendStatus || 'Pending',
+        display_order_number: rawOrd.display_order_number || rawOrd.display_number || String(orderId),
+        ...(combined ? {
+          combined_items: combined.items,
+          items: combined.items || rawOrd.items,
+          combined_total: combined.total_amount,
+          total: combined.total_amount || rawOrd.total,
+          total_amount: combined.total_amount || rawOrd.total_amount,
+          combined_items_subtotal: combined.items_subtotal,
+          paid_amount: combined.paid_amount,
+          balance_due: combined.balance_due,
+          has_continuations: combined.has_continuations,
+          display_order_number: combined.display_order_number || rawOrd.display_order_number || rawOrd.display_number || String(orderId),
+        } : {}),
+      };
+      setTrackingOrder(mapped);
+    } catch (err) {
+      console.error('Error loading order for tracking:', err);
+      if (table?.active_order) {
+        setTrackingOrder({
+          ...table.active_order,
+          id: orderId,
+          table: tableService.getCanonicalTableNumber(table.number || table.table_number || table.id),
+          tableNumber: tableService.getCanonicalTableNumber(table.number || table.table_number || table.id),
+          tableLocation: table.location || table.area || '',
+          tableId: table.id,
+          table_id: table.id,
+          display_order_number: table.active_order.display_order_number || String(orderId),
+        });
+      } else {
+        window.alert('Failed to load order details for this table.');
+        setTrackingTable(null);
+        setTrackingOrder(null);
+      }
+    } finally {
+      setTrackingLoading(false);
+    }
+  };
+
+  const handleTrackTableOrder = async (table) => {
+    const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
+    if (!activeOrderId) {
+      // Find from orders context if not directly on table
+      const activeOrd = (orders || []).find(o => {
+        if (!o) return false;
+        const INACTIVE = ['completed', 'cancelled', 'canceled', 'done', 'settled', 'delivered', 'rejected', 'void'];
+        if (INACTIVE.includes(String(o.status || '').toLowerCase().trim())) return false;
+        const tId = String(o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : (typeof o.table === 'number' ? o.table : ''))).trim();
+        const oCanon = tableService.getCanonicalTableNumber(o.tableNumber || o.table_number || o.table || '');
+        const tCanon = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
+        return (tId && tId === String(table.id)) || (oCanon && oCanon === tCanon);
+      });
+      if (activeOrd?.id) {
+        return loadTrackingForTable(activeOrd.id, table);
+      }
+      window.alert('No active order found for this table.');
+      return;
+    }
+    await loadTrackingForTable(activeOrderId, table);
+  };
+
+  const handleContinueFromModal = (ord) => {
+    const rawStatus = String(ord?.backendStatus || ord?.status || '').toUpperCase();
+    if (rawStatus === 'COMPLETED' || rawStatus === 'CANCELLED') {
+      window.alert('This order has proceeded to bill and cannot be continued.');
+      return;
+    }
+    const targetTableId = ord?.tableId || ord?.table_id || trackingTable?.id;
+    const targetOrderId = ord?.parent_order_id || ord?.parent_order || ord?.id;
+    const rawPhone = ord?.customer_phone || ord?.customerPhone || ord?.customer?.phone || trackingTable?.active_order?.customer_phone || '';
+    const rawName = ord?.customer_name || ord?.customerName || ord?.customer?.name || trackingTable?.active_order?.customer_name || '';
+    setTrackingTable(null);
+    setTrackingOrder(null);
+    const targetUrl = isAdmin ? '/admin/pos' : '/employee/pos';
+    const params = new URLSearchParams();
+    if (targetTableId) params.set('table', targetTableId);
+    if (targetOrderId) params.set('order', targetOrderId);
+    params.set('continue', '1');
+    if (rawPhone) params.set('phone', rawPhone);
+    if (rawName) params.set('name', rawName);
+    navigate(`${targetUrl}?${params.toString()}`);
+  };
+
+  const handleProceedToBillFromModal = async (ord) => {
+    setTrackingTable(null);
+    setTrackingOrder(null);
+    try {
+      const { fetchBillPreview } = await import('../../services/adminApi');
+      const rootId = ord.parent_order_id || ord.parent_order || ord.id;
+      const preview = await fetchBillPreview(rootId);
+      setViewingBillOrder({
+        ...ord,
+        ...preview,
+        items: preview.items || ord.items,
+        combined_items: preview.items,
+        total: preview.total_amount || ord.total,
+        total_amount: preview.total_amount || ord.total_amount,
+      });
+    } catch (e) {
+      setViewingBillOrder(ord);
+    }
+  };
+
   const handleTakeOrder = async (table) => {
     if (table.is_active === false) {
       window.alert('This table is inactive and cannot take a new order.');
       return;
     }
-    if (table.status === 'Occupied' || table.is_occupied) {
-      window.alert('Table is occupied.');
+    const targetUrl = isAdmin ? '/admin/pos' : '/employee/pos';
+    const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
+    if ((table.status === 'Occupied' || table.is_occupied) && activeOrderId) {
+      const activePhone = table.active_order?.customer_phone || table.active_order?.customerPhone || '';
+      const activeName = table.active_order?.customer_name || table.active_order?.customerName || '';
+      const params = new URLSearchParams();
+      params.set('table', table.id);
+      params.set('order', activeOrderId);
+      params.set('continue', '1');
+      if (activePhone) params.set('phone', activePhone);
+      if (activeName) params.set('name', activeName);
+      navigate(`${targetUrl}?${params.toString()}`);
       return;
     }
-    const targetUrl = isAdmin ? '/admin/pos' : '/employee/pos';
     navigate(`${targetUrl}?table=${table.id}`);
   };
 
+  const [selectedLocation, setSelectedLocation] = useState('ALL');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
+
+  const uniqueLocations = Array.from(new Set(tables.map(t => t.location || t.area || 'Indoor').filter(Boolean)));
+
+  const availableCount = tables.filter(t => {
+    const isOccupied = t.status === 'Occupied' || t.is_occupied;
+    return !isOccupied && t.status !== 'Inactive';
+  }).length;
+
+  const occupiedCount = tables.filter(t => t.status === 'Occupied' || t.is_occupied).length;
+
   const filteredTables = tables.filter((t) => {
+    if (selectedLocation !== 'ALL') {
+      const loc = t.location || t.area || 'Indoor';
+      if (loc !== selectedLocation) return false;
+    }
+    const isOccupied = t.status === 'Occupied' || t.is_occupied;
+    if (selectedStatusFilter === 'available') {
+      return !isOccupied;
+    }
+    if (selectedStatusFilter === 'occupied') {
+      return isOccupied;
+    }
     if (isAvailableOnly) {
-      const st = String(t.status || '').toLowerCase().trim();
-      const isAvail = st === 'available' || t.isAvailable === true || t.is_available === true;
-      if (!isAvail) return false;
+      return !isOccupied;
     }
     return true;
   });
@@ -277,61 +449,11 @@ export const Tables = () => {
     );
   }
 
-  if (!loading && (!tables || tables.length === 0)) {
-    return (
-      <AdminLayout contentClassName="p-0">
-        <div className="tables-page-container">
-          <PageHeader 
-            title="Manage Tables" 
-            showBackButton
-            actions={
-              <div className="d-flex align-items-center gap-2">
-                <Button 
-                  onClick={handleTakeawayOrder} 
-                  variant="outline" 
-                  disabled={!hasDishes}
-                  title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable because no dishes are currently available.'}
-                  className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs"
-                >
-                  <FiShoppingCart /> Takeaway Order
-                </Button>
-                {isAdmin && hasBranches && (
-                  <Button 
-                    onClick={() => setIsAddOpen(true)} 
-                    variant="primary" 
-                    className="d-flex align-items-center gap-2 py-2 px-3"
-                  >
-                    <FiPlus /> Add Table
-                  </Button>
-                )}
-              </div>
-            }
-          />
-          <EmptyState
-            title="No Tables Found"
-            description="There are currently no tables added yet."
-            icon="bi-border-all"
-          />
-
-          {/* Add Table Modal */}
-          {isAdmin && isAddOpen && (
-            <AddTableModal
-              isOpen={isAddOpen}
-              existingTables={tables}
-              onClose={() => setIsAddOpen(false)}
-              onAdd={handleAddTable}
-            />
-          )}
-        </div>
-      </AdminLayout>
-    );
-  }
-
   return (
     <AdminLayout contentClassName="p-0">
       <div className="tables-page-container">
         <PageHeader 
-          title="Manage Tables" 
+          title="Tables" 
           showBackButton
           actions={
             <div className="d-flex align-items-center gap-2">
@@ -340,7 +462,8 @@ export const Tables = () => {
                 variant="outline" 
                 disabled={!hasDishes}
                 title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable because no dishes are currently available.'}
-                className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs"
+                className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs rounded-pill"
+                style={{ fontSize: '13px' }}
               >
                 <FiShoppingCart /> Takeaway Order
               </Button>
@@ -348,7 +471,8 @@ export const Tables = () => {
                 <Button 
                   onClick={() => setIsAddOpen(true)} 
                   variant="primary" 
-                  className="d-flex align-items-center gap-2 py-2 px-3"
+                  className="d-flex align-items-center gap-2 py-2 px-3.5 rounded-pill fw-bold"
+                  style={{ fontSize: '13px' }}
                 >
                   <FiPlus /> Add Table
                 </Button>
@@ -357,28 +481,58 @@ export const Tables = () => {
           }
         />
 
-        {!hasDishes && (
-          <div className="alert alert-warning rounded-3 py-2 px-3 mb-4 small">
-            Takeaway ordering is unavailable because no dishes are currently available.
-          </div>
-        )}
-
-        {isAvailableOnly && (
-          <div className="alert alert-info rounded-3 py-2 px-3 d-flex align-items-center justify-content-between mb-4 small shadow-xs">
-            <span>Showing <strong>Available Tables Only</strong> ({filteredTables.length} available table{filteredTables.length === 1 ? '' : 's'})</span>
-            <button
-              onClick={() => {
-                searchParams.delete('status');
-                searchParams.delete('filter');
-                setSearchParams(searchParams);
-              }}
-              className="btn btn-sm btn-outline-info rounded-pill px-3 py-1 fw-bold"
-              style={{ fontSize: '11px' }}
+        {/* Panel 9 Filter Toolbar: Location dropdown & Status pills */}
+        <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
+          <div className="d-flex align-items-center gap-2">
+            <select
+              value={selectedLocation}
+              onChange={(e) => setSelectedLocation(e.target.value)}
+              className="form-select form-select-sm rounded-pill border-light-subtle fw-semibold px-3 py-1.5"
+              style={{ minWidth: '150px', fontSize: '13px', backgroundColor: 'var(--surface-muted)' }}
+              aria-label="Filter tables by location"
             >
-              Show All Tables
-            </button>
+              <option value="ALL">All Locations</option>
+              {uniqueLocations.map(loc => (
+                <option key={loc} value={loc}>{loc}</option>
+              ))}
+            </select>
           </div>
-        )}
+
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'available' ? 'ALL' : 'available')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 transition-all ${
+                selectedStatusFilter === 'available' ? 'bg-success text-white shadow-xs' : 'bg-success-subtle text-success border border-success-subtle'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              <span className="rounded-circle bg-success d-inline-block" style={{ width: '6px', height: '6px' }}></span>
+              <span>Available ({availableCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'occupied' ? 'ALL' : 'occupied')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 transition-all ${
+                selectedStatusFilter === 'occupied' ? 'bg-danger text-white shadow-xs' : 'bg-danger-subtle text-danger border border-danger-subtle'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              <span className="rounded-circle bg-danger d-inline-block" style={{ width: '6px', height: '6px' }}></span>
+              <span>Occupied ({occupiedCount})</span>
+            </button>
+            {selectedStatusFilter !== 'ALL' && (
+              <button
+                type="button"
+                onClick={() => setSelectedStatusFilter('ALL')}
+                className="btn btn-sm btn-link text-secondary text-decoration-none fw-semibold p-0 ms-1"
+                style={{ fontSize: '12px' }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
 
         {/* Grid */}
         {loading ? (
@@ -421,6 +575,7 @@ export const Tables = () => {
                       key={table.id}
                       table={table}
                       onSelect={handleTakeOrder}
+                      onTrackOrder={handleTrackTableOrder}
                       onStatusChange={handleStatusChange}
                       onEdit={(t) => setEditingTable(t)}
                       onDelete={(t) => { setDeleteError(''); setDeletingTable(t); }}
@@ -514,6 +669,51 @@ export const Tables = () => {
           )}
         </div>
       </Modal>
+
+      {/* Track Existing Order Popup Modal */}
+      {trackingTable && trackingOrder && (
+        <TrackOrderModal
+          isOpen={Boolean(trackingTable && trackingOrder)}
+          order={trackingOrder}
+          table={trackingTable}
+          onClose={() => {
+            setTrackingTable(null);
+            setTrackingOrder(null);
+          }}
+          onContinueOrder={handleContinueFromModal}
+          onProceedToBill={handleProceedToBillFromModal}
+          loading={trackingLoading}
+        />
+      )}
+
+      {/* Combined E-Bill Modal */}
+      {viewingBillOrder && (
+        <EBillModal
+          isOpen={Boolean(viewingBillOrder)}
+          order={viewingBillOrder}
+          onClose={() => setViewingBillOrder(null)}
+          onProceedToBill={async (ord) => {
+            const targetOrder = ord || viewingBillOrder;
+            if (!targetOrder) return;
+            const targetId = targetOrder.backendOrderId || targetOrder.id || targetOrder.order_id;
+            if (!targetId) return;
+            try {
+              const { proceedToBill } = await import('../../services/adminApi');
+              await proceedToBill(targetId);
+              window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: targetId, status: 'Completed' } }));
+              window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
+              fetchTables();
+              setViewingBillOrder(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
+              window.alert(`Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`);
+            } catch (err) {
+              console.error('Failed to complete order on Proceed to Bill:', err);
+              const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
+              window.alert(msg);
+              throw err;
+            }
+          }}
+        />
+      )}
       </div>
     </AdminLayout>
   );

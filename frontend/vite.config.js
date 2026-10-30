@@ -53,9 +53,53 @@ export default defineConfig({
         secure: false,
         timeout: 60000,
         configure: (proxy) => {
-          proxy.on('error', () => {
-            /* Do not log the proxied WebSocket URL; it can include an access token. */
-          });
+          const originalOn = proxy.on.bind(proxy);
+          proxy.on = (event, listener) => {
+            if (event === 'error') {
+              return originalOn('error', (err, req, res) => {
+                // Silently handle expected WebSocket disconnect / reset errors
+                const isReset = err && (
+                  err.code === 'ECONNRESET' ||
+                  err.code === 'ECONNREFUSED' ||
+                  err.code === 'EPIPE' ||
+                  String(err.message || '').includes('ECONNRESET')
+                );
+                if (isReset) {
+                  try {
+                    const socket = (res && typeof res.destroy === 'function') ? res : (req && req.socket);
+                    if (socket && !socket.destroyed && typeof socket.destroy === 'function') {
+                      socket.destroy();
+                    }
+                  } catch (_) {}
+                  return;
+                }
+                return listener(err, req, res);
+              });
+            }
+            if (event === 'proxyReqWs') {
+              return originalOn('proxyReqWs', (proxyReq, req, socket, options) => {
+                if (socket && typeof socket.on === 'function') {
+                  socket.on('error', (err) => {
+                    const isReset = err && (
+                      err.code === 'ECONNRESET' ||
+                      err.code === 'ECONNREFUSED' ||
+                      err.code === 'EPIPE' ||
+                      String(err.message || '').includes('ECONNRESET')
+                    );
+                    if (isReset) {
+                      try {
+                        if (!socket.destroyed && typeof socket.destroy === 'function') {
+                          socket.destroy();
+                        }
+                      } catch (_) {}
+                    }
+                  });
+                }
+                return listener(proxyReq, req, socket, options);
+              });
+            }
+            return originalOn(event, listener);
+          };
         },
       },
       '/media': {

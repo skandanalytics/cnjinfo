@@ -17,6 +17,7 @@ import api from '../../services/api';
 import { applyOrderContext, customerBranchId } from '../../services/customerCheckout';
 import { getOrderType } from '../../utils/orderContext';
 import ServerBillSummary from '../../components/customer/ServerBillSummary';
+import CheckoutStepper from '../../components/customer/CheckoutStepper';
 
 export const Cart = () => {
   const navigate = useNavigate();
@@ -233,6 +234,8 @@ export const Cart = () => {
   return (
     <CustomerLayout>
       <main className="pt-2">
+        <CheckoutStepper currentStep={1} />
+
         <div className="d-flex align-items-center gap-3 mb-4">
           <BackButton />
           <h4 className="fw-bold text-dark mb-0">My Order</h4>
@@ -370,14 +373,14 @@ export const Cart = () => {
                   <div className="card rounded-3 bg-success-subtle border border-success-subtle p-3 mb-2 text-start">
                     <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
                       <div>
-                        <div className="d-flex align-items-center gap-2 mb-1">
+                        <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
                           <span className="small text-success fw-bold">Applied Coupon:</span>
                           <span className="badge bg-success text-white font-monospace px-2.5 py-1 rounded" style={{ fontSize: '12px' }}>
                             {coupon.code}
                           </span>
-                        </div>
-                        <div className="text-success fw-bold small" style={{ fontSize: '13px' }}>
-                          Discount: {formatCurrency(getDiscount())}
+                          <span className="badge rounded-pill fw-bold bg-success-subtle text-success border border-success-subtle px-2.5 py-0.5" style={{ fontSize: '11px' }}>
+                            🎉 You save {formatCurrency(getDiscount())}!
+                          </span>
                         </div>
                       </div>
                       <button 
@@ -405,9 +408,13 @@ export const Cart = () => {
                       value={promoCode}
                       onChange={(e) => setPromoCode(e.target.value)}
                     />
-                    <Button type="submit" variant="outline" className="py-1 px-4">
+                    <button 
+                      type="submit" 
+                      className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm flex-shrink-0"
+                      style={{ height: '40px', backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)' }}
+                    >
                       Apply
-                    </Button>
+                    </button>
                   </form>
                   {promoMessage && (
                     <div className={`small mt-2 fw-semibold text-start ${promoSuccess ? 'text-success' : 'text-danger'}`} style={{ fontSize: '11px' }}>
@@ -578,17 +585,23 @@ export const Cart = () => {
           <div className="col-12 col-lg-4">
             {isCustomer && serverCart ? (
               <ServerBillSummary cart={serverCart}>
-                <div className="d-grid gap-2">
-                  <Button onClick={handleCheckout} variant="primary" className="py-2.5 fw-bold shadow-sm">
+                <div className="d-flex flex-column gap-2 mt-3">
+                  <button 
+                    type="button"
+                    onClick={handleCheckout} 
+                    className="btn btn-danger w-100 rounded-pill py-3 fw-bold shadow-sm"
+                    style={{ height: '48px', backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', fontSize: '15px' }}
+                  >
                     Proceed to Checkout
-                  </Button>
-                  <Button
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => navigate('/customer/home')}
-                    variant="outline-primary"
-                    className="py-2.5 fw-bold border-danger text-danger bg-white"
+                    className="btn btn-outline-danger w-100 rounded-pill py-2.5 fw-bold bg-white"
+                    style={{ fontSize: '13px', borderColor: 'var(--primary-color, #C8102E)', color: 'var(--primary-color, #C8102E)' }}
                   >
                     Save and Continue (Add More Items)
-                  </Button>
+                  </button>
                 </div>
               </ServerBillSummary>
             ) : (

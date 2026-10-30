@@ -34,13 +34,60 @@ export const RevenueChart = ({
   // Find highest sales slot
   const peakItem = chartData.reduce((max, item) => (item.sales > (max?.sales || 0) ? item : max), chartData[0]);
 
+  // SVG dimensions for responsive coordinate space
+  const svgWidth = 600;
+  const svgHeight = 200;
+  const paddingX = 40;
+  const paddingY = 25;
+
+  const innerWidth = svgWidth - paddingX * 2;
+  const innerHeight = svgHeight - paddingY * 2;
+
+  const points = chartData.map((d, index) => {
+    const x = paddingX + (chartData.length > 1 ? (index / (chartData.length - 1)) * innerWidth : innerWidth / 2);
+    const y = maxSales > 0 ? (svgHeight - paddingY) - (d.sales / maxSales) * innerHeight : svgHeight - paddingY;
+    return { x, y, ...d, index };
+  });
+
+  const generateCurvedPath = (pts) => {
+    if (!pts || pts.length === 0) return '';
+    if (pts.length === 1) return `M ${pts[0].x} ${pts[0].y}`;
+    let d = `M ${pts[0].x} ${pts[0].y}`;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i === 0 ? 0 : i - 1];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
+
+      const cp1x = p1.x + (p2.x - p0.x) / 6;
+      const cp1y = p1.y + (p2.y - p0.y) / 6;
+      const cp2x = p2.x - (p3.x - p1.x) / 6;
+      const cp2y = p2.y - (p3.y - p1.y) / 6;
+
+      d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+    }
+    return d;
+  };
+
+  const curveLine = generateCurvedPath(points);
+  const baselineY = svgHeight - paddingY;
+  const areaPath = points.length > 1 
+    ? `${curveLine} L ${points[points.length - 1].x} ${baselineY} L ${points[0].x} ${baselineY} Z`
+    : '';
+
   return (
-    <div className="card rounded-3 border-0 shadow-sm p-4 bg-white h-100 position-relative">
+    <div 
+      className="card border rounded-4 shadow-sm p-4 h-100 position-relative"
+      style={{ 
+        backgroundColor: 'var(--surface-color)', 
+        borderColor: 'var(--border-color)' 
+      }}
+    >
       {/* Header with Title and Period Dropdown */}
       <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
         <div>
           <div className="d-flex align-items-center gap-2">
-            <h5 className="fw-bold text-dark mb-0">Sales Overview</h5>
+            <h5 className="fw-bold text-dark mb-0" style={{ fontSize: '16px' }}>Sales Overview</h5>
             {percentageChange && (
               <span className={`badge rounded-pill px-2.5 py-1 fw-bold ${
                 percentageChange.startsWith('+') ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'
@@ -56,13 +103,13 @@ export const RevenueChart = ({
           </p>
         </div>
 
-        {/* Dropdown with neat side padding */}
+        {/* Dropdown Selector */}
         <div className="d-flex align-items-center gap-2">
           <div className="position-relative">
             <select
               value={period}
               onChange={(e) => onPeriodChange && onPeriodChange(e.target.value)}
-              className="form-select form-select-sm rounded-pill border-light-subtle shadow-sm fw-semibold text-secondary"
+              className="form-select form-select-sm rounded-pill fw-semibold text-secondary"
               style={{
                 minWidth: '150px',
                 height: '38px',
@@ -70,8 +117,9 @@ export const RevenueChart = ({
                 cursor: 'pointer',
                 paddingLeft: '16px',
                 paddingRight: '36px',
-                backgroundColor: '#f8fafc',
-                border: '1.5px solid #e2e8f0'
+                backgroundColor: 'var(--surface-muted)',
+                borderColor: 'var(--border-color)',
+                color: 'var(--text-primary)'
               }}
               aria-label="Sales Overview Period Selector"
             >
@@ -87,127 +135,123 @@ export const RevenueChart = ({
 
       {/* Top Highlights Banner */}
       {peakItem && peakItem.sales > 0 && (
-        <div className="d-flex align-items-center justify-content-between px-3 py-2 rounded-2 mb-3" style={{ backgroundColor: '#fff5f5', border: '1px solid #fed7d7' }}>
+        <div 
+          className="d-flex align-items-center justify-content-between px-3 py-2 rounded-3 mb-3" 
+          style={{ backgroundColor: 'var(--primary-subtle)', border: '1px solid rgba(200, 16, 46, 0.2)' }}
+        >
           <span className="small text-danger fw-semibold" style={{ fontSize: '11.5px' }}>
-            🔥 Peak Period: <strong>{peakItem.label}</strong> with <strong>{formatCurrency(peakItem.sales)}</strong>
+            🔥 Peak: <strong>{peakItem.label}</strong> with <strong>{formatCurrency(peakItem.sales)}</strong>
           </span>
-          <span className="badge bg-danger text-white rounded-pill px-2 py-0.5" style={{ fontSize: '10px' }}>
+          <span className="badge rounded-pill px-2 py-0.5" style={{ fontSize: '10px', backgroundColor: 'var(--primary-color)', color: '#fff' }}>
             Highest Sales
           </span>
         </div>
       )}
 
-      {/* Vertical Bar Graph Container */}
-      <div 
-        className="position-relative pt-4 pb-2 px-2 d-flex flex-column justify-content-end"
-        style={{ minHeight: '260px', height: '260px' }}
-      >
-        {/* Horizontal Background Grid Reference Lines */}
-        <div className="position-absolute w-100" style={{ top: '35px', left: 0, right: 0, borderBottom: '1px dashed #e2e8f0', zIndex: 1 }}>
-          <span className="position-absolute end-0 text-muted small pe-2" style={{ top: '-18px', fontSize: '9px' }}>
-            {formatShortCurrency(maxSales)}
-          </span>
-        </div>
-        <div className="position-absolute w-100" style={{ top: '125px', left: 0, right: 0, borderBottom: '1px dashed #e2e8f0', zIndex: 1 }}>
-          <span className="position-absolute end-0 text-muted small pe-2" style={{ top: '-18px', fontSize: '9px' }}>
-            {formatShortCurrency(Math.round(maxSales / 2))}
-          </span>
-        </div>
-        <div className="position-absolute w-100" style={{ bottom: '38px', left: 0, right: 0, borderBottom: '1.5px solid #cbd5e1', zIndex: 1 }}>
-          <span className="position-absolute end-0 text-muted small pe-2" style={{ bottom: '3px', fontSize: '9px' }}>
-            ₹0
-          </span>
-        </div>
+      {/* SVG Smooth Curve Area Chart */}
+      <div className="position-relative w-100" style={{ height: '240px' }}>
+        <svg 
+          viewBox={`0 0 ${svgWidth} ${svgHeight}`} 
+          className="w-100 h-100 overflow-visible"
+          preserveAspectRatio="none"
+        >
+          <defs>
+            <linearGradient id="foodieCurveGradient" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="#C8102E" stopOpacity="0.28" />
+              <stop offset="100%" stopColor="#C8102E" stopOpacity="0.0" />
+            </linearGradient>
+          </defs>
 
-        {/* Vertical Bars Columns */}
-        <div className="d-flex align-items-end justify-content-between gap-1 flex-nowrap w-100 h-100 overflow-x-auto position-relative" style={{ zIndex: 2 }}>
-          {chartData.map((item, idx) => {
-            const heightPercent = maxSales > 0 ? (item.sales / maxSales) * 100 : 0;
-            // Bar height between 8px and 140px
-            const barHeightPx = Math.max(8, Math.round((heightPercent / 100) * 140));
+          {/* Background Grid Lines */}
+          <line x1={paddingX} y1={paddingY} x2={svgWidth - paddingX} y2={paddingY} stroke="var(--border-subtle)" strokeDasharray="3 3" strokeWidth="1" />
+          <line x1={paddingX} y1={paddingY + innerHeight / 2} x2={svgWidth - paddingX} y2={paddingY + innerHeight / 2} stroke="var(--border-subtle)" strokeDasharray="3 3" strokeWidth="1" />
+          <line x1={paddingX} y1={baselineY} x2={svgWidth - paddingX} y2={baselineY} stroke="var(--border-color)" strokeWidth="1.5" />
+
+          {/* Area Fill */}
+          {areaPath && (
+            <path d={areaPath} fill="url(#foodieCurveGradient)" />
+          )}
+
+          {/* Smooth Red Curve Stroke */}
+          {curveLine && (
+            <path 
+              d={curveLine} 
+              fill="none" 
+              stroke="#C8102E" 
+              strokeWidth="3.5" 
+              strokeLinecap="round" 
+              strokeLinejoin="round" 
+            />
+          )}
+
+          {/* Interactive Data Points */}
+          {points.map((pt, idx) => {
             const isHovered = hoveredIndex === idx;
-            const isHighest = item.sales > 0 && item.sales === peakItem?.sales;
+            const isPeak = pt.sales > 0 && pt.sales === peakItem?.sales;
 
             return (
-              <div 
-                key={idx} 
-                className="d-flex flex-column align-items-center flex-grow-1 position-relative"
-                style={{ minWidth: '36px', maxWidth: '80px', cursor: 'pointer' }}
-                onMouseEnter={() => setHoveredIndex(idx)}
-                onMouseLeave={() => setHoveredIndex(null)}
-              >
-                {/* Interactive Tooltip on Hover */}
-                {isHovered && (
-                  <div 
-                    className="position-absolute shadow-lg rounded-2 py-1 px-2 text-white bg-dark text-center"
-                    style={{ 
-                      bottom: `${barHeightPx + 48}px`, 
-                      zIndex: 10,
-                      whiteSpace: 'nowrap',
-                      fontSize: '11px',
-                      pointerEvents: 'none',
-                      animation: 'fadeIn 0.15s ease'
-                    }}
-                  >
-                    <div className="fw-bold">{item.label}</div>
-                    <div className="text-warning fw-bold">{formatCurrency(item.sales)}</div>
-                    {item.count > 0 && (
-                      <div className="text-white-50" style={{ fontSize: '9.5px' }}>{item.count} orders</div>
-                    )}
-                  </div>
-                )}
-
-                {/* Price on top of the vertical bar */}
-                <span 
-                  className={`small fw-bold mb-1 text-nowrap transition-all ${
-                    isHovered ? 'text-dark scale-110' : isHighest ? 'text-danger' : 'text-secondary'
-                  }`} 
-                  style={{ 
-                    fontSize: '10px',
-                    transform: isHovered ? 'scale(1.1)' : 'scale(1)'
-                  }}
-                >
-                  {formatShortCurrency(item.sales)}
-                </span>
-
-                {/* Vertical Bar Pill */}
-                <div 
-                  className="w-75 rounded-top position-relative"
-                  style={{ 
-                    height: `${barHeightPx}px`, 
-                    background: isHovered
-                      ? 'linear-gradient(180deg, #b91c1c 0%, #ef4444 100%)'
-                      : isHighest
-                        ? 'linear-gradient(180deg, #dc2626 0%, #f87171 100%)'
-                        : 'linear-gradient(180deg, #ef4444 0%, #fca5a5 100%)',
-                    borderRadius: '8px 8px 0 0',
-                    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                    boxShadow: isHovered ? '0 4px 12px rgba(239, 68, 68, 0.35)' : 'none',
-                    transform: isHovered ? 'translateY(-2px)' : 'none'
-                  }}
-                >
-                  {/* Subtle inner top highlight */}
-                  <div 
-                    style={{
-                      height: '3px',
-                      borderRadius: '8px 8px 0 0',
-                      background: 'rgba(255, 255, 255, 0.4)'
-                    }}
-                  />
-                </div>
-
-                {/* Time / Category label below bar */}
-                <span 
-                  className={`small mt-2 text-nowrap fw-semibold ${
-                    isHovered ? 'text-dark fw-bold' : 'text-secondary'
-                  }`} 
-                  style={{ fontSize: '11px' }}
-                >
-                  {item.label}
-                </span>
-              </div>
+              <g key={idx} className="cursor-pointer">
+                {/* Invisible larger hit area for hover */}
+                <circle 
+                  cx={pt.x} 
+                  cy={pt.y} 
+                  r="16" 
+                  fill="transparent" 
+                  onMouseEnter={() => setHoveredIndex(idx)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                  style={{ cursor: 'pointer' }}
+                />
+                
+                {/* Visible Data Point Dot */}
+                <circle 
+                  cx={pt.x} 
+                  cy={pt.y} 
+                  r={isHovered ? 7 : (isPeak ? 5 : 4)} 
+                  fill={isHovered || isPeak ? '#C8102E' : 'var(--surface-color)'}
+                  stroke="#C8102E"
+                  strokeWidth={isHovered ? 3 : 2}
+                  style={{ transition: 'all 0.2s ease', pointerEvents: 'none' }}
+                />
+              </g>
             );
           })}
+        </svg>
+
+        {/* Floating Tooltip */}
+        {hoveredIndex !== null && points[hoveredIndex] && (
+          <div 
+            className="position-absolute shadow-lg rounded-3 py-1.5 px-3 text-white"
+            style={{ 
+              left: `${(points[hoveredIndex].x / svgWidth) * 100}%`,
+              top: `${(points[hoveredIndex].y / svgHeight) * 100 - 15}%`,
+              transform: 'translate(-50%, -100%)',
+              zIndex: 10,
+              whiteSpace: 'nowrap',
+              fontSize: '11px',
+              backgroundColor: '#1E293B',
+              pointerEvents: 'none',
+              animation: 'fadeIn 0.15s ease'
+            }}
+          >
+            <div className="fw-semibold text-white-50" style={{ fontSize: '10px' }}>{points[hoveredIndex].label}</div>
+            <div className="fw-bold text-white" style={{ fontSize: '13px' }}>{formatCurrency(points[hoveredIndex].sales)}</div>
+            {points[hoveredIndex].count > 0 && (
+              <div className="text-warning small" style={{ fontSize: '10px' }}>{points[hoveredIndex].count} orders</div>
+            )}
+          </div>
+        )}
+
+        {/* X-Axis Labels */}
+        <div className="d-flex justify-content-between px-2 pt-2">
+          {chartData.map((d, i) => (
+            <span 
+              key={i} 
+              className={`small text-center ${hoveredIndex === i ? 'fw-bold text-danger' : 'text-secondary'}`}
+              style={{ fontSize: '11px', flex: 1 }}
+            >
+              {d.label}
+            </span>
+          ))}
         </div>
       </div>
     </div>

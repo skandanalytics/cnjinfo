@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import PageHeader from '../../components/layout/PageHeader';
 import OrderCard from '../../components/orders/OrderCard';
@@ -11,9 +11,13 @@ import { OrderContext } from '../../context/OrderContext';
 import { restaurantService } from '../../services/restaurantService';
 import { useAuth } from '../../hooks/useAuth';
 import EBillModal from '../../components/orders/EBillModal';
+import { FiEye, FiGrid, FiList } from 'react-icons/fi';
+import formatCurrency from '../../utils/formatCurrency';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const Orders = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { orders, loading, updateStatus, fetchOrders } = useContext(OrderContext);
   const [search, setSearch] = useState('');
@@ -35,6 +39,8 @@ export const Orders = () => {
   };
 
   const [activeTab, setActiveTab] = useState(getInitialTab);
+  const [typeFilter, setTypeFilter] = useState('ALL'); // 'ALL' | 'DINE_IN' | 'TAKEAWAY'
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
   const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState(null);
 
@@ -205,8 +211,32 @@ export const Orders = () => {
     const pay = String(o.paymentStatus || o.payment_status || '').toUpperCase();
     const matchesPayment = paymentFilter === 'ALL' || pay === paymentFilter;
 
-    return matchesSearch && matchesTab && matchesPayment;
+    let matchesType = true;
+    if (typeFilter !== 'ALL') {
+      const isTakeaway = String(o.orderType || o.order_type || o.source || '').toUpperCase().includes('TAKEAWAY') || 
+        String(o.table || '').toLowerCase() === 'takeaway';
+      if (typeFilter === 'DINE_IN' && isTakeaway) matchesType = false;
+      if (typeFilter === 'TAKEAWAY' && !isTakeaway) matchesType = false;
+    }
+
+    return matchesSearch && matchesTab && matchesPayment && matchesType;
   });
+
+  const handleContinueOrder = (ord) => {
+    setSelectedOrder(null);
+    const targetUrl = user?.role === 'employee' ? '/employee/pos' : '/admin/pos';
+    const targetTableId = ord?.table_id || ord?.tableId || (typeof ord?.table === 'object' ? ord?.table?.id : ord?.table);
+    const targetOrderId = ord?.parent_order_id || ord?.parent_order || ord?.id;
+    const rawPhone = ord?.customer_phone || ord?.customerPhone || ord?.customer?.phone || '';
+    const rawName = ord?.customer_name || ord?.customerName || ord?.customer?.name || '';
+    const params = new URLSearchParams();
+    if (targetTableId) params.set('table', targetTableId);
+    if (targetOrderId) params.set('order', targetOrderId);
+    params.set('continue', '1');
+    if (rawPhone) params.set('phone', rawPhone);
+    if (rawName) params.set('name', rawName);
+    navigate(`${targetUrl}?${params.toString()}`);
+  };
 
   if (loading && (!orders || orders.length === 0)) {
     return (
@@ -313,22 +343,79 @@ export const Orders = () => {
         }
       />
 
-      {/* Tabs */}
-      <div className="d-flex flex-wrap gap-2 mb-4 border-bottom pb-3">
-        {tabs.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => handleTabClick(tab)}
-            className={`btn btn-sm rounded-pill px-3 py-2 border-0 fw-bold transition-all ${activeTab === tab ? 'bg-danger text-white' : 'bg-white text-secondary border'
+      {/* Panel 12 Filter Toolbar: Segmented Type Pills & View Mode */}
+      <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          {/* Segmented Type Pills */}
+          <div className="p-1 rounded-pill d-inline-flex align-items-center" style={{ backgroundColor: 'var(--surface-muted, #F1F5F9)' }}>
+            <button
+              type="button"
+              onClick={() => setTypeFilter('ALL')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                typeFilter === 'ALL' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
               }`}
-            style={{ fontSize: '12px' }}
+              style={{ fontSize: '12px' }}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              onClick={() => setTypeFilter('DINE_IN')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                typeFilter === 'DINE_IN' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              Dine-In
+            </button>
+            <button
+              type="button"
+              onClick={() => setTypeFilter('TAKEAWAY')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                typeFilter === 'TAKEAWAY' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              Takeaway
+            </button>
+          </div>
+
+          {/* Status Filter Dropdown */}
+          <select
+            value={activeTab}
+            onChange={(e) => handleTabClick(e.target.value)}
+            className="form-select form-select-sm rounded-pill border-light-subtle fw-semibold px-3 py-1.5"
+            style={{ width: '150px', fontSize: '12.5px', backgroundColor: 'var(--surface-muted, #F8FAFC)' }}
+            aria-label="Filter by order status"
           >
-            {tab}
+            {tabs.map((tab) => (
+              <option key={tab} value={tab}>{tab === 'All' ? 'All Statuses' : tab}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* View Mode Switcher: Table vs Cards */}
+        <div className="d-flex align-items-center gap-1 bg-light rounded-pill p-1 border">
+          <button
+            type="button"
+            onClick={() => setViewMode('table')}
+            className={`btn btn-sm rounded-circle p-1.5 border-0 ${viewMode === 'table' ? 'bg-white text-danger shadow-xs' : 'text-secondary'}`}
+            title="Table View"
+          >
+            <FiList size={16} />
           </button>
-        ))}
+          <button
+            type="button"
+            onClick={() => setViewMode('cards')}
+            className={`btn btn-sm rounded-circle p-1.5 border-0 ${viewMode === 'cards' ? 'bg-white text-danger shadow-xs' : 'text-secondary'}`}
+            title="Cards View"
+          >
+            <FiGrid size={16} />
+          </button>
+        </div>
       </div>
 
-      {/* Order List */}
+      {/* Order List / Table */}
       {loading ? (
         <Loader />
       ) : filteredOrders.length === 0 ? (
@@ -343,6 +430,103 @@ export const Orders = () => {
           }
           icon="bi-basket2-fill"
         />
+      ) : viewMode === 'table' ? (
+        <div className="card rounded-4 border-0 shadow-sm overflow-hidden bg-white mb-4">
+          <div className="table-responsive">
+            <table className="table align-middle mb-0">
+              <thead className="bg-light-subtle">
+                <tr className="text-secondary small fw-semibold" style={{ fontSize: '12px', borderBottom: '1px solid var(--border-color, #E2E8F0)' }}>
+                  <th className="ps-4 py-3">Order #</th>
+                  <th className="py-3">Table</th>
+                  <th className="py-3">Type</th>
+                  <th className="py-3">Amount</th>
+                  <th className="py-3">Status</th>
+                  <th className="py-3">Payment</th>
+                  <th className="text-end pe-4 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrders.map((order) => {
+                  const adj = adjustOrderForServiceTax(order);
+                  const isTakeaway = String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('TAKEAWAY') || 
+                    String(order.table || '').toLowerCase() === 'takeaway';
+                  const rawTable = order.table ? String(order.table).replace(/^(table\s*|t-?)/i, '').trim() : '';
+                  const displayTable = isTakeaway ? '—' : (rawTable ? `T${rawTable.padStart(2, '0')}` : (order.table || '—'));
+                  const displayNo = formatOrderDisplayNumber(order, order.id);
+                  const isPaid = String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID';
+
+                  // Status Badge Variant
+                  const st = String(order.status || '').toLowerCase().trim();
+                  let stVariant = 'bg-secondary-subtle text-secondary';
+                  let stLabel = order.status;
+                  if (['pending', 'placed', 'new'].includes(st)) {
+                    stVariant = 'bg-warning-subtle text-warning-emphasis';
+                    stLabel = 'New';
+                  } else if (['preparing', 'cooking', 'in_kitchen'].includes(st)) {
+                    stVariant = 'bg-info-subtle text-info-emphasis';
+                    stLabel = 'Preparing';
+                  } else if (['ready', 'prepared'].includes(st)) {
+                    stVariant = 'bg-primary-subtle text-primary';
+                    stLabel = 'Ready';
+                  } else if (['completed', 'delivered', 'done', 'settled'].includes(st)) {
+                    stVariant = 'bg-success-subtle text-success';
+                    stLabel = 'Completed';
+                  } else if (['cancelled', 'canceled', 'rejected'].includes(st)) {
+                    stVariant = 'bg-danger-subtle text-danger';
+                    stLabel = 'Cancelled';
+                  }
+
+                  return (
+                    <tr key={order.id} className="border-bottom border-light">
+                      <td className="ps-4 py-3 fw-bold text-dark font-monospace" style={{ fontSize: '13px' }}>
+                        #{displayNo}
+                      </td>
+                      <td className="py-3 text-secondary fw-semibold" style={{ fontSize: '13px' }}>
+                        {displayTable}
+                      </td>
+                      <td className="py-3 text-secondary" style={{ fontSize: '13px' }}>
+                        {isTakeaway ? 'Takeaway' : 'Dine-In'}
+                      </td>
+                      <td className="py-3 fw-bold text-dark" style={{ fontSize: '13.5px' }}>
+                        {formatCurrency(adj.total || adj.total_amount)}
+                      </td>
+                      <td className="py-3">
+                        <span className={`badge rounded-pill fw-semibold px-2.5 py-1 ${stVariant}`} style={{ fontSize: '11px' }}>
+                          {stLabel}
+                        </span>
+                      </td>
+                      <td className="py-3">
+                        <span className={`badge rounded-pill fw-semibold px-2.5 py-1 ${isPaid ? 'bg-success-subtle text-success' : 'bg-light text-secondary border'}`} style={{ fontSize: '11px' }}>
+                          {isPaid ? 'Paid' : 'Unpaid'}
+                        </span>
+                      </td>
+                      <td className="text-end pe-4 py-3">
+                        <div className="d-flex align-items-center justify-content-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrder(order)}
+                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
+                            style={{ fontSize: '11.5px' }}
+                          >
+                            View
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEBillOrder(adj)}
+                            className="btn btn-sm btn-link text-secondary p-1 border-0"
+                            title="View Bill"
+                          >
+                            <FiEye size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       ) : (
         <div className="row">
           {filteredOrders.map((order) => (
@@ -365,9 +549,9 @@ export const Orders = () => {
           onClose={() => setSelectedOrder(null)}
           onStatusChange={updateStatus}
           onViewEBill={(ord) => setEBillOrder(ord || selectedOrder)}
+          onContinueOrder={handleContinueOrder}
           onOrderUpdated={(updated) => {
             setSelectedOrder(updated);
-            setOrders((prev) => prev.map((o) => (o.id === updated.id ? updated : o)));
             fetchOrders(false);
           }}
           onPaymentRecorded={async () => {
@@ -382,6 +566,27 @@ export const Orders = () => {
           isOpen={!!eBillOrder}
           order={adjustOrderForServiceTax(eBillOrder)}
           onClose={() => setEBillOrder(null)}
+          onProceedToBill={async (ord) => {
+            const targetOrder = ord || eBillOrder;
+            if (!targetOrder) return;
+            const targetId = targetOrder.backendOrderId || targetOrder.id || targetOrder.order_id;
+            if (!targetId) return;
+            try {
+              const { proceedToBill } = await import('../../services/adminApi');
+              await proceedToBill(targetId);
+              await fetchOrders(false);
+              window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: targetId, status: 'Completed' } }));
+              window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
+              setEBillOrder(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
+              setSelectedOrder(prev => (prev && String(prev.id) === String(targetId)) ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : prev);
+              window.alert(`Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`);
+            } catch (err) {
+              console.error('Failed to complete order on Proceed to Bill:', err);
+              const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
+              window.alert(msg);
+              throw err;
+            }
+          }}
         />
       )}
     </AdminLayout>

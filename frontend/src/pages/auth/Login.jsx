@@ -225,7 +225,12 @@ export const Login = () => {
           </div>
         </form>
 
-        <p className="text-muted small mt-4 mb-0">Sign in with your Admin ID, employee code, email, or registered mobile number.</p>
+        <div className="mt-3 p-2.5 rounded-3 bg-light border text-secondary small text-start d-flex justify-content-between align-items-center" style={{ fontSize: '12px' }}>
+          <div>Admin ID: <strong className="text-dark">ADMIN</strong></div>
+          <div>Password: <strong className="text-dark">Admin@123</strong></div>
+        </div>
+
+        <p className="text-muted small mt-3 mb-0">Sign in with your Admin ID, employee code, email, or registered mobile number.</p>
       </div>
 
       {/* Forgot Password Modal */}

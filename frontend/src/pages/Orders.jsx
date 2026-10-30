@@ -6,6 +6,7 @@ import Footer from '../components/layout/Footer';
 import BottomNavigation from '../components/layout/BottomNavigation';
 import EmptyState from '../components/common/EmptyState';
 import Button from '../components/common/Button';
+import { formatOrderDisplayNumber } from '../utils/orderNumber';
 
 export const Orders = () => {
   const navigate = useNavigate();
@@ -65,7 +66,7 @@ export const Orders = () => {
                 <div key={order.id} className="card rounded-3 p-4 mb-3 shadow-sm border-0 bg-white">
                   <div className="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center border-bottom pb-3 mb-3 gap-2">
                     <div>
-                      <span className="fw-bold text-dark fs-5">Order #{order.id}</span>
+                      <span className="fw-bold text-dark fs-5">Order #{formatOrderDisplayNumber(order, order.id)}</span>
                       <div className="text-muted small mt-1">Placed on {order.date}</div>
                     </div>
                     
@@ -108,7 +109,7 @@ export const Orders = () => {
             <div className="modal-dialog modal-dialog-centered">
               <div className="modal-content rounded-4 border-0 p-3">
                 <div className="modal-header border-bottom-0 pb-0">
-                  <h5 className="modal-title fw-bold text-dark">Order Details ( #{selectedOrder.id} )</h5>
+                  <h5 className="modal-title fw-bold text-dark">Order Details ( #{formatOrderDisplayNumber(selectedOrder, selectedOrder.id)} )</h5>
                   <button type="button" className="btn-close" onClick={() => setSelectedOrder(null)} aria-label="Close"></button>
                 </div>
                 <div className="modal-body py-3">

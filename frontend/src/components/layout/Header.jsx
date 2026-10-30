@@ -35,6 +35,10 @@ export const Header = () => {
 
   const formattedPhone = customerPhone ? (String(customerPhone).startsWith('+') ? customerPhone : `+91 ${String(customerPhone).replace(/\D/g, '').slice(-10)}`) : '';
 
+  const [branchName, setBranchName] = useState(() => {
+    return sessionStorage.getItem('foodie_branch_name') || localStorage.getItem('foodie_branch_name') || 'Tumakuru Main';
+  });
+
   return (
     <nav className="navbar navbar-expand-md navbar-light bg-white sticky-top py-2 border-bottom shadow-sm">
       <div className="container px-3">
@@ -49,6 +53,12 @@ export const Header = () => {
             </span>
             <span className="fw-bold fs-4 text-dark" style={{ letterSpacing: '-0.5px' }}>Foodie</span>
           </Link>
+          {branchName && (
+            <span className="badge bg-light text-secondary border border-light-subtle rounded-pill px-3 py-1.5 small fw-semibold d-none d-sm-inline-flex align-items-center gap-1 ms-1">
+              <FiMapPin size={12} className="text-danger" />
+              <span>{branchName}</span>
+            </span>
+          )}
         </div>
 
         {/* Right Side Items */}

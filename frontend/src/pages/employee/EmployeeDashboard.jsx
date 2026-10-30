@@ -9,6 +9,7 @@ import { tableService } from '../../services/tableService';
 import { FiLayers, FiShoppingBag, FiCheckCircle, FiClock } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import EBillModal from '../../components/orders/EBillModal';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const EmployeeDashboard = () => {
   const navigate = useNavigate();
@@ -301,7 +302,7 @@ export const EmployeeDashboard = () => {
                       <div className="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-2">
                         <div>
                           <div className="d-flex align-items-center gap-2 mb-1">
-                            <span className="fw-bold text-dark font-monospace fs-6">#{ord.orderNumber || ord.id}</span>
+                            <span className="fw-bold text-dark font-monospace fs-6">#{formatOrderDisplayNumber(ord, ord.orderNumber || ord.id)}</span>
                             <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-0.5" style={{ fontSize: '10.5px' }}>
                               Table {ord.table || 'Takeaway'}
                             </span>
@@ -446,7 +447,7 @@ export const EmployeeDashboard = () => {
                     <div className="d-flex align-items-start justify-content-between flex-wrap gap-2">
                       <div>
                         <div className="d-flex align-items-center gap-2 mb-1">
-                          <span className="fw-bold text-dark font-monospace">#{ord.orderNumber || ord.id}</span>
+                          <span className="fw-bold text-dark font-monospace">#{formatOrderDisplayNumber(ord, ord.orderNumber || ord.id)}</span>
                           <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '10.5px' }}>
                             Table {ord.table || 'Takeaway'}
                           </span>
@@ -495,6 +496,26 @@ export const EmployeeDashboard = () => {
           isOpen={!!eBillOrder}
           order={eBillOrder}
           onClose={() => setEBillOrder(null)}
+          onProceedToBill={async (ord) => {
+            const targetOrder = ord || eBillOrder;
+            if (!targetOrder) return;
+            const targetId = targetOrder.backendOrderId || targetOrder.id || targetOrder.order_id;
+            if (!targetId) return;
+            try {
+              const { proceedToBill } = await import('../../services/adminApi');
+              await proceedToBill(targetId);
+              await fetchOrders(false);
+              window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: targetId, status: 'Completed' } }));
+              window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
+              setEBillOrder(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
+              window.alert(`Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`);
+            } catch (err) {
+              console.error('Failed to complete order on Proceed to Bill:', err);
+              const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
+              window.alert(msg);
+              throw err;
+            }
+          }}
         />
       )}
     </AdminLayout>

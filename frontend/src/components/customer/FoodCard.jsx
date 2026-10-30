@@ -177,23 +177,16 @@ export const FoodCard = ({ dish }) => {
           onClick={(e) => e.stopPropagation()}
           className="d-flex align-items-center justify-content-between pt-2 border-top border-light mt-auto"
         >
-          {hasDiscount ? (
-            <div className="d-flex flex-column align-items-start">
-              <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
-                <span className="text-decoration-line-through text-danger opacity-75 small me-1" style={{ fontSize: '11px' }}>
-                  {formatCurrency(oldPrice)}
-                </span>
-                <span className="fw-bold text-dark fs-6">
-                  {formatCurrency(finalPrice)}
-                </span>
-              </div>
-              <span className="badge bg-danger-subtle text-danger fw-bold rounded px-1.5 py-0.5 mt-0.5" style={{ fontSize: '9px' }}>
-                {discountLabel}
+          <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
+            <span className="fw-bold fs-6" style={{ color: 'var(--primary-color, #C8102E)' }}>
+              {formatCurrency(hasDiscount ? finalPrice : dish.price)}
+            </span>
+            {hasDiscount && (
+              <span className="text-muted text-decoration-line-through small" style={{ fontSize: '11px' }}>
+                {formatCurrency(oldPrice)}
               </span>
-            </div>
-          ) : (
-            <span className="fw-bold text-dark fs-6">{formatCurrency(dish.price)}</span>
-          )}
+            )}
+          </div>
 
           {isOutOfStock ? (
             <div className="text-end">
@@ -206,9 +199,6 @@ export const FoodCard = ({ dish }) => {
               >
                 Out of Stock
               </button>
-              <div className="text-muted small mt-0.5" style={{ fontSize: '9px' }}>
-                Will be available soon
-              </div>
             </div>
           ) : quantityInCart > 0 ? (
             <div onClick={(e) => e.stopPropagation()}>
@@ -225,10 +215,16 @@ export const FoodCard = ({ dish }) => {
             <button
               type="button"
               onClick={handleQuickAdd}
-              className="btn btn-sm btn-outline-danger food-card-add-btn rounded-pill px-3 py-1 fw-bold"
-              style={{ fontSize: '11px' }}
+              className="btn btn-danger rounded-circle p-0 d-flex align-items-center justify-content-center shadow-sm flex-shrink-0"
+              style={{ 
+                width: '36px', 
+                height: '36px', 
+                backgroundColor: 'var(--primary-color, #C8102E)', 
+                borderColor: 'var(--primary-color, #C8102E)' 
+              }}
+              title={`Add ${dish.name}`}
             >
-              Add +
+              <FiPlus size={20} className="text-white" />
             </button>
           )}
         </div>

@@ -8,6 +8,7 @@ import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
 import EBillModal from '../../components/orders/EBillModal';
+import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const Kitchen = () => {
   const { orders, loading, updateStatus, fetchOrders } = useContext(OrderContext);
@@ -17,6 +18,7 @@ export const Kitchen = () => {
   const [actionError, setActionError] = useState('');
   const [eBillOrder, setEBillOrder] = useState(null);
   const [branches, setBranches] = useState([]);
+  const [activeStageTab, setActiveStageTab] = useState('ALL');
   const headerRef = useRef(null);
   const [gridHeight, setGridHeight] = useState(null);
 
@@ -410,6 +412,62 @@ export const Kitchen = () => {
           )}
         </div>
 
+        {/* Panel 11 Kitchen Status Tabs */}
+        <div className="card rounded-4 border-0 shadow-sm p-2.5 mb-3 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
+          <div className="d-flex align-items-center gap-1.5 flex-wrap">
+            <button
+              type="button"
+              onClick={() => setActiveStageTab('ALL')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                activeStageTab === 'ALL' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              All Stages
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveStageTab('NEW')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                activeStageTab === 'NEW' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              New ({pendingOrders.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveStageTab('PREPARING')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                activeStageTab === 'PREPARING' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              Preparing ({preparingOrders.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveStageTab('READY')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                activeStageTab === 'READY' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              Ready ({readyOrders.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveStageTab('COMPLETED')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                activeStageTab === 'COMPLETED' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+              }`}
+              style={{ fontSize: '12px' }}
+            >
+              Completed ({completedOrders.length})
+            </button>
+          </div>
+        </div>
+
         {loading ? (
           <Loader />
         ) : (
@@ -437,7 +495,7 @@ export const Kitchen = () => {
                   pendingOrders.map((ord) => (
                     <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket shadow-xs border-danger-subtle">
                       <div className="d-flex align-items-center justify-content-between fw-bold mb-2">
-                        <span className="text-dark fs-6">#{ord.id}</span>
+                        <span className="text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
                         <span className="badge bg-danger text-white rounded-pill px-2.5 py-1">
                           {formatTableBadge(ord.table)}
                         </span>
@@ -501,7 +559,7 @@ export const Kitchen = () => {
                             loading={isRejecting(ord.id)}
                             size="sm"
                             variant="outline"
-                            className="py-1 px-2.5 fw-bold shadow-xs"
+                            className="py-1 px-3 fw-bold shadow-xs rounded-pill"
                             style={{ fontSize: '11.5px' }}
                           >
                             Reject
@@ -512,10 +570,10 @@ export const Kitchen = () => {
                             loading={isAccepting(ord.id)}
                             size="sm"
                             variant="primary"
-                            className="py-1 px-3 fw-bold shadow-xs"
+                            className="py-1 px-3 fw-bold shadow-xs rounded-pill"
                             style={{ fontSize: '11.5px' }}
                           >
-                            Accept
+                            Start Preparing
                           </Button>
                         </div>
                       </div>
@@ -546,7 +604,7 @@ export const Kitchen = () => {
                   preparingOrders.map((ord) => (
                     <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket ticket-preparing shadow-xs">
                       <div className="d-flex align-items-center justify-content-between fw-bold mb-2">
-                        <span className="text-dark fs-6">#{ord.id}</span>
+                        <span className="text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
                         <span className="badge bg-warning text-dark rounded-pill px-2.5 py-1">
                           {formatTableBadge(ord.table)}
                         </span>
@@ -609,7 +667,7 @@ export const Kitchen = () => {
                           loading={isUpdatingStatus(ord.id, isTakeawayOrder(ord) ? 'Served' : 'Ready')}
                           size="sm"
                           variant="primary"
-                          className="py-1 px-3 fw-bold shadow-xs"
+                          className="py-1 px-3 fw-bold shadow-xs rounded-pill"
                           style={{
                             backgroundColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14',
                             borderColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14'
@@ -645,7 +703,7 @@ export const Kitchen = () => {
                   readyOrders.map((ord) => (
                     <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket ticket-ready shadow-xs">
                       <div className="d-flex align-items-center justify-content-between fw-bold mb-2">
-                        <span className="text-dark fs-6">#{ord.id}</span>
+                        <span className="text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
                         <span className="badge bg-info text-white rounded-pill px-2.5 py-1">
                           {formatTableBadge(ord.table)}
                         </span>
@@ -703,7 +761,7 @@ export const Kitchen = () => {
                           loading={isUpdatingStatus(ord.id, 'Served')}
                           size="sm"
                           variant="primary"
-                          className="py-1 px-3 fw-bold shadow-xs"
+                          className="py-1 px-3 fw-bold shadow-xs rounded-pill"
                           style={{ backgroundColor: '#198754', borderColor: '#198754' }}
                         >
                           Mark Serving
@@ -736,7 +794,7 @@ export const Kitchen = () => {
                   completedOrders.map((ord) => (
                     <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket ticket-completed shadow-xs">
                       <div className="d-flex align-items-center justify-content-between fw-bold mb-3">
-                        <span className="text-dark fs-6">#{ord.id}</span>
+                        <span className="text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
                         <span className="badge bg-success text-white rounded-pill px-2.5 py-1">
                           {formatTableBadge(ord.table)}
                         </span>
@@ -818,6 +876,24 @@ export const Kitchen = () => {
           isOpen={!!eBillOrder}
           order={eBillOrder}
           onClose={() => setEBillOrder(null)}
+          onProceedToBill={async (ord) => {
+            const targetOrder = ord || eBillOrder;
+            if (!targetOrder) return;
+            const targetId = targetOrder.backendOrderId || targetOrder.id || targetOrder.order_id;
+            if (!targetId) return;
+            try {
+              await updateStatus(targetId, 'Completed');
+              await fetchOrders(false);
+              window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: targetId, status: 'Completed' } }));
+              setEBillOrder(null);
+              window.alert(`Order #${targetOrder.orderNumber || targetId} marked as Completed.`);
+            } catch (err) {
+              console.error('Failed to complete order on Proceed to Bill:', err);
+              const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
+              window.alert(msg);
+              throw err;
+            }
+          }}
         />
       )}
     </AdminLayout>

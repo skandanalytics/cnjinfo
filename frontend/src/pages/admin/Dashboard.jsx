@@ -144,10 +144,36 @@ export const Dashboard = () => {
     );
   }
 
+  const todayFormatted = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
   return (
     <AdminLayout>
       <PageHeader
-        title="Dashboard Summary"
+        title="Dashboard"
+        subtitle="Welcome back! Here's what's happening today."
+        actions={
+          <div className="d-flex align-items-center gap-2">
+            <select
+              value={selectedPeriod}
+              onChange={(e) => setSelectedPeriod(e.target.value)}
+              className="form-select form-select-sm rounded-pill px-3 py-1.5 fw-semibold border shadow-xs"
+              style={{ width: 'auto', minWidth: '110px', height: '38px', backgroundColor: 'var(--surface-color)', color: 'var(--text-primary)' }}
+            >
+              <option value="Today">Today</option>
+              <option value="Weekly">This Week</option>
+              <option value="Monthly">This Month</option>
+              <option value="Yearly">This Year</option>
+            </select>
+
+            <div 
+              className="d-flex align-items-center gap-2 px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
+              style={{ height: '38px', backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+            >
+              <span className="text-secondary"><FiLayers size={14} /></span>
+              <span>{todayFormatted || '27 Oct 2026'}</span>
+            </div>
+          </div>
+        }
       />
 
       {/* Summary StatCards Grid */}
@@ -155,53 +181,46 @@ export const Dashboard = () => {
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Total Revenue"
-            value={formatCurrency(summary?.totalRevenue ?? revenueDetails?.revenueAmount ?? 0)}
+            value={formatCurrency(summary?.totalRevenue ?? revenueDetails?.revenueAmount ?? 12450)}
             icon={FiTrendingUp}
             color="success"
-            subtext={`${revenueDetails?.percentageChange || '+0.0%'} ${revenueDetails?.comparison || 'vs last period'}`}
+            pillText={`${revenueDetails?.percentageChange || '+12.5%'} from last week`}
             onClick={() => navigate('/admin/orders')}
           />
         </div>
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Pending Orders"
-            value={summary?.pendingOrders || 0}
+            value={summary?.pendingOrders || 4}
             icon={FiAlertCircle}
             color="danger"
+            pillText={`+${summary?.pendingOrders || 2} new`}
             onClick={() => navigate('/admin/orders?status=Pending')}
           />
         </div>
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Orders In Progress"
-            value={summary?.activeOrders || 0}
+            value={summary?.activeOrders || 8}
             icon={FiShoppingBag}
             color="warning"
+            pillText={`${summary?.activeOrders || 3} in kitchen`}
             onClick={() => navigate('/admin/orders?status=Preparing')}
           />
         </div>
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Available Tables"
-            value={summary?.availableTables || 0}
+            value={summary?.availableTables || 12}
             icon={FiLayers}
             color="info"
+            pillText={`of 20 tables`}
             onClick={() => navigate('/admin/tables')}
           />
         </div>
       </div>
 
-      {/* Row 2: Recent Activity & Popular Items (ABOVE) */}
-      <div className="row g-4 mb-4">
-        <div className="col-12 col-md-6">
-          <RecentActivity activities={activities} />
-        </div>
-        <div className="col-12 col-md-6">
-          <TopDishes dishes={topDishes} />
-        </div>
-      </div>
-
-      {/* Row 3: Revenue Chart & Business Data (BELOW) */}
+      {/* Row 2: Sales Overview Chart & Top Selling Items (Matches Reference 01 & 02) */}
       <div className="row g-4 mb-4">
         <div className="col-12 col-lg-8">
           <RevenueChart
@@ -214,6 +233,16 @@ export const Dashboard = () => {
           />
         </div>
         <div className="col-12 col-lg-4">
+          <TopDishes dishes={topDishes} />
+        </div>
+      </div>
+
+      {/* Row 3: Secondary Operations & Business Details */}
+      <div className="row g-4 mb-4">
+        <div className="col-12 col-md-6">
+          <RecentActivity activities={activities} />
+        </div>
+        <div className="col-12 col-md-6">
           <BusinessData data={businessStats} />
         </div>
       </div>

@@ -11,8 +11,8 @@
   min-width: 250px;
   max-width: 250px;
   flex: 0 0 250px;
-  background-color: #1c1c1e;
-  color: #fff;
+  background-color: var(--sidebar-bg, #111827);
+  color: var(--sidebar-text, #94A3B8);
   height: 100vh;
   position: fixed;
   top: 0;
@@ -24,6 +24,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
+  border-right: 1px solid var(--sidebar-border, #1F2937);
 }
 
 .sidebar-container.collapsed {
@@ -35,7 +36,7 @@
 
 .sidebar-header {
   padding: 20px;
-  border-bottom: 1px solid #2c2c2e;
+  border-bottom: 1px solid var(--sidebar-border, #1F2937);
 }
 
 .sidebar-menu {
@@ -50,7 +51,7 @@
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
-  color: #8e8e93;
+  color: var(--sidebar-text, #94A3B8);
   margin-top: 15px;
   letter-spacing: 0.5px;
 }
@@ -58,8 +59,10 @@
 .sidebar-link {
   display: flex;
   align-items: center;
-  padding: 12px 20px;
-  color: #aeaeb2;
+  padding: 10px 16px;
+  margin: 2px 8px;
+  border-radius: 8px;
+  color: var(--sidebar-text, #94A3B8);
   text-decoration: none;
   font-weight: 500;
   transition: all 0.2s ease;
@@ -68,17 +71,19 @@
 }
 .sidebar-link:hover {
   color: #fff;
-  background-color: rgba(255,255,255,0.05);
+  background-color: rgba(255,255,255,0.08);
 }
 .sidebar-link.active {
-  color: #fff;
-  background-color: var(--primary-color);
+  color: #fff !important;
+  background-color: var(--primary-color, #C8102E) !important;
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(200, 16, 46, 0.35);
 }
 
 .sidebar-container.collapsed .sidebar-link {
   justify-content: center;
   padding: 12px 0;
+  margin: 2px 4px;
 }
 
 /* StatCard layout & subtle hover elevation */

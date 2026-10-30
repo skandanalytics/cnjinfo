@@ -336,7 +336,7 @@ export const FoodDetails = () => {
                     <Button
                       disabled
                       variant="secondary"
-                      className="w-100 py-2.5"
+                      className="w-100 py-2.5 rounded-pill"
                     >
                       Out of Stock
                     </Button>
@@ -348,12 +348,12 @@ export const FoodDetails = () => {
                   <Button
                     onClick={() => navigate('/customer/cart')}
                     variant="primary"
-                    className="py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
+                    className="py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm rounded-pill"
                   >
                     Go to Cart ({inCartQuantity}) →
                   </Button>
                 ) : (
-                  <Button onClick={handleAddToCart} variant="primary" className="py-2.5 fw-bold shadow-sm">
+                  <Button onClick={handleAddToCart} variant="primary" className="py-2.5 fw-bold shadow-sm rounded-pill">
                     Add to Cart — {formatCurrency(getProductSellingPrice(dish) * (quantity > 0 ? quantity : 1))}
                   </Button>
                 )}

@@ -3,7 +3,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import formatCurrency from '../../utils/formatCurrency';
 import { useAuth } from '../../hooks/useAuth';
-import { FiEye } from 'react-icons/fi';
+import { FiEye, FiPlus } from 'react-icons/fi';
 
 export const OrderDetailsModal = ({
   isOpen,
@@ -13,6 +13,8 @@ export const OrderDetailsModal = ({
   onViewEBill,
   onPaymentRecorded,
   onOrderUpdated,
+  onContinueOrder,
+  onProceedToBill,
 }) => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin' || user?.role === 'employee' || user?.role === 'SUPER_ADMIN';
@@ -27,6 +29,9 @@ export const OrderDetailsModal = ({
 
   if (!currentOrder) return null;
 
+  const isDineIn = currentOrder.orderType !== 'Takeaway' && currentOrder.order_type !== 'TAKEAWAY' && String(currentOrder.table || '').toLowerCase() !== 'takeaway';
+  const isCompleted = ['Completed', 'COMPLETED', 'Delivered', 'DELIVERED', 'Done', 'DONE', 'Settled', 'SETTLED'].includes(currentOrder.status);
+  const isActive = !['Cancelled', 'CANCELLED', 'Completed', 'COMPLETED'].includes(currentOrder.status);
   const isPaid = String(currentOrder.payment_status || '').toUpperCase() === 'PAID';
   const isServiceChargeActive = Number(currentOrder.service_charge_amount ?? currentOrder.serviceCharge ?? 0) > 0 || Number(currentOrder.service_charge_rate ?? 0) > 0;
 
@@ -90,50 +95,71 @@ export const OrderDetailsModal = ({
     onClose();
   };
 
+  const displayItems = (currentOrder.combined_items && currentOrder.combined_items.length > 0)
+    ? currentOrder.combined_items
+    : (currentOrder.items || []);
+
   const getActionButtons = () => {
     return (
       <div className="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => { if(onViewEBill) onViewEBill(currentOrder); }}
-          className="btn btn-outline-danger fw-bold d-flex align-items-center gap-1.5 rounded-pill px-3 py-2"
-          style={{ fontSize: '13px' }}
-        >
-          <FiEye size={15} />
-          <span>View E-Bill</span>
-        </button>
+        <div className="d-flex align-items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              if (onViewEBill) onViewEBill(currentOrder);
+              else if (onProceedToBill) onProceedToBill(currentOrder);
+            }}
+            className="btn btn-outline-danger fw-bold d-flex align-items-center gap-1.5 rounded-pill px-3 py-2"
+            style={{ fontSize: '13px' }}
+          >
+            <FiEye size={15} />
+            <span>{isCompleted ? 'View E-Bill' : 'Proceed to Bill'}</span>
+          </button>
+
+          {onContinueOrder && isDineIn && isActive && (
+            <button
+              type="button"
+              onClick={() => onContinueOrder(currentOrder)}
+              className="btn btn-danger fw-bold d-flex align-items-center gap-1.5 rounded-pill px-3 py-2 shadow-xs"
+              style={{ fontSize: '13px' }}
+            >
+              <FiPlus size={15} />
+              <span>Continue Order</span>
+            </button>
+          )}
+        </div>
 
         {isAdmin && (
-          <div className="d-flex align-items-center gap-2">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
             {currentOrder.status === 'Pending' && (
               <>
-                <Button variant="danger" onClick={() => handleStatusUpdate('Cancelled')} disabled={loading || togglingServiceCharge}>
+                <Button variant="outline-danger" onClick={() => handleStatusUpdate('Cancelled')} disabled={loading || togglingServiceCharge} className="rounded-pill px-3">
                   Reject
                 </Button>
-                <Button variant="primary" onClick={() => handleStatusUpdate('Preparing')} loading={loading} disabled={togglingServiceCharge}>
-                  Accept Order
+                <Button variant="primary" onClick={() => handleStatusUpdate('Preparing')} loading={loading} disabled={togglingServiceCharge} className="rounded-pill px-3">
+                  Start Preparing
                 </Button>
               </>
             )}
             {currentOrder.status === 'Preparing' && (
-              <Button variant="primary" onClick={() => handleStatusUpdate('Ready')} loading={loading} disabled={togglingServiceCharge}>
-                Mark Ready (Sent to Counter)
+              <Button variant="success" onClick={() => handleStatusUpdate('Ready')} loading={loading} disabled={togglingServiceCharge} className="rounded-pill px-3 bg-success border-success text-white">
+                Mark Ready
               </Button>
             )}
             {currentOrder.status === 'Ready' && (
-              <Button variant="primary" onClick={() => handleStatusUpdate('Serving')} loading={loading} disabled={togglingServiceCharge}>
+              <Button variant="primary" onClick={() => handleStatusUpdate('Serving')} loading={loading} disabled={togglingServiceCharge} className="rounded-pill px-3">
                 Serve to Table
               </Button>
             )}
             {(currentOrder.status === 'Serving' || currentOrder.status === 'Served') && (
-              <Button variant="primary" onClick={() => handleStatusUpdate('Completed')} loading={loading} disabled={togglingServiceCharge}>
+              <Button variant="primary" onClick={() => handleStatusUpdate('Completed')} loading={loading} disabled={togglingServiceCharge} className="rounded-pill px-3">
                 Complete Session (Settle Bill)
               </Button>
             )}
             {isPaid ? (
-              <span className="badge bg-success rounded-pill px-3 py-2">Paid</span>
+              <span className="badge bg-success rounded-pill px-3 py-2 fw-bold">Paid</span>
             ) : String(currentOrder.status || '').toLowerCase() !== 'cancelled' && (
-              <Button variant="outline-danger" onClick={handleCounterPay} disabled={loading || togglingServiceCharge}>
+              <Button variant="outline-danger" onClick={handleCounterPay} disabled={loading || togglingServiceCharge} className="rounded-pill px-3">
                 Mark as Paid
               </Button>
             )}
@@ -144,18 +170,33 @@ export const OrderDetailsModal = ({
   };
 
   return (
-    <Modal isOpen={isOpen} title={`Order details #${currentOrder.id}`} onClose={onClose} footerActions={getActionButtons()} size="lg">
+    <Modal isOpen={isOpen} title={`Order details #${currentOrder.display_order_number || currentOrder.display_number || currentOrder.id}`} onClose={onClose} footerActions={getActionButtons()} size="lg">
       {notice && (
         <div className={`alert ${notice.kind === 'error' ? 'alert-danger' : 'alert-success'} py-2 small fw-semibold`} role="status">{notice.text}</div>
       )}
       <div className="row g-4">
         {/* Left Column: Items and summary */}
         <div className="col-12 col-md-7">
+          {currentOrder.has_continuations && (
+            <div className="alert alert-info py-2 px-3 small rounded-3 mb-3 d-flex align-items-center justify-content-between">
+              <div>
+                <strong>Combined Dine-In Order</strong> (Includes continuation orders: #{currentOrder.display_order_number || currentOrder.id}
+                {currentOrder.continuations?.map(c => `, #${c.display_order_number || c.id}`)})
+              </div>
+              <span className="badge bg-info text-dark">Combined</span>
+            </div>
+          )}
+
           <h6 className="fw-bold text-dark mb-3">Items Ordered</h6>
           <div className="bg-light p-3 rounded-3 mb-4">
-            {currentOrder.items && currentOrder.items.length > 0 ? currentOrder.items.map((item, idx) => (
+            {displayItems && displayItems.length > 0 ? displayItems.map((item, idx) => (
               <div key={idx} className="d-flex align-items-start justify-content-between mb-2 small border-bottom border-light pb-2 last-border-0">
                 <div className="text-dark fw-semibold text-break me-2">
+                  {item.order_display_number && (
+                    <span className="badge bg-light text-dark border me-1 px-1.5 py-0.5" style={{ fontSize: '10px' }}>
+                      #{item.order_display_number}
+                    </span>
+                  )}
                   {item.name || 'Dish Item'} <strong className="text-danger ms-1">x{item.quantity || 1}</strong>
                   {item.instructions && <div className="text-muted fw-normal mt-1" style={{ fontSize: '11px' }}>Instructions: {item.instructions}</div>}
                   {item.extraIngredients && item.extraIngredients.length > 0 && (
@@ -180,7 +221,7 @@ export const OrderDetailsModal = ({
           <div className="small p-2 border rounded-3">
             <div className="d-flex align-items-center justify-content-between mb-1">
               <span className="text-secondary">Subtotal</span>
-              <span className="text-dark fw-bold">{formatCurrency(currentOrder.subtotal)}</span>
+              <span className="text-dark fw-bold">{formatCurrency(currentOrder.combined_items_subtotal ?? currentOrder.subtotal)}</span>
             </div>
             {currentOrder.discount > 0 && (
               <div className="d-flex align-items-center justify-content-between mb-1 text-success">
@@ -233,9 +274,21 @@ export const OrderDetailsModal = ({
                 )}
               </span>
             </div>
+            {Number(currentOrder.paid_amount || 0) > 0 && (
+              <div className="d-flex align-items-center justify-content-between mb-1 text-success">
+                <span>Paid Amount</span>
+                <span className="fw-bold">{formatCurrency(currentOrder.paid_amount)}</span>
+              </div>
+            )}
+            {currentOrder.balance_due != null && Number(currentOrder.balance_due) > 0 && (
+              <div className="d-flex align-items-center justify-content-between mb-1 text-danger">
+                <span>Balance Due</span>
+                <span className="fw-bold">{formatCurrency(currentOrder.balance_due)}</span>
+              </div>
+            )}
             <div className="d-flex align-items-center justify-content-between border-top pt-2 mt-2 fw-bold text-danger fs-5">
               <span>Grand Total</span>
-              <span>{formatCurrency(currentOrder.total)}</span>
+              <span>{formatCurrency(currentOrder.combined_total ?? currentOrder.total)}</span>
             </div>
           </div>
         </div>
@@ -252,6 +305,12 @@ export const OrderDetailsModal = ({
                   <div className="mb-2">Diners: <strong>{currentOrder.diners || currentOrder.number_of_diners} {Number(currentOrder.diners || currentOrder.number_of_diners) === 1 ? 'Diner' : 'Diners'}</strong></div>
                 )}
               </>
+            )}
+            {(currentOrder.customer_phone || currentOrder.customerPhone || currentOrder.customer?.phone) && (
+              <div className="mb-2">Customer Phone: <strong className="text-dark">{currentOrder.customer_phone || currentOrder.customerPhone || currentOrder.customer?.phone}</strong></div>
+            )}
+            {(currentOrder.customer_name || currentOrder.customerName || currentOrder.customer?.name) && (
+              <div className="mb-2">Customer Name: <strong className="text-dark">{currentOrder.customer_name || currentOrder.customerName || currentOrder.customer?.name}</strong></div>
             )}
             <div className="mb-2">Source: <strong>{currentOrder.source}</strong></div>
             <div className="mb-2">Payment Method: <strong>{currentOrder.paymentMethod}</strong></div>

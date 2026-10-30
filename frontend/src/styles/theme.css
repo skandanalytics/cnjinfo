@@ -1,30 +1,124 @@
 :root {
-  --primary-color: #be123c;
-  --primary-dark: #9f1239;
-  --primary-light: #fff1f2;
+  /* Override Bootstrap 5 core variables with Foodie Design Tokens */
+  --bs-primary: #C8102E;
+  --bs-primary-rgb: 200, 16, 46;
+  --bs-danger: #C8102E;
+  --bs-danger-rgb: 200, 16, 46;
+  --bs-link-color: #C8102E;
+  --bs-link-hover-color: #A90E27;
+  --bs-border-radius: 12px;
+  --bs-border-radius-sm: 8px;
+  --bs-border-radius-lg: 16px;
+  --bs-border-radius-xl: 20px;
+  --bs-border-radius-xxl: 24px;
+  --bs-border-radius-pill: 9999px;
+  --bs-body-bg: #F5F7FA;
+  --bs-body-color: #20242B;
+
+  /* Brand Palette - Foodie Master Design System */
+  --primary-color: #C8102E;
+  --primary-hover: #A90E27;
+  --primary-dark: #850B20;
+  --primary-light: #FCE8ED;
+  --primary-subtle: rgba(200, 16, 46, 0.08);
 
   --secondary-color: #ffffff;
 
-  --background-color: #f8fafc;
-  --surface-color: #ffffff;
+  /* Surfaces & Backgrounds */
+  --background-color: #F5F7FA;
+  --surface-color: #FFFFFF;
+  --surface-muted: #F8FAFC;
+  --sidebar-bg: #111827;
+  --sidebar-border: #1F2937;
+  --sidebar-text: #94A3B8;
+  --sidebar-text-active: #FFFFFF;
 
-  --text-primary: #0f172a;
-  --text-secondary: #475569;
-  --text-muted: #94a3b8;
+  /* Typography */
+  --text-primary: #20242B;
+  --text-secondary: #667085;
+  --text-muted: #94A3B8;
 
-  --border-color: #e2e8f0;
+  /* Borders & Dividers */
+  --border-color: #E3E7ED;
+  --border-subtle: #EDF2F7;
 
-  --success-color: #22c55e;
-  --warning-color: #f59e0b;
-  --danger-color: #ef4444;
-  --info-color: #3b82f6;
+  /* Semantic Feedback */
+  --success-color: #198754;
+  --success-light: #E8F5E9;
+  --warning-color: #D99718;
+  --warning-light: #FEF3C7;
+  --danger-color: #C62828;
+  --danger-light: #FEE2E2;
+  --info-color: #2563EB;
+  --info-light: #EFF6FF;
 
-  --border-radius-sm: 6px;
+  /* Radii */
+  --border-radius-xs: 4px;
+  --border-radius-sm: 8px;
   --border-radius-md: 12px;
-  --border-radius-lg: 20px;
+  --border-radius-lg: 16px;
+  --border-radius-xl: 20px;
   --border-radius-pill: 9999px;
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
-  --shadow-lg: 0 10px 15px -3px rgba(190, 18, 60, 0.1), 0 4px 6px -2px rgba(190, 18, 60, 0.05);
+  /* Shadows */
+  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 10px 10px -5px rgba(15, 23, 42, 0.04);
+  --shadow-brand: 0 4px 14px rgba(200, 16, 46, 0.25);
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-slow: 300ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Dark Mode Tokens for Admin & Staff */
+[data-theme="dark"],
+[data-bs-theme="dark"],
+.dark-mode {
+  --bs-primary: #E61E40;
+  --bs-primary-rgb: 230, 30, 64;
+  --bs-danger: #E61E40;
+  --bs-danger-rgb: 230, 30, 64;
+  --bs-body-bg: #0F172A;
+  --bs-body-color: #F8FAFC;
+  --bs-border-color: #334155;
+  --bs-card-bg: #1E293B;
+
+  --primary-color: #E61E40;
+  --primary-hover: #C8102E;
+  --primary-dark: #A90E27;
+  --primary-light: rgba(200, 16, 46, 0.2);
+  --primary-subtle: rgba(230, 30, 64, 0.15);
+
+  --background-color: #0F172A;
+  --surface-color: #1E293B;
+  --surface-muted: #182234;
+  --sidebar-bg: #0B1120;
+  --sidebar-border: #1E293B;
+  --sidebar-text: #94A3B8;
+  --sidebar-text-active: #FFFFFF;
+
+  --text-primary: #F8FAFC;
+  --text-secondary: #94A3B8;
+  --text-muted: #64748B;
+
+  --border-color: #334155;
+  --border-subtle: #1E293B;
+
+  --success-color: #22C55E;
+  --success-light: rgba(34, 197, 94, 0.15);
+  --warning-color: #F59E0B;
+  --warning-light: rgba(245, 158, 11, 0.15);
+  --danger-color: #EF4444;
+  --danger-light: rgba(239, 68, 68, 0.15);
+  --info-color: #3B82F6;
+  --info-light: rgba(59, 130, 246, 0.15);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  --shadow-brand: 0 4px 14px rgba(230, 30, 64, 0.35);
 }

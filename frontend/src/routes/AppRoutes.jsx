@@ -171,7 +171,12 @@ export const AppRoutes = () => {
           <Offers />
         </AdminOnlyRoute>
       } />
-      <Route path="/admin/analytics" element={<Navigate to="/admin/dashboard" replace />} />
+      <Route path="/admin/reports" element={
+        <AdminOnlyRoute>
+          <Analytics />
+        </AdminOnlyRoute>
+      } />
+      <Route path="/admin/analytics" element={<Navigate to="/admin/reports" replace />} />
       <Route path="/admin/settings" element={
         <AdminOnlyRoute>
           <Settings />

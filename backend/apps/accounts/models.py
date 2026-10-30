@@ -27,7 +27,24 @@ class UserManager(BaseUserManager):
         extra.setdefault("user_type", User.UserType.EMPLOYEE)
         extra["is_staff"] = True
         extra["is_superuser"] = True
-        return self.create_user(phone, password, **extra)
+        user = self.create_user(phone, password, **extra)
+        try:
+            from apps.accounts.models import Employee
+            code = extra.get("employee_code", "ADMIN")
+            if Employee.objects.filter(employee_code__iexact=code).exists():
+                code = f"ADMIN_{user.id}"
+            Employee.objects.get_or_create(
+                user=user,
+                defaults={
+                    "employee_code": code,
+                    "role": Employee.Role.SUPER_ADMIN,
+                    "status": Employee.Status.ACTIVE,
+                },
+            )
+        except Exception:
+            pass
+        return user
+
 
 
 class User(AbstractBaseUser, PermissionsMixin):

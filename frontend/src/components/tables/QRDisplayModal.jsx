@@ -182,18 +182,18 @@ export const QRDisplayModal = ({
     <div className="d-flex align-items-center justify-content-between w-100 gap-2 flex-wrap">
       {qrRecord && (
         <Button
-          variant="light"
+          variant="outline"
           onClick={handleToggleStatus}
           disabled={updating || isActive === null}
-          className="d-flex align-items-center gap-1.5 small fw-bold"
+          className="d-flex align-items-center gap-1.5 rounded-pill px-3 fw-bold"
         >
-          {isActive ? <FiToggleRight className="text-success fs-5" /> : <FiToggleLeft className="text-secondary fs-5" />}
+          {isActive ? <FiToggleRight className="text-danger fs-5" /> : <FiToggleLeft className="text-secondary fs-5" />}
           {isActive ? 'Disable QR' : 'Enable QR'}
         </Button>
       )}
       {isActive && qrCode && (
         <div className="d-flex align-items-center gap-2 ms-auto">
-          <Button variant="primary" onClick={handlePrint} className="d-flex align-items-center gap-1.5 py-1.5 px-3">
+          <Button variant="primary" onClick={handlePrint} className="d-flex align-items-center gap-1.5 rounded-pill px-4">
             <FiPrinter /> Print Card
           </Button>
         </div>

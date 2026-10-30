@@ -268,7 +268,9 @@ const mapTableToFrontend = (t) => {
     reservationName: status === 'Reserved' ? (custom.reservationName || savedMeta.reservationName || t.reservationName) : undefined,
     qr_token: t.qr_token || custom.qr_token || `FOODIE-TABLE-${tableId}`,
     qr_data: t.qr_data || custom.qr_data || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(`${window.location.origin}/customer/welcome?table=${tableId}`)}`,
-    qr_is_active: t.qr_is_active !== undefined ? Boolean(t.qr_is_active) : (custom.qr_is_active !== undefined ? Boolean(custom.qr_is_active) : true)
+    qr_is_active: t.qr_is_active !== undefined ? Boolean(t.qr_is_active) : (custom.qr_is_active !== undefined ? Boolean(custom.qr_is_active) : true),
+    active_order_id: t.active_order_id || custom.active_order_id || savedMeta.active_order_id || null,
+    active_order: t.active_order || custom.active_order || savedMeta.active_order || null,
   };
 };
 

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { FiCoffee, FiShoppingBag } from 'react-icons/fi';
 import CustomerLayout from '../../components/layout/CustomerLayout';
 import ServerBillSummary from '../../components/customer/ServerBillSummary';
+import CheckoutStepper from '../../components/customer/CheckoutStepper';
 import { useCart } from '../../hooks/useCart';
 import Button from '../../components/common/Button';
 import formatCurrency from '../../utils/formatCurrency';
@@ -12,7 +13,7 @@ import {
 } from '../../services/customerCheckout';
 import {
   DINE_IN, NO_TABLES_MESSAGE, TAKEAWAY, getLastDineInTableId, getOrderType, getSelectedTableId,
-  hasDineInTable, hasScannedTable, rememberDineInTableId, setOrderType, setSelectedTableId,
+  hasDineInTable, hasScannedTable, rememberDineInTableId, rememberScannedTableQr, setOrderType, setSelectedTableId,
 } from '../../utils/orderContext';
 import { formatCompactTableLabel } from '../../utils/tableUtils';
 
@@ -85,112 +86,140 @@ export const Checkout = () => {
   const { setTable } = useCart();
   const [orderType, setType] = useState(() => (hasDineInTable() || getOrderType() === TAKEAWAY ? getOrderType() : null));
   const [cartView, setCartView] = useState(null);
-  const [tableChoices, setTableChoices] = useState(null);
+  const [tableChoices, setTableChoices] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+
+  const fetchAvailableTablesList = async (preferredId = null) => {
+    try {
+      const branchId = await resolvePublicBranchId();
+      if (!branchId) return { open: [], all: [] };
+      const tables = await availableTables(branchId);
+      const activeTableId = preferredId || getSelectedTableId() || getLastDineInTableId() || sessionStorage.getItem('foodie_selected_table');
+      const open = selectableTables(tables, activeTableId);
+      setTableChoices(open);
+      return { open, all: tables };
+    } catch (err) {
+      console.warn('Could not check table availability:', err);
+      return { open: [], all: [] };
+    }
+  };
 
   const chooseType = async (type, tableOrId = null) => {
     setError('');
     setNotice('');
 
-    const targetTableObj = (typeof tableOrId === 'object' && tableOrId !== null) ? tableOrId : null;
-    const directTableId = targetTableObj ? targetTableObj.id : (tableOrId && Number.isInteger(Number(tableOrId)) ? Number(tableOrId) : null);
+    if (type === TAKEAWAY) {
+      setOrderType(TAKEAWAY);
+      setType(TAKEAWAY);
+      setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
+      setCartView(prev => enforceCartPricing(prev, TAKEAWAY, null));
 
-    // Resolve target table ID for Dine-In (prefer passed tableId, then saved table ID, then current table from cartView)
-    let effectiveTableId = directTableId || getSelectedTableId() || cartView?.table?.id;
-
-    if (type === DINE_IN && !hasScannedTable() && !effectiveTableId) {
       setBusy(true);
       try {
-        const branchId = await resolvePublicBranchId();
-        const tables = branchId ? await availableTables(branchId) : [];
-        const open = selectableTables(tables);
-        if (!tables.length) {
-          setNotice(NO_TABLES_MESSAGE);
-          setBusy(false);
-          return;
-        }
-        if (!open.length) {
-          setNotice('Tables are listed, but none are free for a new dine-in order.');
-          setBusy(false);
-          return;
-        }
-        effectiveTableId = open[0].id;
-        const autoTable = open[0];
-        setSelectedTableId(effectiveTableId, autoTable.table_number);
-        rememberDineInTableId(effectiveTableId);
-        if (open.length > 1) {
-          setTableChoices(open);
+        const view = await applyOrderContext(TAKEAWAY);
+        setCartView(enforceCartPricing(view, TAKEAWAY, null));
+        setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
+      } catch (err) {
+        setError(err.message || 'Could not update to takeaway.');
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+
+    // type === DINE_IN
+    setOrderType(DINE_IN);
+    setType(DINE_IN);
+
+    const preferredId = getSelectedTableId() || getLastDineInTableId() || sessionStorage.getItem('foodie_selected_table');
+
+    if (hasScannedTable()) {
+      setBusy(true);
+      try {
+        const view = await applyOrderContext(DINE_IN);
+        const activeTable = view.table || (preferredId ? { id: preferredId, table_number: formatCompactTableLabel(String(preferredId)) } : null);
+        setCartView(enforceCartPricing(view, DINE_IN, activeTable));
+        if (view.table) {
+          setSelectedTableId(view.table.id, view.table.table_number);
+          rememberDineInTableId(view.table.id);
+          setTable({
+            tableNumber: view.table.table_number,
+            tableId: view.table.id,
+            location: view.table.location,
+            orderType: DINE_IN,
+          });
         }
       } catch (err) {
-        setError(err.message || 'Could not check table availability.');
+        setError(err.message || 'Could not set dine-in table.');
+      } finally {
         setBusy(false);
-        return;
       }
-    }
-
-    // Determine the canonical table number for display
-    let targetTableNum = targetTableObj?.table_number || '';
-    if (!targetTableNum && effectiveTableId) {
-      if (tableChoices) {
-        const match = tableChoices.find(t => Number(t.id) === Number(effectiveTableId));
-        if (match) targetTableNum = match.table_number;
-      }
-      if (!targetTableNum && cartView?.table && Number(cartView.table.id) === Number(effectiveTableId)) {
-        targetTableNum = cartView.table.table_number;
-      }
-      if (!targetTableNum && tableContext?.tableNumber && Number(tableContext?.tableId) === Number(effectiveTableId)) {
-        targetTableNum = tableContext.tableNumber;
-      }
-      if (!targetTableNum) {
-        targetTableNum = formatCompactTableLabel(String(effectiveTableId));
-      }
-    }
-
-    if (type === DINE_IN && effectiveTableId) {
-      setSelectedTableId(effectiveTableId, targetTableNum);
-      rememberDineInTableId(effectiveTableId);
-      // Clear any outdated scanned QR that does not belong to this newly selected table
-      if (directTableId) {
-        rememberScannedTableQr(targetTableObj?.qr_code || null);
-      }
-    }
-
-    setOrderType(type);
-    setType(type);
-
-    // Optimistically and synchronously update both tableContext and cartView with the EXACT same table
-    if (type === TAKEAWAY) {
-      setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
-      setCartView(prev => enforceCartPricing(prev, type, null));
-    } else {
-      const tableInfo = {
-        id: effectiveTableId,
-        tableId: effectiveTableId,
-        table_number: targetTableNum,
-        tableNumber: targetTableNum,
-        location: targetTableObj?.location || '',
-        orderType: DINE_IN
-      };
-      setTable(tableInfo);
-      setCartView(prev => enforceCartPricing(prev, type, tableInfo));
+      return;
     }
 
     setBusy(true);
     try {
-      const view = await applyOrderContext(type, effectiveTableId);
-      const confirmedTable = view.table || (effectiveTableId ? { id: effectiveTableId, table_number: targetTableNum } : null);
-      setCartView(enforceCartPricing(view, type, confirmedTable));
-      if (type === TAKEAWAY) {
-        setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
-      } else if (view.table) {
+      const { open: openTables, all: allTables } = await fetchAvailableTablesList(preferredId);
+
+      let resolvedTable = null;
+      if (tableOrId && typeof tableOrId === 'object' && tableOrId.id) {
+        resolvedTable = (allTables.length ? allTables : openTables).find(t => Number(t.id) === Number(tableOrId.id)) || tableOrId;
+      } else if (tableOrId && Number.isInteger(Number(tableOrId))) {
+        resolvedTable = (allTables.length ? allTables : openTables).find(t => Number(t.id) === Number(tableOrId));
+      }
+
+      if (!resolvedTable && preferredId) {
+        resolvedTable = (allTables.length ? allTables : openTables).find(t => Number(t.id) === Number(preferredId));
+        if (!resolvedTable && cartView?.table && Number(cartView.table.id) === Number(preferredId)) {
+          resolvedTable = cartView.table;
+        }
+      }
+
+      if (!resolvedTable && openTables.length > 0) {
+        resolvedTable = openTables[0];
+      }
+
+      if (!resolvedTable) {
+        setNotice(NO_TABLES_MESSAGE);
+        setCartView(prev => enforceCartPricing(prev, DINE_IN, null));
+        setBusy(false);
+        return;
+      }
+
+      setSelectedTableId(resolvedTable.id, resolvedTable.table_number);
+      rememberDineInTableId(resolvedTable.id);
+      if (resolvedTable.qr_code) {
+        rememberScannedTableQr(resolvedTable.qr_code);
+      }
+
+      const tableInfo = {
+        id: resolvedTable.id,
+        tableId: resolvedTable.id,
+        table_number: resolvedTable.table_number,
+        tableNumber: resolvedTable.table_number,
+        location: resolvedTable.location || '',
+        orderType: DINE_IN,
+      };
+      setTable(tableInfo);
+      setCartView(prev => enforceCartPricing(prev, DINE_IN, tableInfo));
+
+      const view = await applyOrderContext(DINE_IN, resolvedTable.id);
+      const confirmedTable = view.table || tableInfo;
+      setCartView(enforceCartPricing(view, DINE_IN, confirmedTable));
+      if (view.table) {
         setSelectedTableId(view.table.id, view.table.table_number);
         rememberDineInTableId(view.table.id);
-        setTable({ tableNumber: view.table.table_number, tableId: view.table.id, location: view.table.location, orderType: DINE_IN });
+        setTable({
+          tableNumber: view.table.table_number,
+          tableId: view.table.id,
+          location: view.table.location,
+          orderType: DINE_IN,
+        });
       }
     } catch (err) {
-      setError(err.message);
+      setError(err.message || 'Could not select dine-in table.');
     } finally {
       setBusy(false);
     }
@@ -202,23 +231,55 @@ export const Checkout = () => {
       try {
         setBusy(true);
         const currentType = getOrderType();
-        const tableId = getSelectedTableId();
-        if (currentType === DINE_IN && (hasScannedTable() || tableId)) {
-          const view = await applyOrderContext(DINE_IN, tableId);
-          if (!active) return;
-          const targetTable = view.table || (tableId ? { id: tableId, table_number: tableContext?.tableNumber || formatCompactTableLabel(String(tableId)) } : null);
-          setCartView(enforceCartPricing(view, DINE_IN, targetTable));
-          setType(DINE_IN);
-          if (view.table) {
-            setSelectedTableId(view.table.id, view.table.table_number);
-            rememberDineInTableId(view.table.id);
-            setTable({ tableNumber: view.table.table_number, tableId: view.table.id, location: view.table.location, orderType: DINE_IN });
+        const preferredId = getSelectedTableId() || getLastDineInTableId() || sessionStorage.getItem('foodie_selected_table');
+        const parentOrderId = sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id');
+
+        let openTables = [];
+        let allTables = [];
+        if (!hasScannedTable() && sessionStorage.getItem('foodie_staff_ordering') !== '1') {
+          try {
+            const branchId = await resolvePublicBranchId();
+            if (branchId) {
+              allTables = await availableTables(branchId);
+              openTables = selectableTables(allTables, preferredId);
+              if (active) setTableChoices(openTables);
+            }
+          } catch {}
+        }
+
+        if (currentType === DINE_IN || (!currentType && (parentOrderId || preferredId))) {
+          let effectiveTableId = preferredId;
+          if (!hasScannedTable() && !effectiveTableId && openTables.length > 0) {
+            effectiveTableId = openTables[0].id;
+          }
+
+          if (hasScannedTable() || effectiveTableId) {
+            const view = await applyOrderContext(DINE_IN, effectiveTableId);
+            if (!active) return;
+            const matchedTable = (allTables.length ? allTables : openTables).find(t => Number(t.id) === Number(effectiveTableId));
+            const targetTable = view.table || matchedTable || (effectiveTableId ? { id: effectiveTableId, table_number: formatCompactTableLabel(String(effectiveTableId)) } : null);
+            setCartView(enforceCartPricing(view, DINE_IN, targetTable));
+            setType(DINE_IN);
+            setOrderType(DINE_IN);
+            if (view.table || targetTable) {
+              const tb = view.table || targetTable;
+              setSelectedTableId(tb.id, tb.table_number);
+              rememberDineInTableId(tb.id);
+              setTable({ tableNumber: tb.table_number, tableId: tb.id, location: tb.location, orderType: DINE_IN });
+            }
+          } else {
+            const view = await fetchCurrentCart();
+            if (!active) return;
+            setCartView(enforceCartPricing(view, DINE_IN, null));
+            setType(DINE_IN);
+            setOrderType(DINE_IN);
           }
         } else if (currentType === TAKEAWAY) {
           const view = await applyOrderContext(TAKEAWAY);
           if (!active) return;
-          setCartView(enforceCartPricing(view, TAKEAWAY));
+          setCartView(enforceCartPricing(view, TAKEAWAY, null));
           setType(TAKEAWAY);
+          setOrderType(TAKEAWAY);
           setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: TAKEAWAY });
         } else {
           const view = await fetchCurrentCart();
@@ -230,6 +291,7 @@ export const Checkout = () => {
             setOrderType(initialType);
             if (initialType === DINE_IN && view?.table) {
               setSelectedTableId(view.table.id, view.table.table_number);
+              rememberDineInTableId(view.table.id);
               setTable({ tableNumber: view.table.table_number, tableId: view.table.id, location: view.table.location, orderType: DINE_IN });
             }
           }
@@ -252,11 +314,17 @@ export const Checkout = () => {
   }, []);
 
   const items = cartView?.items || [];
-  const canProceed = Boolean(orderType && cartView?.can_checkout) && !busy;
+  const canProceed = Boolean(
+    orderType &&
+    cartView?.can_checkout &&
+    (orderType === TAKEAWAY || cartView?.table || hasScannedTable() || getSelectedTableId())
+  ) && !busy;
 
   return (
     <CustomerLayout>
       <main className="pt-2">
+        <CheckoutStepper currentStep={2} />
+
         <div className="d-flex align-items-center gap-3 mb-4">
           <BackButton />
           <h4 className="fw-bold text-dark mb-0">Checkout Details</h4>
@@ -264,13 +332,39 @@ export const Checkout = () => {
 
         <div className="row g-4">
           <div className="col-12 col-lg-8">
+            {Boolean(sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')) && (
+              <div className="alert alert-info py-2.5 px-3 mb-3 d-flex align-items-center justify-content-between gap-2 small rounded-3 border-0 shadow-xs" style={{ fontSize: '13px' }}>
+                <div className="d-flex align-items-center gap-2">
+                  <i className="bi bi-info-circle-fill text-primary flex-shrink-0 fs-6" />
+                  <div>
+                    <strong>Continuing Order #{sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')}</strong>
+                    {cartView?.table ? ` · Table ${formatCompactTableLabel(cartView.table.table_number)}` : ''}.
+                    <span className="text-secondary d-block mt-0.5" style={{ fontSize: '12px' }}>
+                      Extra dishes will be sent to the kitchen and combined into your final table bill.
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary py-1 px-2.5 text-nowrap rounded-2 ms-2"
+                  style={{ fontSize: '11px' }}
+                  onClick={() => {
+                    sessionStorage.removeItem('foodie_parent_order_id');
+                    localStorage.removeItem('foodie_parent_order_id');
+                    setBusy((prev) => !prev);
+                  }}
+                >
+                  Start New Order
+                </button>
+              </div>
+            )}
             <div className="card rounded-3 border-0 shadow-sm p-3 p-sm-4 bg-white text-start mb-4">
               <h5 className="fw-bold text-dark mb-3">Service Option</h5>
               <div className="d-flex flex-column flex-sm-row gap-3">
                 <OptionButton
                   testId="order-type-dine-in"
                   active={orderType === DINE_IN}
-                  onClick={() => chooseType(DINE_IN, getSelectedTableId())}
+                  onClick={() => chooseType(DINE_IN)}
                   icon={<FiCoffee size={22} />}
                   title="Table Dine-In"
                   hint={hasScannedTable() ? 'Served at the table you scanned' : 'Choose an available table'}
@@ -287,49 +381,40 @@ export const Checkout = () => {
               {notice && (
                 <div className="alert alert-warning small py-2 mt-3 mb-0" role="status" data-testid="no-tables-banner">
                   {notice}
-                  <button type="button" className="btn btn-link btn-sm p-0 ms-2" onClick={() => chooseType(DINE_IN, null)}>Check again</button>
+                  <button type="button" className="btn btn-link btn-sm p-0 ms-2" onClick={() => chooseType(DINE_IN)}>Check again</button>
                 </div>
               )}
-              {tableChoices && sessionStorage.getItem('foodie_staff_ordering') !== '1' && !hasScannedTable() && (
-                <div className="d-flex flex-wrap gap-2 mt-3">
-                  {tableChoices.map((table) => (
-                    <button
-                      key={table.id}
-                      type="button"
-                      className="btn btn-sm btn-outline-danger"
-                      onClick={() => {
-                        setSelectedTableId(table.id, table.table_number);
-                        setTableChoices(null);
-                        chooseType(DINE_IN, table);
-                      }}
-                    >
-                      {formatCompactTableLabel(table.table_number)}
-                    </button>
-                  ))}
+              {orderType === DINE_IN && !hasScannedTable() && sessionStorage.getItem('foodie_staff_ordering') !== '1' && tableChoices && tableChoices.length > 0 && (
+                <div className="mt-3">
+                  <span className="small text-secondary fw-semibold d-block mb-2">Available Tables:</span>
+                  <div className="d-flex flex-wrap gap-2">
+                    {tableChoices.map((table) => {
+                      const isSelected = Number(table.id) === Number(cartView?.table?.id || getSelectedTableId());
+                      return (
+                        <button
+                          key={table.id}
+                          type="button"
+                          data-testid={`select-table-${table.id}`}
+                          aria-pressed={isSelected}
+                          className={`btn btn-sm rounded-pill px-3 py-1.5 ${isSelected ? 'btn-danger text-white fw-bold shadow-sm' : 'btn-outline-danger bg-white'}`}
+                          onClick={() => chooseType(DINE_IN, table)}
+                        >
+                          {formatCompactTableLabel(table.table_number)}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
               )}
               {orderType === DINE_IN && cartView?.table && (
                 <div className="p-3 bg-light rounded-3 border border-light-subtle mt-3 d-flex align-items-center justify-content-between">
                   <div>
                     <span className="small text-secondary fw-semibold">Table:</span>
-                    <h6 className="fw-bold text-dark mb-0">{formatCompactTableLabel(cartView.table.table_number)}{cartView.table.location ? ` · ${cartView.table.location}` : ''}</h6>
+                    <h6 className="fw-bold text-dark mb-0">
+                      {formatCompactTableLabel(cartView.table.table_number)}
+                      {cartView.table.location ? ` · ${cartView.table.location}` : ''}
+                    </h6>
                   </div>
-                  {!hasScannedTable() && sessionStorage.getItem('foodie_staff_ordering') !== '1' && (
-                    <button
-                      type="button"
-                      className="btn btn-link btn-sm text-danger text-decoration-none p-0 fw-semibold"
-                      onClick={async () => {
-                        try {
-                          const branchId = await resolvePublicBranchId();
-                          const tables = branchId ? await availableTables(branchId) : [];
-                          const open = selectableTables(tables);
-                          if (open.length > 0) setTableChoices(open);
-                        } catch {}
-                      }}
-                    >
-                      Change Table
-                    </button>
-                  )}
                 </div>
               )}
               {!orderType && !error && (
@@ -344,7 +429,7 @@ export const Checkout = () => {
                 {items.length === 0 ? (
                   <div className="text-center py-3">
                     <p className="text-secondary small mb-3">Your cart is empty.</p>
-                    <Button onClick={() => navigate('/customer/home')} variant="primary" className="py-2">Browse Menu</Button>
+                    <Button onClick={() => navigate('/customer/home')} variant="primary" className="py-2.5 px-4 rounded-pill">Browse Menu</Button>
                   </div>
                 ) : (
                   <div className="d-flex flex-column gap-3">
@@ -375,7 +460,7 @@ export const Checkout = () => {
                   <Button
                     type="button"
                     variant="outline"
-                    className="py-2 fw-bold"
+                    className="py-2.5 fw-bold rounded-pill"
                     onClick={() => navigate('/customer/cart')}
                   >
                     Update cart
@@ -386,7 +471,7 @@ export const Checkout = () => {
                   data-testid="proceed-to-payment"
                   onClick={() => navigate('/customer/payment', { state: { orderType } })}
                   variant="primary"
-                  className="py-2.5 fw-bold shadow-sm"
+                  className="py-2.5 fw-bold shadow-sm rounded-pill"
                   disabled={!canProceed}
                   loading={busy}
                 >

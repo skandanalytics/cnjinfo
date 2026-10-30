@@ -4,18 +4,18 @@ import { AppContext } from '../../context/AppContext';
 import { useAuth } from '../../hooks/useAuth';
 import { 
   FiGrid, FiShoppingBag, FiLayers, FiActivity, 
-  FiSliders, FiLogOut, FiUsers, FiCpu, FiTag, FiBookOpen, FiMapPin, FiMonitor
+  FiSliders, FiUsers, FiCpu, FiTag, FiBookOpen, FiMapPin, FiMonitor
 } from 'react-icons/fi';
 
 export const Sidebar = () => {
   const { sidebarCollapsed } = useContext(AppContext);
-  const { logout, user } = useAuth();
+  const { user } = useAuth();
   const isEmployee = user?.role === 'employee';
 
-  const width = sidebarCollapsed ? '70px' : '250px';
+  const width = sidebarCollapsed ? '72px' : '240px';
 
   return (
-    <div 
+    <aside 
       className={`sidebar-container ${sidebarCollapsed ? 'collapsed' : ''}`}
       style={{ 
         position: 'fixed',
@@ -28,81 +28,79 @@ export const Sidebar = () => {
         maxWidth: width, 
         flex: `0 0 ${width}`,
         zIndex: 1000,
-        backgroundColor: '#1E1E2D',
-        color: '#a2a3b7',
+        backgroundColor: '#111827',
+        color: '#94A3B8',
         display: 'flex',
         flexDirection: 'column',
-        boxShadow: '0 0 20px 0 rgba(0, 0, 0, 0.25)',
-        transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+        boxShadow: '0 0 25px rgba(0, 0, 0, 0.3)',
+        transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         overflowY: 'auto',
-        overflowX: 'hidden'
+        overflowX: 'hidden',
+        borderRight: '1px solid #1F2937'
       }}
     >
+      {/* Brand Header */}
       <NavLink 
         to={isEmployee ? "/employee/dashboard" : "/admin/dashboard"}
-        className="p-4 border-bottom border-secondary d-flex align-items-center justify-content-between text-decoration-none"
-        style={{ cursor: 'pointer' }}
+        className="px-3 py-3.5 border-bottom d-flex align-items-center gap-2.5 text-decoration-none"
+        style={{ borderColor: '#1F2937', cursor: 'pointer' }}
       >
+        <span 
+          className="rounded-3 d-flex align-items-center justify-content-center fw-extrabold text-white flex-shrink-0 shadow-sm"
+          style={{ width: '36px', height: '36px', backgroundColor: 'var(--primary-color, #C8102E)', fontSize: '18px' }}
+        >
+          F
+        </span>
         {!sidebarCollapsed && (
-          <div className="d-flex align-items-center gap-2">
-            <span className="badge bg-danger rounded-circle p-2">🍔</span>
-            <span className="fw-bold text-white fs-5">{isEmployee ? 'Foodie Staff' : 'Foodie Admin'}</span>
-          </div>
-        )}
-        {sidebarCollapsed && (
-          <span className="badge bg-danger rounded-circle p-2 mx-auto">🍔</span>
+          <span className="fw-bold text-white fs-5 tracking-tight" style={{ letterSpacing: '-0.3px' }}>
+            {isEmployee ? 'Foodie Staff' : 'Foodie Admin'}
+          </span>
         )}
       </NavLink>
 
-      <ul className="list-unstyled flex-grow-1 p-3 mb-0 d-flex flex-column gap-1 overflow-auto">
-        <li className="sidebar-section-title">
-          {!sidebarCollapsed ? 'Main' : '•••'}
-        </li>
+      {/* Nav List */}
+      <ul className="list-unstyled flex-grow-1 py-3 px-2 mb-0 d-flex flex-column gap-1 overflow-auto">
         <li>
-          <NavLink to={isEmployee ? "/employee/dashboard" : "/admin/dashboard"} className="sidebar-link">
-            <FiGrid size={18} />
+          <NavLink to={isEmployee ? "/employee/dashboard" : "/admin/dashboard"} end className="sidebar-link">
+            <FiGrid size={18} className="flex-shrink-0" />
             {!sidebarCollapsed && <span>Dashboard</span>}
           </NavLink>
         </li>
         <li>
           <NavLink to={isEmployee ? "/employee/pos" : "/admin/pos"} className="sidebar-link">
-            <FiMonitor size={18} />
+            <FiMonitor size={18} className="flex-shrink-0" />
             {!sidebarCollapsed && <span>POS / Take Order</span>}
           </NavLink>
         </li>
         <li>
           <NavLink to={isEmployee ? "/employee/orders" : "/admin/orders"} className="sidebar-link">
-            <FiShoppingBag size={18} />
+            <FiShoppingBag size={18} className="flex-shrink-0" />
             {!sidebarCollapsed && <span>Orders</span>}
           </NavLink>
         </li>
         <li>
           <NavLink to={isEmployee ? "/employee/tables" : "/admin/tables"} className="sidebar-link">
-            <FiLayers size={18} />
+            <FiLayers size={18} className="flex-shrink-0" />
             {!sidebarCollapsed && <span>Tables</span>}
           </NavLink>
         </li>
         <li>
           <NavLink to={isEmployee ? "/employee/kitchen" : "/admin/kitchen"} className="sidebar-link">
-            <FiCpu size={18} />
+            <FiCpu size={18} className="flex-shrink-0" />
             {!sidebarCollapsed && <span>Kitchen Queue</span>}
           </NavLink>
         </li>
         {!isEmployee && (
           <li>
             <NavLink to="/admin/menus" className="sidebar-link">
-              <FiBookOpen size={18} />
-              {!sidebarCollapsed && <span>Add Menu</span>}
+              <FiBookOpen size={18} className="flex-shrink-0" />
+              {!sidebarCollapsed && <span>Menu Management</span>}
             </NavLink>
           </li>
         )}
-
-        <li className="sidebar-section-title">
-          {!sidebarCollapsed ? 'Operations' : '•••'}
-        </li>
         <li>
           <NavLink to={isEmployee ? "/employee/inventory" : "/admin/inventory"} className="sidebar-link">
-            <FiSliders size={18} />
+            <FiSliders size={18} className="flex-shrink-0" />
             {!sidebarCollapsed && <span>Inventory</span>}
           </NavLink>
         </li>
@@ -110,25 +108,31 @@ export const Sidebar = () => {
           <>
             <li>
               <NavLink to="/admin/branches" className="sidebar-link">
-                <FiMapPin size={18} />
-                {!sidebarCollapsed && <span>Manage Branch</span>}
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/admin/offers" className="sidebar-link">
-                <FiTag size={18} />
-                {!sidebarCollapsed && <span>Offers & Coupons</span>}
+                <FiMapPin size={18} className="flex-shrink-0" />
+                {!sidebarCollapsed && <span>Branches</span>}
               </NavLink>
             </li>
             <li>
               <NavLink to="/admin/users" className="sidebar-link">
-                <FiUsers size={18} />
-                {!sidebarCollapsed && <span>Employee</span>}
+                <FiUsers size={18} className="flex-shrink-0" />
+                {!sidebarCollapsed && <span>Employees</span>}
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/admin/offers" className="sidebar-link">
+                <FiTag size={18} className="flex-shrink-0" />
+                {!sidebarCollapsed && <span>Coupons</span>}
+              </NavLink>
+            </li>
+            <li>
+              <NavLink to="/admin/reports" className="sidebar-link">
+                <FiActivity size={18} className="flex-shrink-0" />
+                {!sidebarCollapsed && <span>Reports</span>}
               </NavLink>
             </li>
             <li>
               <NavLink to="/admin/settings" className="sidebar-link">
-                <FiSliders size={18} />
+                <FiSliders size={18} className="flex-shrink-0" />
                 {!sidebarCollapsed && <span>Settings</span>}
               </NavLink>
             </li>
@@ -136,14 +140,29 @@ export const Sidebar = () => {
         )}
       </ul>
 
-      <div className="p-3 border-top border-secondary mt-auto">
-        {!sidebarCollapsed && (
-          <div className="small text-secondary">
-            Logged in as <strong className="text-white d-block">{user?.name || (isEmployee ? 'Staff' : 'Admin')}</strong>
+      {/* User Footer Context */}
+      {!sidebarCollapsed && (
+        <div className="p-3 border-top mt-auto" style={{ borderColor: '#1F2937' }}>
+          <div className="d-flex align-items-center gap-2">
+            <div 
+              className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
+              style={{ width: '32px', height: '32px', backgroundColor: 'var(--primary-color, #C8102E)', fontSize: '13px' }}
+            >
+              {user?.name?.charAt(0).toUpperCase() || 'A'}
+            </div>
+            <div className="overflow-hidden">
+              <span className="d-block text-white fw-semibold small text-truncate" style={{ fontSize: '12px' }}>
+                {user?.name || (isEmployee ? 'Staff' : 'foodieadmin')}
+              </span>
+              <span className="d-block text-secondary small text-truncate" style={{ fontSize: '11px', color: '#94A3B8' }}>
+                {isEmployee ? 'Employee' : 'Admin'}
+              </span>
+            </div>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+    </aside>
   );
 };
+
 export default Sidebar;

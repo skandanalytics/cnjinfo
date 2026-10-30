@@ -26,7 +26,7 @@ const getJsPDF = async () => {
  */
 const printHtmlInvoice = (order, backendId, payment, customer) => {
   try {
-    const displayOrderNum = String(backendId || order.id || order.backendNumericId || 'N/A');
+    const displayOrderNum = String(order?.display_order_number || order?.display_number || backendId || order?.id || order?.backendNumericId || 'N/A');
     const items = Array.isArray(order.items) ? order.items : [];
     const subtotal = parseFloat(order.subtotal || 0) || items.reduce((s, i) => s + (parseFloat(i.price || 0) * (parseInt(i.quantity) || 1)), 0);
     const isTakeaway = order.orderType === 'Takeaway' || order.table === 'Takeaway' || order.packingCharge > 0 || order.packing_charge > 0;
@@ -436,7 +436,7 @@ export const generateEBillPDF = async (orderOrId) => {
     let box1Y = y + 5;
     const box1X = margin + 4;
 
-    const displayOrderNum = String(backendId || order.backendNumericId || order.id || 'N/A');
+    const displayOrderNum = String(order?.display_order_number || order?.display_number || backendId || order?.backendNumericId || order?.id || 'N/A');
 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);

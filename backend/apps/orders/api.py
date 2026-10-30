@@ -21,6 +21,8 @@ class PlaceOrderSerializer(serializers.Serializer):
     payment_method = serializers.ChoiceField(choices=["UPI", "CARD", "NETBANKING", "WALLET", "COUNTER"])
     cart_id = serializers.IntegerField(required=False, allow_null=True)
     cart = serializers.IntegerField(required=False, allow_null=True)
+    parent_order = serializers.IntegerField(required=False, allow_null=True)
+    parent_order_id = serializers.IntegerField(required=False, allow_null=True)
     service_tax_enabled = serializers.BooleanField(required=False, default=True)
 
 
@@ -49,10 +51,12 @@ class OrderListCreateView(APIView):
                 return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
                                 status=status.HTTP_403_FORBIDDEN)
         try:
+            parent_order_id = ser.validated_data.get("parent_order_id") or ser.validated_data.get("parent_order")
             order, created = create_from_cart(request.user, ser.validated_data["branch"],
                                               ser.validated_data["idempotency_key"],
                                               ser.validated_data["payment_method"],
-                                              service_tax_enabled=ser.validated_data.get("service_tax_enabled", True))
+                                              service_tax_enabled=ser.validated_data.get("service_tax_enabled", True),
+                                              parent_order_id=parent_order_id)
         except OrderError as exc:
             return _error(exc)
         if created:
@@ -92,23 +96,39 @@ class AssistedOrderSerializer(serializers.Serializer):
     table = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     branch = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY"], default="DINE_IN")
+    parent_order = serializers.IntegerField(required=False, allow_null=True)
+    parent_order_id = serializers.IntegerField(required=False, allow_null=True)
     items = AssistedItemSerializer(many=True)
     idempotency_key = serializers.CharField(max_length=64)
     coupon_code = serializers.CharField(max_length=50, required=False, allow_blank=True, default="")
-    customer_phone = serializers.CharField(max_length=20, required=True, allow_blank=False)
+    customer_phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
     customer_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     payment_method = serializers.CharField(max_length=30, required=False, default="CASH")
     mark_paid = serializers.BooleanField(required=False, default=False)
     service_tax_enabled = serializers.BooleanField(required=False, default=True)
 
-    def validate_customer_phone(self, value):
-        val = (value or "").strip()
-        if not val:
-            raise serializers.ValidationError("Customer mobile number is required.")
-        digits = "".join(filter(str.isdigit, val))
-        if len(digits) < 7:
-            raise serializers.ValidationError("Please enter a valid mobile number.")
-        return val
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        phone = (attrs.get("customer_phone") or "").strip()
+        parent_id = attrs.get("parent_order_id") or attrs.get("parent_order")
+        if not parent_id and not phone:
+            table_id = attrs.get("table")
+            if table_id:
+                from apps.orders.models import Order
+                has_active = Order.objects.filter(
+                    table_id=table_id,
+                    order_type=Order.Type.DINE_IN,
+                    status__in=Order.ACTIVE_STATUSES
+                ).exists()
+                if not has_active:
+                    raise serializers.ValidationError({"customer_phone": "Customer mobile number is required."})
+            else:
+                raise serializers.ValidationError({"customer_phone": "Customer mobile number is required."})
+        elif phone:
+            digits = "".join(filter(str.isdigit, phone))
+            if len(digits) < 7:
+                raise serializers.ValidationError({"customer_phone": "Please enter a valid mobile number."})
+        return attrs
 
 
 class AssistedOrderView(APIView):
@@ -121,6 +141,7 @@ class AssistedOrderView(APIView):
         if not data["items"]:
             return Response({"detail": "Add at least one dish.", "code": "cart_empty"}, status=400)
         try:
+            parent_order_id = data.get("parent_order_id") or data.get("parent_order")
             order, created = create_assisted(
                 request.user,
                 data.get("table"),
@@ -134,6 +155,7 @@ class AssistedOrderView(APIView):
                 mark_paid=data.get("mark_paid", False),
                 payment_method=data.get("payment_method", "CASH"),
                 service_tax_enabled=data.get("service_tax_enabled", True),
+                parent_order_id=parent_order_id,
             )
         except OrderError as exc:
             return _error(exc)
@@ -261,10 +283,22 @@ class OrderDetailView(APIView):
         if not user.is_authenticated:
             return None
         if user.user_type == "CUSTOMER":
-            return order if order.customer_id == user.id else None
+            clean_phone = str(user.phone).replace("+91", "").strip() if getattr(user, "phone", None) else ""
+            is_owner = (order.customer_id == user.id) or (
+                bool(clean_phone and order.customer_phone and str(order.customer_phone).replace("+91", "").strip() == clean_phone)
+            )
+            if not is_owner and order.parent_order_id:
+                p = order.parent_order
+                if p and (p.customer_id == user.id or bool(clean_phone and p.customer_phone and str(p.customer_phone).replace("+91", "").strip() == clean_phone)):
+                    is_owner = True
+            if not is_owner:
+                root = order.parent_order if order.parent_order_id else order
+                if root.continuations.filter(customer_id=user.id).exists():
+                    is_owner = True
+                elif clean_phone and any(str(c.customer_phone or "").replace("+91", "").strip() == clean_phone for c in root.continuations.all()):
+                    is_owner = True
+            return order if is_owner else None
         if not can_access_branch(user, order.branch_id):
-            return None
-        if not _sees_every_order(user) and order.placed_by_id != user.id:
             return None
         return order
 
@@ -311,3 +345,70 @@ class KitchenQueueView(APIView):
         if branch and emp and emp.branch_id is None:
             qs = qs.filter(branch_id=branch)
         return Response([serialize_order(o) for o in qs.order_by("created_at").prefetch_related("items", "status_history")])
+
+
+class ProceedToBillView(APIView):
+    permission_classes = [_CustomerOrStaff]
+
+    def post(self, request, pk):
+        detail_view = OrderDetailView()
+        order = detail_view._visible(request, pk)
+        if order is None:
+            return Response({"detail": "Not found."}, status=404)
+
+        root = order.parent_order if order.parent_order_id else order
+
+        if root.status == Order.Status.CANCELLED:
+            return Response({"detail": "Cancelled orders cannot proceed to bill.", "code": "order_cancelled"}, status=400)
+
+        # Transition root order and all sibling continuations if not already completed
+        if root.status != Order.Status.COMPLETED:
+            try:
+                change_status(root.id, Order.Status.COMPLETED, request.user, "Proceed to Bill confirmed")
+            except OrderError as exc:
+                return _error(exc)
+
+        from django.utils import timezone
+        from .models import OrderStatusHistory
+        for sibling in root.continuations.exclude(status__in=[Order.Status.CANCELLED, Order.Status.COMPLETED]):
+            prev_status = sibling.status
+            sibling.status = Order.Status.COMPLETED
+            if not sibling.completed_at:
+                sibling.completed_at = timezone.now()
+            sibling.save(update_fields=["status", "completed_at", "updated_at"])
+            OrderStatusHistory.objects.create(
+                order=sibling,
+                from_status=prev_status,
+                to_status=Order.Status.COMPLETED,
+                note="Proceed to Bill confirmed",
+                changed_by=request.user,
+            )
+
+        # Ensure final invoice is generated
+        from apps.billing.services import ensure_final_invoice, preview_bill
+        try:
+            ensure_final_invoice(root)
+        except Exception:
+            pass
+
+        # Free the table automatically when proceed-to-bill completes the session
+        from .lifecycle import _release_if_idle
+        target_table = root.table or order.table
+        if target_table:
+            _release_if_idle(target_table)
+
+        order.refresh_from_db()
+
+        record_audit(
+            request.user,
+            "order.proceed_to_bill",
+            "Order",
+            order.id,
+            branch=order.branch,
+            changes={"status": Order.Status.COMPLETED},
+            ip=request.META.get("REMOTE_ADDR"),
+        )
+        return Response({
+            "order": serialize_order(order),
+            "bill": preview_bill(root),
+        })

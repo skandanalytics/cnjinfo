@@ -28,7 +28,8 @@ import {
   FiShield,
   FiCoffee,
   FiLayers,
-  FiCreditCard
+  FiCreditCard,
+  FiCheckCircle
 } from 'react-icons/fi';
 
 export const Users = () => {
@@ -865,7 +866,7 @@ export const Users = () => {
                   <button
                     type="button"
                     disabled={isSubmitting}
-                    className="btn btn-secondary btn-sm rounded-pill px-4"
+                    className="btn btn-outline-danger btn-sm rounded-pill px-4"
                     onClick={() => {
                       setIsAddModalOpen(false);
                       setEditingUser(null);
@@ -896,17 +897,29 @@ export const Users = () => {
       )}
 
       {createdName && (
-        <div className="modal show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+        <div className="modal show d-block animate-fade-in" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1055 }}>
           <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content border-0 rounded-4 shadow">
+            <div className="modal-content border-0 rounded-4 shadow-lg p-3 text-center">
               <div className="modal-body p-4 text-center">
-                <h5 className="fw-bold text-dark">Employee created successfully.</h5>
-                <p className="text-secondary mb-0">{createdName} has been added to the staff directory.</p>
-              </div>
-              <div className="modal-footer border-0 justify-content-center pb-4">
-                <button type="button" className="btn btn-danger rounded-pill px-4 fw-bold" onClick={() => setCreatedName('')}>
-                  OK
-                </button>
+                <div 
+                  className="rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow-xs"
+                  style={{ width: '64px', height: '64px', backgroundColor: '#e8f5e9', color: '#16a34a' }}
+                >
+                  <FiCheckCircle size={36} />
+                </div>
+                <h4 className="fw-bold text-dark mb-1">Employee Created Successfully!</h4>
+                <p className="text-secondary small mb-4">{createdName} has been registered and added to your staff directory.</p>
+                
+                <div className="d-flex justify-content-center">
+                  <button 
+                    type="button" 
+                    className="btn btn-danger rounded-pill px-5 py-2 fw-bold shadow-sm"
+                    style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)' }}
+                    onClick={() => setCreatedName('')}
+                  >
+                    Done
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -926,7 +939,7 @@ export const Users = () => {
                 {deleteError && <div className="alert alert-danger py-2 small mt-3 mb-0">{deleteError}</div>}
               </div>
               <div className="modal-footer border-0">
-                <button type="button" className="btn btn-light rounded-pill px-4" disabled={deleteBusy} onClick={() => setPendingDelete(null)}>Cancel</button>
+                <button type="button" className="btn btn-outline-danger rounded-pill px-4" disabled={deleteBusy} onClick={() => setPendingDelete(null)}>Cancel</button>
                 <button
                   type="button"
                   className="btn btn-danger rounded-pill px-4 fw-bold"
