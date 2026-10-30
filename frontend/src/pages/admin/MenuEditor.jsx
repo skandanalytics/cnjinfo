@@ -143,7 +143,11 @@ export const MenuEditor = () => {
         const filtered = prev.filter(m => normalizeCategoryName(getFrontendCategoryName(m.name)) !== norm);
         return [...filtered, created];
       });
-      setSelectedCategory(created.name);
+      setSelectedCategories(prev => {
+        // If the category is already selected, keep existing list
+        if (prev.includes(created.name)) return prev;
+        return [...prev, created.name];
+      });
     }
     await fetchDetails();
   };
