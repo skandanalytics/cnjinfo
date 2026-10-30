@@ -3,8 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { AppContext } from '../../context/AppContext';
 import { useAuth } from '../../hooks/useAuth';
 import { 
-  FiGrid, FiShoppingBag, FiLayers, FiActivity, 
-  FiSliders, FiUsers, FiCpu, FiTag, FiBookOpen, FiMapPin, FiMonitor
+  FiGrid, FiShoppingBag, FiLayers, FiSliders, FiUsers, FiCpu, FiTag, FiBookOpen, FiMapPin, FiMonitor
 } from 'react-icons/fi';
 
 export const Sidebar = () => {
@@ -53,7 +52,7 @@ export const Sidebar = () => {
         </span>
         {!sidebarCollapsed && (
           <span className="fw-bold text-white fs-5 tracking-tight" style={{ letterSpacing: '-0.3px' }}>
-            {isEmployee ? 'Foodie Staff' : 'Foodie Admin'}
+            {isEmployee ? 'Foodie Staff' : 'Foodie  Admin'}
           </span>
         )}
       </NavLink>
@@ -122,12 +121,6 @@ export const Sidebar = () => {
               <NavLink to="/admin/offers" className="sidebar-link">
                 <FiTag size={18} className="flex-shrink-0" />
                 {!sidebarCollapsed && <span>Coupons</span>}
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/admin/reports" className="sidebar-link">
-                <FiActivity size={18} className="flex-shrink-0" />
-                {!sidebarCollapsed && <span>Reports</span>}
               </NavLink>
             </li>
             <li>
