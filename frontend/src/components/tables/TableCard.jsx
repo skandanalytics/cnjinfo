@@ -1,6 +1,15 @@
 import React from 'react';
 import { FiLayers, FiShoppingCart, FiEdit2, FiTrash2 } from 'react-icons/fi';
-import { tableService } from '../../services/tableService';
+
+export function getShortTableNumber(val) {
+  if (!val && val !== 0) return 'T1';
+  const str = String(val).trim();
+  const digits = str.replace(/\D/g, '');
+  if (digits) {
+    return `T${parseInt(digits, 10)}`;
+  }
+  return str.startsWith('T') ? str : `T${str}`;
+}
 
 export const TableCard = ({
   table,
@@ -9,20 +18,20 @@ export const TableCard = ({
   onEdit,
   onDelete,
   onViewQR,
-  onTrackOrder,
   isAdmin = false,
   showActions = false,
   hasDishes = true,
   hasActiveOrder = false
 }) => {
-  const isOccupied = table.status === 'Occupied' || hasActiveOrder || Boolean(table.is_occupied);
+  const isOccupied = table.status === 'Occupied' || hasActiveOrder || Boolean(table.has_active_order) || Boolean(table.is_occupied);
   const isReserved = table.status === 'Reserved';
   const isInactive = table.is_active === false;
 
-  const currentStatus = isOccupied ? 'Occupied' : isReserved ? 'Reserved' : (table.status || 'Available');
-  const statusColor = currentStatus === 'Occupied' ? '#ef4444' : currentStatus === 'Reserved' ? '#f59e0b' : '#22c55e';
+  const statusColor = isOccupied ? '#ef4444' : isReserved ? '#f59e0b' : '#22c55e';
+  const statusLabel = isOccupied ? 'Occupied' : isReserved ? 'Reserved' : 'Available';
 
   const isTakeOrderDisabled = !hasDishes || isOccupied || isInactive;
+  const hasUnfinishedOrders = Boolean(table.has_active_order || hasActiveOrder);
 
   const getTakeOrderTooltip = () => {
     if (isOccupied) return 'Table is occupied.';
@@ -32,104 +41,147 @@ export const TableCard = ({
   };
 
   const rawNum = table.number || table.table_number || table.id || '';
-  const displayTableNum = tableService.getCanonicalTableNumber(rawNum);
-  const locationLabel = table.location || table.area || 'Indoor';
+  const shortNum = getShortTableNumber(rawNum);
 
   return (
-    <div 
-      className={`card border rounded-4 shadow-sm p-3 h-100 transition-all ${
-        isOccupied ? 'border-danger-subtle' : 'border-success-subtle'
-      }`}
-      style={{
-        backgroundColor: 'var(--surface-color)',
-        transition: 'all 0.2s ease',
-        cursor: 'pointer'
-      }}
-      onClick={() => {
-        if (isOccupied && onTrackOrder) onTrackOrder(table);
-        else if (onSelect) onSelect(table);
-      }}
-    >
-      {/* Top Header: Table Number & Admin Actions */}
-      <div className="d-flex align-items-center justify-content-between mb-2 pb-1">
-        <h5 className="fw-bold text-dark mb-0 fs-5">
-          {displayTableNum.startsWith('T') ? displayTableNum : `T${String(displayTableNum).padStart(2, '0')}`}
-        </h5>
-
-        <div className="d-flex align-items-center gap-1" onClick={(e) => e.stopPropagation()}>
+    <div className={`table-card transition-all ${
+      !isOccupied && !isReserved ? 'table-available' : 
+      isOccupied ? 'table-occupied' : 'table-reserved'
+    } ${isInactive ? 'opacity-75' : ''}`}>
+      {/* Top Header: Table Short Name & Availability Indicator */}
+      <div className="d-flex align-items-center justify-content-between mb-2.5 pb-2 border-bottom flex-shrink-0">
+        <div className="d-flex align-items-center" style={{ gap: '8px' }}>
+          <FiLayers size={17} className="text-secondary flex-shrink-0" />
+          <span className="fw-bold text-dark text-nowrap fs-6" style={{ letterSpacing: '-0.2px' }}>
+            {shortNum}
+          </span>
+          <span
+            className="rounded-circle d-inline-block flex-shrink-0"
+            style={{
+              width: '9px',
+              height: '9px',
+              backgroundColor: statusColor,
+              boxShadow: `0 0 0 2.5px ${statusColor}33`,
+            }}
+            title={statusLabel}
+            aria-label={`Table status: ${statusLabel}`}
+            role="status"
+          />
+        </div>
+        <div className="d-flex align-items-center flex-shrink-0" style={{ gap: '6px' }}>
           {isAdmin && (
-            <>
+            <div className="d-flex align-items-center gap-1 ms-1">
               <button 
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onEdit(table); }}
-                className="btn btn-sm btn-link text-secondary p-1 border-0"
+                className="btn btn-sm btn-outline-secondary p-0 border-0"
+                style={{ borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Edit Table"
               >
-                <FiEdit2 size={13} />
+                <FiEdit2 size={12} />
               </button>
               <button 
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onDelete(table); }}
-                className="btn btn-sm btn-link text-danger p-1 border-0"
+                className="btn btn-sm btn-outline-danger p-0 border-0"
+                style={{ borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 title="Delete Table"
               >
-                <FiTrash2 size={13} />
+                <FiTrash2 size={12} />
               </button>
-            </>
+            </div>
           )}
         </div>
       </div>
 
-      {/* Middle Body: Location & Capacity */}
-      <div className="mb-3 text-secondary" style={{ fontSize: '12px' }}>
-        <div className="fw-semibold text-secondary mb-0.5">{locationLabel}</div>
-        <div className="text-muted" style={{ fontSize: '11px' }}>{table.capacity || 4} Diners</div>
-      </div>
-
-      {/* Status Pill Badge */}
-      <div className="mt-auto d-flex align-items-center justify-content-between pt-2 border-top">
-        <span 
-          className={`badge rounded-pill fw-bold px-2.5 py-1 d-inline-flex align-items-center gap-1.5 ${
-            isOccupied 
-              ? 'bg-danger-subtle text-danger border border-danger-subtle' 
-              : 'bg-success-subtle text-success border border-success-subtle'
-          }`}
-          style={{ fontSize: '11px' }}
-        >
-          <span 
-            className={`rounded-circle d-inline-block ${isOccupied ? 'bg-danger' : 'bg-success'}`}
-            style={{ width: '6px', height: '6px' }}
-          />
-          {isOccupied ? 'Occupied' : 'Available'}
-        </span>
-
-        {isOccupied ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onTrackOrder) onTrackOrder(table);
-            }}
-            className="btn btn-xs btn-outline-danger rounded-pill px-2.5 py-0.5 fw-bold"
-            style={{ fontSize: '10.5px' }}
-          >
-            Track Order
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onSelect) onSelect(table);
-            }}
-            className="btn btn-xs btn-danger text-white rounded-pill px-2.5 py-0.5 fw-bold shadow-xs"
-            style={{ fontSize: '10.5px', backgroundColor: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
-          >
-            Take Order
-          </button>
+      {/* Middle Body: Capacity & Details */}
+      <div className="text-start mb-2.5 text-secondary flex-grow-1" style={{ fontSize: '12px', lineHeight: '1.5' }}>
+        <div className="mb-1 text-truncate">
+          Capacity: <strong className="text-dark">{table.capacity || 4} Diners</strong>
+        </div>
+        <div className="mb-1 text-truncate">
+          Location: <strong className="text-dark">{table.location || table.area || 'Indoor Main'}</strong>
+        </div>
+        {isReserved && table.reservationName && (
+          <div className="text-warning-emphasis fw-semibold text-truncate mt-1" style={{ fontSize: '11.5px' }}>
+            Reserved for: {table.reservationName}
+          </div>
         )}
       </div>
+
+      {/* Footer Action Buttons */}
+      {showActions && (
+        <div className="d-flex gap-1.5 justify-content-end pt-2.5 border-top flex-wrap align-items-center mt-auto flex-shrink-0">
+          {hasDishes && onViewQR && (
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                onViewQR(table);
+              }} 
+              className="table-card-btn btn btn-outline-dark"
+              title="View Table QR Code"
+              style={{ fontSize: '11.5px', padding: '4px 8px' }}
+            >
+              <i className="bi bi-qr-code me-1"></i>
+              QR Code
+            </button>
+          )}
+          {!isOccupied && !isReserved && (
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (!hasDishes) return;
+                onStatusChange(table.id, 'Reserved');
+              }} 
+              disabled={!hasDishes}
+              className={`table-card-btn btn ${!hasDishes ? 'btn-outline-secondary opacity-50' : 'btn-outline-warning'}`}
+              style={{ cursor: !hasDishes ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px' }}
+              title={!hasDishes ? "Cannot reserve: menu categories and dishes required" : "Reserve Table"}
+            >
+              Reserve
+            </button>
+          )}
+          {(isOccupied || isReserved) && (
+            <button 
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                if (hasUnfinishedOrders) return;
+                onStatusChange(table.id, 'Available');
+              }} 
+              disabled={hasUnfinishedOrders}
+              className={`table-card-btn btn ${hasUnfinishedOrders ? 'btn-outline-secondary opacity-50' : 'btn-outline-success'}`}
+              style={{ cursor: hasUnfinishedOrders ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px' }}
+              title={hasUnfinishedOrders ? "Cannot vacate: active order in progress" : (isReserved ? "Release Reservation / Vacate" : "Vacate Table")}
+            >
+              Vacate
+            </button>
+          )}
+          <button 
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (isTakeOrderDisabled) return;
+              onSelect(table);
+            }} 
+            disabled={isTakeOrderDisabled}
+            className={`table-card-btn btn ${isTakeOrderDisabled ? 'btn-secondary opacity-50' : 'btn-danger shadow-xs'}`}
+            style={{ cursor: isTakeOrderDisabled ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px' }}
+            title={getTakeOrderTooltip()}
+          >
+            <FiShoppingCart size={12} className="me-1" />
+            Take Order
+          </button>
+        </div>
+      )}
     </div>
   );
 };
+
 export default TableCard;

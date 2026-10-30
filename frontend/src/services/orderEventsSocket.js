@@ -100,7 +100,9 @@ function dispatchLivePayload(data) {
   try {
     const syncTag = resource || (data.order_id ? 'order' : 'data');
     localStorage.setItem('foodie_data_sync', JSON.stringify({ t: Date.now(), resource: syncTag, action: data.action }));
-    localStorage.setItem('foodie_orders_sync_trigger', String(Date.now()));
+    if (data.order_id || data.resource === 'order') {
+      localStorage.setItem('foodie_orders_sync_trigger', String(Date.now()));
+    }
   } catch { /* other tabs */ }
 }
 
@@ -168,65 +170,65 @@ async function connect() {
     }
     networkRetries += 1;
     reconnectTimer = setTimeout(() => {
-      delayMs = Math.min(delayMs * 2, MAX_DELAY_MS);
+      reconnectTimer = null;
       connect();
     }, delayMs);
+    delayMs = Math.min(MAX_DELAY_MS, Math.round(delayMs * 1.5));
+    notify('reconnecting', { attempt: networkRetries, delayMs });
+  };
+
+  ws.onerror = () => {
+    /* onclose handles the reconnect */
   };
 }
 
-function handleLogout() {
+export function startLiveSocket() {
+  stopped = false;
+  if (!logoutBound && typeof window !== 'undefined') {
+    logoutBound = true;
+    window.addEventListener('foodie_logout', () => {
+      stopLiveSocket();
+    });
+  }
+  connect();
+}
+
+export function stopLiveSocket() {
   stopped = true;
   clearSocket();
 }
 
-let lifecycleBound = false;
-function bindLifecycleEvents() {
-  if (lifecycleBound || typeof window === 'undefined') return;
-  lifecycleBound = true;
+export function subscribeLiveEvents(listener) {
+  subscribers.add(listener);
+  startLiveSocket();
+  return () => {
+    subscribers.delete(listener);
+    if (!subscribers.size) stopLiveSocket();
+  };
+}
 
-  window.addEventListener('online', () => {
-    networkRetries = 0;
-    delayMs = 2000;
-    stopped = false;
-    connect();
-    window.dispatchEvent(new CustomEvent('foodie_data_sync_refetch'));
-  });
-
-  window.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      if (!socket || socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
-        networkRetries = 0;
-        delayMs = 2000;
-        stopped = false;
-        connect();
-      }
-      window.dispatchEvent(new CustomEvent('foodie_data_sync_refetch'));
-    }
-  });
-
-  window.addEventListener('focus', () => {
-    if (!socket || socket.readyState === WebSocket.CLOSED) {
-      networkRetries = 0;
-      delayMs = 2000;
-      stopped = false;
-      connect();
-    }
-  });
+export function sendLiveAction(action, payload = {}) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) {
+    return false;
+  }
+  try {
+    socket.send(JSON.stringify({ action, ...payload }));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function startOrderEvents(listener) {
-  subscribers.add(listener);
-  stopped = false;
-  if (!logoutBound && typeof window !== 'undefined') {
-    window.addEventListener('foodie_logout', handleLogout);
-    logoutBound = true;
-  }
-  bindLifecycleEvents();
-  connect();
-  return () => {
-    subscribers.delete(listener);
-    if (subscribers.size === 0) {
-      clearSocket();
+  return subscribeLiveEvents((type, payload) => {
+    if (type === 'message' && payload) {
+      if (payload.order_id || payload.resource === 'order') {
+        listener('order', payload);
+      } else {
+        listener('data', payload);
+      }
+    } else {
+      listener(type, payload);
     }
-  };
+  });
 }

@@ -27,6 +27,13 @@ export const OrderDetailsModal = ({
     setCurrentOrder(order);
   }, [order]);
 
+  useEffect(() => {
+    if (notice) {
+      const timer = setTimeout(() => setNotice(null), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [notice]);
+
   if (!currentOrder) return null;
 
   const isDineIn = currentOrder.orderType !== 'Takeaway' && currentOrder.order_type !== 'TAKEAWAY' && String(currentOrder.table || '').toLowerCase() !== 'takeaway';
@@ -53,7 +60,7 @@ export const OrderDetailsModal = ({
   };
 
   const handleToggleServiceCharge = async (nextChecked) => {
-    if (isPaid || togglingServiceCharge || loading) return;
+    if (togglingServiceCharge || loading) return;
     setTogglingServiceCharge(true);
     setNotice(null);
     try {
@@ -172,7 +179,10 @@ export const OrderDetailsModal = ({
   return (
     <Modal isOpen={isOpen} title={`Order details #${currentOrder.display_order_number || currentOrder.display_number || currentOrder.id}`} onClose={onClose} footerActions={getActionButtons()} size="lg">
       {notice && (
-        <div className={`alert ${notice.kind === 'error' ? 'alert-danger' : 'alert-success'} py-2 small fw-semibold`} role="status">{notice.text}</div>
+        <div className={`alert ${notice.kind === 'error' ? 'alert-danger' : 'alert-success'} py-2 px-3 small fw-semibold d-flex align-items-center justify-content-between mb-3`} role="status">
+          <span>{notice.text}</span>
+          <button type="button" className="btn-close btn-close-sm" onClick={() => setNotice(null)} style={{ fontSize: '10px' }} aria-label="Close" />
+        </div>
       )}
       <div className="row g-4">
         {/* Left Column: Items and summary */}
@@ -259,9 +269,9 @@ export const OrderDetailsModal = ({
                       role="switch"
                       checked={isServiceChargeActive}
                       onChange={(e) => handleToggleServiceCharge(e.target.checked)}
-                      disabled={isPaid || togglingServiceCharge || loading}
-                      title={isPaid ? "Service charge cannot be modified for paid orders" : (isServiceChargeActive ? "Disable service charge for this order" : "Enable service charge for this order")}
-                      style={{ width: '32px', height: '17px' }}
+                      disabled={togglingServiceCharge || loading}
+                      title={isServiceChargeActive ? "Disable service charge for this order" : "Enable service charge for this order"}
+                      style={{ width: '32px', height: '17px', cursor: (togglingServiceCharge || loading) ? 'not-allowed' : 'pointer' }}
                     />
                   </div>
                 )}

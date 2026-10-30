@@ -30,6 +30,9 @@ class Coupon(models.Model):
     # Admin toggle: apply this coupon automatically when the order qualifies. No code entry required.
     auto_apply = models.BooleanField(default=False)
     is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

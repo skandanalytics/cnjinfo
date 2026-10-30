@@ -303,8 +303,19 @@ class ChangePasswordView(APIView):
 class EmployeeViewSet(BranchScopedMixin, viewsets.ModelViewSet):
     """Admin-level only. DELETE removes the employee and their login; orders keep the staff name snapshot."""
 
-    queryset = Employee.objects.select_related("user", "branch").order_by("-id")
+    queryset = Employee.objects.select_related("user", "branch")
     serializer_class = EmployeeSerializer
+
+    def get_queryset(self):
+        from django.db.models import Case, When, Value, IntegerField
+        qs = super().get_queryset()
+        order_case = Case(
+            When(role=Employee.Role.SUPER_ADMIN, then=Value(1)),
+            When(role=Employee.Role.ADMIN, then=Value(2)),
+            default=Value(3),
+            output_field=IntegerField(),
+        )
+        return qs.annotate(role_priority=order_case).order_by("role_priority", "id")
     permission_classes = [IsAdminLevel]
     filterset_fields = ["role", "status", "department", "branch"]
     search_fields = ["user__name", "employee_code", "user__phone"]

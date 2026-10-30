@@ -179,7 +179,7 @@ export const OrderProvider = ({ children }) => {
   };
 
   return (
-    <OrderContext.Provider value={{ orders, loading, fetchOrders, updateStatus }}>
+    <OrderContext.Provider value={{ orders, setOrders, loading, fetchOrders, updateStatus }}>
       {children}
     </OrderContext.Provider>
   );

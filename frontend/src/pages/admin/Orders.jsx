@@ -19,7 +19,7 @@ export const Orders = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { orders, loading, updateStatus, fetchOrders } = useContext(OrderContext);
+  const { orders, setOrders, loading, updateStatus, fetchOrders } = useContext(OrderContext);
   const [search, setSearch] = useState('');
   const [restaurants, setRestaurants] = useState([]);
   const [branchFilter, setBranchFilter] = useState('ALL');
@@ -209,7 +209,12 @@ export const Orders = () => {
     }
 
     const pay = String(o.paymentStatus || o.payment_status || '').toUpperCase();
-    const matchesPayment = paymentFilter === 'ALL' || pay === paymentFilter;
+    let matchesPayment = true;
+    if (paymentFilter === 'PAID') {
+      matchesPayment = pay === 'PAID';
+    } else if (paymentFilter === 'UNPAID') {
+      matchesPayment = pay !== 'PAID';
+    }
 
     let matchesType = true;
     if (typeFilter !== 'ALL') {
@@ -254,30 +259,31 @@ export const Orders = () => {
         actions={
           orders && orders.length > 0 ? (
             <div className="d-flex align-items-center gap-2 flex-wrap">
-              {/* Service Tax Checkbox / Toggle */}
-              <div
-                className="form-check form-switch d-flex align-items-center gap-2 m-0 bg-white border border-secondary-subtle rounded-pill px-3 py-1.5 shadow-xs"
-                style={{ minHeight: '32px' }}
-                title={user?.role === 'employee' ? 'Only administrators can change service tax' : 'Enable or disable service tax'}
-              >
-                <input
-                  id="service-tax-toggle"
-                  className="form-check-input m-0 cursor-pointer"
-                  type="checkbox"
-                  role="switch"
-                  checked={serviceTaxEnabled}
-                  onChange={(e) => handleToggleServiceTax(e.target.checked)}
-                  disabled={user?.role === 'employee'}
-                />
-                <label
-                  htmlFor="service-tax-toggle"
-                  className="form-check-label small fw-bold text-dark cursor-pointer user-select-none text-nowrap"
-                  style={{ fontSize: '12px' }}
+              {/* Service Tax Checkbox / Toggle (Admin Only) */}
+              {user?.role !== 'employee' && !window.location.pathname.includes('/employee/') && (
+                <div
+                  className="form-check form-switch d-flex align-items-center gap-2 m-0 bg-white border border-secondary-subtle rounded-pill px-3 py-1.5 shadow-xs"
+                  style={{ minHeight: '32px' }}
+                  title="Enable or disable service tax"
                 >
-                  Service Tax
-                </label>
-              </div>
-              {restaurants.length > 0 && (
+                  <input
+                    id="service-tax-toggle"
+                    className="form-check-input m-0 cursor-pointer"
+                    type="checkbox"
+                    role="switch"
+                    checked={serviceTaxEnabled}
+                    onChange={(e) => handleToggleServiceTax(e.target.checked)}
+                  />
+                  <label
+                    htmlFor="service-tax-toggle"
+                    className="form-check-label small fw-bold text-dark cursor-pointer user-select-none text-nowrap"
+                    style={{ fontSize: '12px' }}
+                  >
+                    Service Tax
+                  </label>
+                </div>
+              )}
+              {user?.role !== 'employee' && !window.location.pathname.includes('/employee/') && restaurants.length > 1 && (
                 <select
                   value={branchFilter}
                   onChange={(e) => setBranchFilter(e.target.value)}
@@ -302,9 +308,7 @@ export const Orders = () => {
               >
                 <option value="ALL">All Payments</option>
                 <option value="UNPAID">Unpaid</option>
-                <option value="PENDING">Payment pending</option>
                 <option value="PAID">Paid</option>
-                <option value="FAILED">Failed</option>
               </select>
               {user?.role !== 'employee' && (
               <select

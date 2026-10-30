@@ -100,8 +100,9 @@ class AssistedOrderSerializer(serializers.Serializer):
     parent_order_id = serializers.IntegerField(required=False, allow_null=True)
     items = AssistedItemSerializer(many=True)
     idempotency_key = serializers.CharField(max_length=64)
-    coupon_code = serializers.CharField(max_length=50, required=False, allow_blank=True, default="")
-    customer_phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+    coupon_code = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
+    coupon_codes = serializers.ListField(child=serializers.CharField(), required=False, default=list)
+    customer_phone = serializers.CharField(max_length=20, required=True, allow_blank=False)
     customer_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     payment_method = serializers.CharField(max_length=30, required=False, default="CASH")
     mark_paid = serializers.BooleanField(required=False, default=False)
@@ -135,6 +136,9 @@ class AssistedOrderView(APIView):
     permission_classes = [IsStaffMember]
 
     def post(self, request):
+        emp = get_active_employee(request.user)
+        if emp and (emp.role == "CHEF" or (emp.job_title and "cook" in emp.job_title.lower()) or (emp.job_title and "chef" in emp.job_title.lower())):
+            return Response({"detail": "Kitchen staff and cooks are not permitted to place orders.", "code": "cook_forbidden"}, status=status.HTTP_403_FORBIDDEN)
         ser = AssistedOrderSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         data = ser.validated_data
@@ -149,7 +153,7 @@ class AssistedOrderView(APIView):
                 data["idempotency_key"],
                 branch_id=data.get("branch"),
                 order_type=data.get("order_type", Order.Type.DINE_IN),
-                coupon_code=data.get("coupon_code", ""),
+                coupon_code=data.get("coupon_codes") or data.get("coupon_code", ""),
                 customer_phone=data.get("customer_phone", ""),
                 customer_name=data.get("customer_name", ""),
                 mark_paid=data.get("mark_paid", False),
@@ -192,14 +196,14 @@ class OrderDetailView(APIView):
         if not user or not user.is_authenticated:
             return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
 
-        # Only authorized administrators / branch managers / superusers can modify per-order service charges
-        if getattr(user, "is_superuser", False):
-            is_admin = True
+        # Authorized staff or administrators who have access to this branch can modify service charge
+        if getattr(user, "is_superuser", False) or getattr(user, "user_type", None) == "ADMIN":
+            is_authorized = True
         else:
             emp = get_active_employee(user)
-            is_admin = emp is not None and emp.role in ADMIN_ROLES
-        if not is_admin:
-            return Response({"detail": "Only administrators can modify order service charges.", "code": "permission_denied"}, status=status.HTTP_403_FORBIDDEN)
+            is_authorized = emp is not None or user.is_staff
+        if not is_authorized:
+            return Response({"detail": "Only staff members can modify order service charges.", "code": "permission_denied"}, status=status.HTTP_403_FORBIDDEN)
 
         enabled_raw = request.data.get("service_charge_enabled")
         if enabled_raw is None:
@@ -220,9 +224,6 @@ class OrderDetailView(APIView):
 
             if not can_access_branch(user, order.branch_id):
                 return Response({"detail": "Not found."}, status=status.HTTP_404_NOT_FOUND)
-
-            if order.payment_status == Order.PaymentStatus.PAID:
-                return Response({"detail": "Cannot modify service charge for an order that is already paid.", "code": "order_already_paid"}, status=status.HTTP_400_BAD_REQUEST)
 
             if order.status == Order.Status.CANCELLED:
                 return Response({"detail": "Cannot modify service charge for a cancelled order.", "code": "order_cancelled"}, status=status.HTTP_400_BAD_REQUEST)
@@ -253,6 +254,9 @@ class OrderDetailView(APIView):
             order.round_off = round_off
             order.total_amount = payable
             order.save(update_fields=["service_charge_rate", "service_charge_amount", "round_off", "total_amount", "updated_at"])
+
+            if order.payment_status == Order.PaymentStatus.PAID:
+                order.payments.filter(status="SUCCESS").update(amount=payable)
 
             record_audit(
                 user,

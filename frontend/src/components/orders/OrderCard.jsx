@@ -56,7 +56,7 @@ export const OrderCard = ({
             {itemsSummary}
           </div>
           <div className="text-muted small mt-1">
-            Source: <strong>{isTakeaway ? 'Takeaway' : (order.source || 'Dine-In')}</strong> | Payment: <strong>{order.paymentMethod}</strong>
+            Source: <strong>{isTakeaway ? 'Takeaway' : (order.source || 'Dine-In')}</strong> | Payment: <strong className={String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' ? 'text-success' : 'text-danger'}>{String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' ? 'Paid' : 'Unpaid'}</strong>
           </div>
         </div>
 

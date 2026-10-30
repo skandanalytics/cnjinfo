@@ -399,6 +399,8 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
     emp = get_active_employee(staff_user)
     if emp is None and not (staff_user.is_superuser or staff_user.is_staff):
         raise OrderError("No active staff profile.", "not_staff", 403)
+    if emp and (emp.role == "CHEF" or (emp.job_title and "cook" in emp.job_title.lower()) or (emp.job_title and "chef" in emp.job_title.lower())):
+        raise OrderError("Kitchen staff and cooks are not permitted to place orders.", "cook_forbidden", 403)
     if idempotency_key:
         existing = Order.objects.filter(idempotency_key=idempotency_key).first()
         if existing:
@@ -521,7 +523,12 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
         customer_phone = customer.phone
 
     lines = [Line(row["food"], row["quantity"], row.get("options", []), row.get("special_instructions", "")) for row in item_rows]
-    coupon_codes = [coupon_code.strip()] if coupon_code and coupon_code.strip() else []
+    if isinstance(coupon_code, list):
+        coupon_codes = [str(c).strip() for c in coupon_code if str(c).strip()]
+    elif coupon_code and coupon_code.strip():
+        coupon_codes = [c.strip() for c in str(coupon_code).split(",") if c.strip()]
+    else:
+        coupon_codes = []
     try:
         priced = price_order(branch, lines, order_type, customer, coupon_codes, service_tax_enabled=service_tax_enabled)
     except PricingError as exc:

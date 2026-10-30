@@ -279,16 +279,18 @@ let cachedFoodImages = null;
 let cachedFoodImagesTime = 0;
 let cachedMappedProducts = null;
 let cachedMappedProductsTime = 0;
+let cachedMappedProductsBranchId = null;
 let cachedCustomerCategories = null;
+let cachedCustomerCategoriesBranchId = null;
 const STATIC_CACHE_TTL = 1500; // 1.5 seconds for instant cross-device updates
 const PRODUCTS_CACHE_TTL = 1500; // 1.5 seconds for instant cross-device updates
 const INVENTORY_CACHE_TTL = 1500; // 1.5 seconds for instant inventory sync
 
 export const getCustomerCategories = async (forceRefresh = false) => {
-  if (!forceRefresh && cachedCustomerCategories && cachedCustomerCategories.length > 0) {
+  const branchId = await resolveCustomerBranchId();
+  if (!forceRefresh && cachedCustomerCategories && cachedCustomerCategories.length > 0 && String(cachedCustomerCategoriesBranchId) === String(branchId)) {
     return cachedCustomerCategories;
   }
-  const branchId = await resolveCustomerBranchId();
   if (branchId) {
     try {
       const menuRes = await api.get(`/public/branches/${branchId}/menu/`);
@@ -299,6 +301,7 @@ export const getCustomerCategories = async (forceRefresh = false) => {
         dish_count: c.dish_count || 0
       }));
       cachedCustomerCategories = categories;
+      cachedCustomerCategoriesBranchId = String(branchId);
       return categories;
     } catch (e) {
       console.warn("Could not fetch customer categories:", e);
@@ -399,6 +402,9 @@ export const clearStaticProductCache = () => {
   cachedFoodImagesTime = 0;
   cachedMappedProducts = null;
   cachedMappedProductsTime = 0;
+  cachedMappedProductsBranchId = null;
+  cachedCustomerCategories = null;
+  cachedCustomerCategoriesBranchId = null;
 };
 
 export async function listOpenBranches() {
@@ -412,8 +418,7 @@ export function chooseCustomerBranch(id) {
   localStorage.setItem('foodie_public_branch', String(id));
   sessionStorage.setItem('foodie_branch_source', 'chosen');
   localStorage.setItem('foodie_branch_source', 'chosen');
-  cachedMappedProducts = null;
-  cachedMappedProductsTime = 0;
+  clearStaticProductCache();
 }
 
 async function resolveCustomerBranchId() {
@@ -422,12 +427,17 @@ async function resolveCustomerBranchId() {
     try {
       const resolved = await api.get(`/public/qr/${qr}/`);
       if (resolved.data?.branch?.id) {
-        sessionStorage.setItem('foodie_public_branch', String(resolved.data.branch.id));
-        localStorage.setItem('foodie_public_branch', String(resolved.data.branch.id));
+        const bId = String(resolved.data.branch.id);
+        const prevBranch = sessionStorage.getItem('foodie_public_branch');
+        if (prevBranch && prevBranch !== bId) {
+          clearStaticProductCache();
+        }
+        sessionStorage.setItem('foodie_public_branch', bId);
+        localStorage.setItem('foodie_public_branch', bId);
         sessionStorage.setItem('foodie_branch_source', 'qr');
         localStorage.setItem('foodie_branch_source', 'qr');
         sessionStorage.setItem('foodie_table_qr', qr);
-        return String(resolved.data.branch.id);
+        return bId;
       }
     } catch (e) { /* unknown QR falls through */ }
   }
@@ -448,12 +458,12 @@ export const productService = {
   getProducts: async (forceRefresh = false) => {
     const { isStaffScreen, listFoods } = await import('./adminApi');
     if (isStaffScreen()) return listFoods();
+    const branchId = await resolveCustomerBranchId();
     const now = Date.now();
-    if (!forceRefresh && cachedMappedProducts && (now - cachedMappedProductsTime < PRODUCTS_CACHE_TTL)) {
+    if (!forceRefresh && cachedMappedProducts && String(cachedMappedProductsBranchId) === String(branchId) && (now - cachedMappedProductsTime < PRODUCTS_CACHE_TTL)) {
       return cachedMappedProducts;
     }
 
-    const branchId = await resolveCustomerBranchId();
     if (branchId) {
       const menuRes = await api.get(`/public/branches/${branchId}/menu/`);
       const categories = (menuRes.data?.categories || []).map(c => ({
@@ -463,6 +473,7 @@ export const productService = {
         dish_count: c.dish_count || 0
       }));
       cachedCustomerCategories = categories;
+      cachedCustomerCategoriesBranchId = String(branchId);
       const mapped = (menuRes.data?.foods || []).map(food => mapProductToFrontend({
         ...food,
         price: food.original_price,
@@ -479,6 +490,7 @@ export const productService = {
       }, categories, [], []));
       cachedMappedProducts = mapped;
       cachedMappedProductsTime = Date.now();
+      cachedMappedProductsBranchId = String(branchId);
       sessionStorage.setItem('foodie_public_branch', String(branchId));
       localStorage.setItem('foodie_public_branch', String(branchId));
       return mapped;

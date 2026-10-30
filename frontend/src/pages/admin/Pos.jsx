@@ -24,6 +24,7 @@ import {
   FiLayers, FiTag, FiCheck, FiDollarSign, FiClock, FiPercent,
   FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw
 } from 'react-icons/fi';
+import { getShortTableNumber } from '../../components/tables/TableCard';
 
 const PREPARATION_PRESETS = [
   'Less Spicy', 'Extra Spicy', 'No Onion', 'No Garlic', 
@@ -90,6 +91,7 @@ export const Pos = () => {
   const [customizingItem, setCustomizingItem] = useState(null); // { dish, cartIndex, selectedOptions: [], specialInstructions: '' }
   const [showTablePicker, setShowTablePicker] = useState(false);
   const [tableFilter, setTableFilter] = useState('ALL');
+  const [tableSearchQuery, setTableSearchQuery] = useState('');
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
@@ -343,7 +345,16 @@ export const Pos = () => {
         ? tableList.filter(t => !t.branch || Number(t.branch) === Number(branchId))
         : [];
       setTables(filteredTables);
-      setDishes(Array.isArray(dishList) ? dishList : []);
+      const rawDishes = Array.isArray(dishList) ? dishList : [];
+      const seenDishIds = new Set();
+      const dedupedDishes = [];
+      for (const d of rawDishes) {
+        if (!seenDishIds.has(String(d.id))) {
+          seenDishIds.add(String(d.id));
+          dedupedDishes.push(d);
+        }
+      }
+      setDishes(dedupedDishes);
 
       // Extract unique categories from dishes & menus
       const rawCategories = Array.isArray(catList) ? catList : [];
@@ -551,6 +562,37 @@ export const Pos = () => {
     setOrderError('');
     setSearchParams({ table: table.id }, { replace: true });
   };
+
+  // Check available food types in dishes
+  const { hasVeg, hasNonVeg, hasVegan } = useMemo(() => {
+    let veg = false;
+    let nonVeg = false;
+    let vegan = false;
+    for (const d of dishes) {
+      const ft = normalizeFoodType(d.foodType || d.type || (d.is_veg === false || d.is_veg === 'false' ? 'non-veg' : 'veg'));
+      if (ft === 'veg') veg = true;
+      if (ft === 'non-veg') nonVeg = true;
+      if (ft === 'vegan') vegan = true;
+    }
+    return { hasVeg: veg, hasNonVeg: nonVeg, hasVegan: vegan };
+  }, [dishes]);
+
+  // Reset active food type filter if matching dishes no longer exist
+  useEffect(() => {
+    setFoodTypeFilter((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      if (!hasNonVeg && next['non-veg']) {
+        next['non-veg'] = false;
+        changed = true;
+      }
+      if (!hasVegan && next.vegan) {
+        next.vegan = false;
+        changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [hasNonVeg, hasVegan]);
 
   // Food Type Toggle
   const toggleFoodType = (type) => {
@@ -807,12 +849,34 @@ export const Pos = () => {
         setToast({ show: true, message: msg, type: 'remove' });
         return;
       }
-      setCartItems(prev => [...prev, {
-        dish,
-        quantity: 1,
-        options: selectedOptions,
-        specialInstructions,
-      }]);
+      // Check if identical item already exists in cart:
+      const optIds = (selectedOptions || []).map(o => String(o.id || o)).sort().join(',');
+      const cleanInst = (specialInstructions || '').trim().toLowerCase();
+      
+      setCartItems(prev => {
+        const matchIdx = prev.findIndex(item => {
+          if (String(item.dish.id) !== String(dish.id)) return false;
+          const itemOptIds = (item.options || []).map(o => String(o.id || o)).sort().join(',');
+          const itemInst = (item.specialInstructions || '').trim().toLowerCase();
+          return itemOptIds === optIds && itemInst === cleanInst;
+        });
+
+        if (matchIdx >= 0) {
+          const updated = [...prev];
+          updated[matchIdx] = {
+            ...updated[matchIdx],
+            quantity: Number(updated[matchIdx].quantity || 0) + 1,
+          };
+          return updated;
+        }
+
+        return [...prev, {
+          dish,
+          quantity: 1,
+          options: selectedOptions,
+          specialInstructions,
+        }];
+      });
     }
     setOrderError('');
     setCustomizingItem(null);
@@ -1032,6 +1096,41 @@ export const Pos = () => {
 
   const canSubmitOrder = !submittingOrder && cartItems.length > 0 && (orderType === 'TAKEAWAY' || Boolean(selectedTable));
 
+  // Block Cooks / Kitchen Staff from creating POS assisted orders
+  const isCook = Boolean(
+    user?.role === 'CHEF' ||
+    (user?.jobTitle && /cook|chef/i.test(user.jobTitle)) ||
+    (user?.designation && /cook|chef/i.test(user.designation)) ||
+    (user?.department && /kitchen/i.test(user.department) && user?.role !== 'admin')
+  );
+
+  if (isCook) {
+    return (
+      <AdminLayout>
+        <div className="container py-5 text-center">
+          <div className="card p-5 border-0 shadow-sm rounded-4 mx-auto" style={{ maxWidth: '480px' }}>
+            <div className="text-danger mb-3">
+              <FiAlertCircle size={48} />
+            </div>
+            <h5 className="fw-bold text-dark mb-2">POS Access Restricted</h5>
+            <p className="text-muted small mb-4">
+              Kitchen staff and cooks are not permitted to place assisted orders. Please monitor the Kitchen Queue instead.
+            </p>
+            <div>
+              <button
+                type="button"
+                onClick={() => navigate('/employee/kitchen')}
+                className="btn btn-danger rounded-pill px-4 py-2 fw-bold"
+              >
+                Go to Kitchen Queue
+              </button>
+            </div>
+          </div>
+        </div>
+      </AdminLayout>
+    );
+  }
+
   return (
     <AdminLayout fullHeight={true} contentClassName="p-0 d-flex flex-column flex-grow-1 overflow-hidden">
       <div className="pos-container d-flex flex-column w-100 h-100 overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
@@ -1130,21 +1229,31 @@ export const Pos = () => {
               
               {/* Category Bar */}
               <div className="d-flex align-items-center gap-2 overflow-auto py-1 scrollbar-hidden">
-                {categories.map((cat, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => setSelectedCategory(cat)}
-                    className={`btn btn-sm rounded-pill text-nowrap px-3 py-1.5 fw-semibold transition-all ${
-                      selectedCategory === cat
-                        ? 'btn-danger shadow-xs'
-                        : 'btn-outline-secondary border-light-subtle bg-white text-dark'
-                    }`}
-                    style={{ fontSize: '12.5px' }}
-                  >
-                    {cat === 'ALL' ? '🍽️ All Dishes' : cat}
-                  </button>
-                ))}
+                {categories.map((cat, idx) => {
+                  const isCatSelected = selectedCategory === cat;
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`btn btn-sm rounded-pill text-nowrap px-3 py-1.5 fw-semibold transition-all d-flex align-items-center gap-2 ${
+                        isCatSelected
+                          ? 'btn-danger shadow-xs'
+                          : 'btn-outline-secondary border-light-subtle bg-white text-dark'
+                      }`}
+                      style={{ fontSize: '12.5px' }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="form-check-input m-0"
+                        checked={isCatSelected}
+                        readOnly
+                        style={{ pointerEvents: 'none', cursor: 'pointer' }}
+                      />
+                      <span>{cat === 'ALL' ? '🍽️ All Dishes' : cat}</span>
+                    </button>
+                  );
+                })}
               </div>
 
               {/* Food Type Checkbox Filter Bar */}
@@ -1153,48 +1262,68 @@ export const Pos = () => {
                   <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
                     Food Type:
                   </span>
+
+                  {/* All Food Types Button */}
+                  <button
+                    type="button"
+                    onClick={() => setFoodTypeFilter({ veg: false, 'non-veg': false, vegan: false })}
+                    className={`btn btn-sm rounded-pill px-2.5 py-1 fw-bold transition-all border ${
+                      !foodTypeFilter.veg && !foodTypeFilter['non-veg'] && !foodTypeFilter.vegan
+                        ? 'btn-danger text-white shadow-xs'
+                        : 'bg-white border-light-subtle text-secondary'
+                    }`}
+                    style={{ fontSize: '11.5px' }}
+                  >
+                    All
+                  </button>
                   
                   {/* Veg Checkbox */}
-                  <label 
-                    onClick={() => toggleFoodType('veg')}
-                    className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
-                      foodTypeFilter.veg 
-                        ? 'bg-success-subtle border-success text-success fw-bold' 
-                        : 'bg-white border-light-subtle text-secondary'
-                    }`}
-                    style={{ cursor: 'pointer', fontSize: '11.5px' }}
-                  >
-                    <span className="veg-badge" style={{ transform: 'scale(0.8)' }}></span>
-                    <span>Veg</span>
-                  </label>
+                  {hasVeg && (
+                    <label 
+                      onClick={() => toggleFoodType('veg')}
+                      className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-2 cursor-pointer user-select-none border ${
+                        foodTypeFilter.veg 
+                          ? 'bg-success-subtle border-success text-success fw-bold' 
+                          : 'bg-white border-light-subtle text-secondary'
+                      }`}
+                      style={{ cursor: 'pointer', fontSize: '11.5px' }}
+                    >
+                      <span className="veg-badge" style={{ transform: 'scale(0.8)' }}></span>
+                      <span>Veg</span>
+                    </label>
+                  )}
 
                   {/* Non-Veg Checkbox */}
-                  <label 
-                    onClick={() => toggleFoodType('non-veg')}
-                    className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
-                      foodTypeFilter['non-veg'] 
-                        ? 'bg-danger-subtle border-danger text-danger fw-bold' 
-                        : 'bg-white border-light-subtle text-secondary'
-                    }`}
-                    style={{ cursor: 'pointer', fontSize: '11.5px' }}
-                  >
-                    <span className="non-veg-badge" style={{ transform: 'scale(0.8)' }}></span>
-                    <span>Non-Veg</span>
-                  </label>
+                  {hasNonVeg && (
+                    <label 
+                      onClick={() => toggleFoodType('non-veg')}
+                      className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
+                        foodTypeFilter['non-veg'] 
+                          ? 'bg-danger-subtle border-danger text-danger fw-bold' 
+                          : 'bg-white border-light-subtle text-secondary'
+                      }`}
+                      style={{ cursor: 'pointer', fontSize: '11.5px' }}
+                    >
+                      <span className="non-veg-badge" style={{ transform: 'scale(0.8)' }}></span>
+                      <span>Non-Veg</span>
+                    </label>
+                  )}
 
                   {/* Vegan Checkbox */}
-                  <label 
-                    onClick={() => toggleFoodType('vegan')}
-                    className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
-                      foodTypeFilter.vegan 
-                        ? 'bg-success-subtle border-success-emphasis text-success-emphasis fw-bold' 
-                        : 'bg-white border-light-subtle text-secondary'
-                    }`}
-                    style={{ cursor: 'pointer', fontSize: '11.5px' }}
-                  >
-                    <span className="vegan-badge" style={{ transform: 'scale(0.8)' }}></span>
-                    <span>Vegan</span>
-                  </label>
+                  {hasVegan && (
+                    <label 
+                      onClick={() => toggleFoodType('vegan')}
+                      className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
+                        foodTypeFilter.vegan 
+                          ? 'bg-success-subtle border-success-emphasis text-success-emphasis fw-bold' 
+                          : 'bg-white border-light-subtle text-secondary'
+                      }`}
+                      style={{ cursor: 'pointer', fontSize: '11.5px' }}
+                    >
+                      <span className="vegan-badge" style={{ transform: 'scale(0.8)' }}></span>
+                      <span>Vegan</span>
+                    </label>
+                  )}
                 </div>
 
                 <div className="small text-muted">
@@ -1414,6 +1543,22 @@ export const Pos = () => {
           {/* RIGHT: Order Panel & Checkout Actions (Independent Scroll Area) */}
           <aside className={`pos-order-panel ${mobilePosTab !== 'order' ? 'd-none d-lg-flex' : ''}`}>
             
+            {/* Back Button / Navigation */}
+            <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white">
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="btn btn-sm btn-light rounded-pill px-2.5 py-1 text-dark fw-bold d-inline-flex align-items-center gap-1.5"
+                style={{ fontSize: '11.5px' }}
+                title="Go Back"
+              >
+                <span>&larr; Back</span>
+              </button>
+              <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
+                Order Summary
+              </span>
+            </div>
+
             {/* 1. Dining Mode Toggle (Dine-In vs Takeaway) */}
             <div className="pos-order-section p-2 bg-light">
               <div className="d-flex align-items-center gap-1">
@@ -1456,10 +1601,12 @@ export const Pos = () => {
                     <div className="d-flex align-items-center gap-2 mt-0.5">
                       {selectedTable ? (
                         <span className="fw-bold text-dark fs-6">
-                          Table {getSelectedTableLabel(selectedTable) || selectedTable.id}
+{getShortTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id)}
                         </span>
                       ) : (
-                        <span className="text-danger fw-semibold small">No Table Selected</span>
+                        <span className="badge bg-danger-subtle text-danger fw-bold border border-danger-subtle px-2 py-1" style={{ fontSize: '11px' }}>
+                          Table Required
+                        </span>
                       )}
                       {selectedTable && (
                         <span
@@ -1982,7 +2129,7 @@ export const Pos = () => {
                   onClick={handleSaveCustomization}
                   className="btn btn-sm btn-danger text-white rounded-pill px-4 fw-bold"
                 >
-                  Save Customization
+                  {customizingItem?.cartIndex >= 0 ? "Save Customization" : "Add to Cart"}
                 </button>
               </div>
             </div>
@@ -1994,6 +2141,12 @@ export const Pos = () => {
           const availableCount = tables.filter(t => t.status === 'Available' && !t.is_occupied && t.is_active !== false).length;
           const occupiedCount = tables.filter(t => t.status === 'Occupied' || Boolean(t.is_occupied) || t.status === 'Reserved').length;
           const filteredTableList = tables.filter(t => {
+            if (tableSearchQuery && tableSearchQuery.trim()) {
+              const q = tableSearchQuery.trim().toLowerCase();
+              const numStr = String(t.number || t.table_number || t.id).toLowerCase();
+              const shortStr = getShortTableNumber(t.number || t.table_number || t.id).toLowerCase();
+              if (!numStr.includes(q) && !shortStr.includes(q)) return false;
+            }
             if (tableFilter === 'ALL') return true;
             if (tableFilter === 'AVAILABLE') return t.status === 'Available' && !t.is_occupied && t.is_active !== false;
             if (tableFilter === 'OCCUPIED') return t.status === 'Occupied' || Boolean(t.is_occupied) || t.status === 'Reserved';
@@ -2093,6 +2246,18 @@ export const Pos = () => {
                       </div>
                     )}
 
+                    {/* Search Tables Input */}
+                    <div className="mb-2.5">
+                      <input
+                        type="text"
+                        className="form-control form-control-sm rounded-pill px-3 border-light-subtle"
+                        placeholder="Search table (e.g. 1, T1, 2)..."
+                        value={tableSearchQuery}
+                        onChange={(e) => setTableSearchQuery(e.target.value)}
+                        style={{ fontSize: '12px' }}
+                      />
+                    </div>
+
                     {/* Table Filter Tabs */}
                     <div className="d-flex align-items-center gap-1.5 mb-3 bg-light p-1 rounded-pill">
                       {[
@@ -2126,6 +2291,7 @@ export const Pos = () => {
                       <div className="row row-cols-2 row-cols-sm-3 g-2.5 overflow-auto" style={{ maxHeight: '350px' }}>
                         {filteredTableList.map((table) => {
                           const isSelected = selectedTable && String(selectedTable.id) === String(table.id);
+                          const shortName = getShortTableNumber(table.number || table.table_number || table.id);
                           const tableNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
                           const isOccupied = table.status === 'Occupied' || Boolean(table.is_occupied) || table.status === 'Reserved' || table.is_active === false;
                           const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
@@ -2135,46 +2301,42 @@ export const Pos = () => {
                               <div
                                 onClick={() => {
                                   if (isOccupied) {
-                                    if (activeOrderId) {
-                                      handleTrackExistingOrder(activeOrderId, table);
-                                      return;
-                                    }
-                                    window.alert(table.status === 'Reserved' ? 'Table is reserved.' : 'Table is occupied.');
+
                                     return;
                                   }
                                   handleSelectTable(table);
                                 }}
-                                className={`p-3 rounded-3 border text-center transition-all ${
+                                className={`p-2.5 rounded-3 border text-center transition-all ${
                                   isOccupied 
-                                    ? 'border-secondary-subtle bg-light opacity-80'
+? 'border-secondary-subtle bg-light opacity-50'
                                     : isSelected 
                                     ? 'border-danger bg-danger-subtle shadow-xs cursor-pointer' 
-                                    : table.status === 'Available'
-                                    ? 'border-success-subtle bg-white hover-shadow cursor-pointer'
-                                    : 'border-warning-subtle bg-light-subtle cursor-pointer'
+                                    : 'border-light-subtle bg-white hover-shadow cursor-pointer'
                                 }`}
-                                style={{ cursor: isOccupied ? 'default' : 'pointer' }}
-                                title={isOccupied ? `Table ${tableNum} is ${table.status}` : `Select Table ${tableNum}`}
+style={{ cursor: isOccupied ? 'not-allowed' : 'pointer', minHeight: '80px' }}
+                                title={isOccupied ? `${shortName} is ${table.status}` : `Select ${shortName}`}
                               >
-                                <div className="fw-bold fs-6 text-dark mb-0.5">
-                                  Table {tableNum}
+                                <div className="d-flex align-items-center justify-content-between mb-1">
+                                  <span className="fw-bold fs-6 text-dark">
+                                    {shortName}
+                                  </span>
+                                  <span
+                                    className="rounded-circle d-inline-block flex-shrink-0"
+                                    style={{
+                                      width: '9px',
+                                      height: '9px',
+                                      backgroundColor: isOccupied ? '#ef4444' : '#22c55e'
+                                    }}
+                                    title={isOccupied ? 'Occupied' : 'Available'}
+                                  />
                                 </div>
-                                <div className="small text-muted mb-1.5" style={{ fontSize: '11px' }}>
+                                <div className="small text-muted text-start" style={{ fontSize: '11px' }}>
                                   {table.capacity || 4} Diners
                                 </div>
-                                <Badge status={table.status} className="px-2 py-0.5" style={{ fontSize: '10px' }} />
-                                {isOccupied && activeOrderId && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleTrackExistingOrder(activeOrderId, table);
-                                    }}
-                                    className="btn btn-xs btn-outline-danger rounded-pill mt-2 w-100 fw-semibold"
-                                    style={{ fontSize: '10.5px', padding: '2px 6px' }}
-                                  >
-                                    Track Existing Order
-                                  </button>
+                                {table.location && (
+                                  <div className="small text-secondary text-start text-truncate" style={{ fontSize: '10px' }}>
+                                    {table.location}
+                                  </div>
                                 )}
                               </div>
                             </div>
@@ -2215,44 +2377,58 @@ export const Pos = () => {
                 />
               ) : (
                 <div className="d-flex flex-column gap-2 overflow-auto" style={{ maxHeight: '350px' }}>
-                  {coupons.map((c) => {
-                    const isEligible = billSummary.merchandise >= Number(c.minOrderValue || c.minimum_order_amount || 0);
-
-                    return (
-                      <div 
-                        key={c.code}
-                        className={`p-3 rounded-3 border d-flex align-items-center justify-content-between gap-3 ${
-                          isEligible ? 'bg-white border-light-subtle' : 'bg-light border-light-subtle opacity-75'
-                        }`}
-                      >
-                        <div>
-                          <div className="d-flex align-items-center gap-2">
-                            <span className="badge bg-danger rounded-pill px-2.5 py-1 fw-bold">
-                              {c.code}
-                            </span>
-                            <span className="fw-bold text-dark small">
-                              {c.type === 'percentage' || c.discount_type === 'PERCENTAGE' 
-                                ? `${c.discount || c.discount_value}% OFF`
-                                : `Flat ₹${c.discount || c.discount_value} OFF`}
-                            </span>
-                          </div>
-                          <p className="text-secondary small mb-0 mt-1" style={{ fontSize: '11px' }}>
-                            {c.description || `Applicable on orders above ${formatCurrency(c.minOrderValue || c.minimum_order_amount || 0)}`}
-                          </p>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={!isEligible}
-                          onClick={() => handleApplyCoupon(c.code)}
-                          className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
-                          style={{ fontSize: '11.5px' }}
-                        >
-                          Apply
-                        </button>
-                      </div>
+                  {(() => {
+                    // Check if higher-tier coupon (min >= 500) qualifies
+                    const hasEligibleHigherTier = coupons.some(cp => 
+                      Number(cp.minOrderValue || cp.minimum_order_amount || 0) >= 500 &&
+                      billSummary.merchandise >= Number(cp.minOrderValue || cp.minimum_order_amount || 0) &&
+                      (cp.status === 'Active' || cp.is_active !== false)
                     );
-                  })}
+
+                    return coupons.map((c) => {
+                      const minVal = Number(c.minOrderValue || c.minimum_order_amount || 0);
+                      const meetsMin = billSummary.merchandise >= minVal;
+                      const isLowerTierDisabled = hasEligibleHigherTier && minVal < 500;
+                      const isEligible = meetsMin && !isLowerTierDisabled && (c.status === 'Active' || c.is_active !== false);
+
+                      return (
+                        <div 
+                          key={c.code}
+                          className={`p-3 rounded-3 border d-flex align-items-center justify-content-between gap-3 ${
+                            isEligible ? 'bg-white border-light-subtle' : 'bg-light border-light-subtle opacity-75'
+                          }`}
+                        >
+                          <div>
+                            <div className="d-flex align-items-center gap-2">
+                              <span className="badge bg-danger rounded-pill px-2.5 py-1 fw-bold">
+                                {c.code}
+                              </span>
+                              <span className="fw-bold text-dark small">
+                                {c.type === 'percentage' || c.discount_type === 'PERCENTAGE' 
+                                  ? `${c.discount || c.discount_value}% OFF`
+                                  : `Flat ₹${c.discount || c.discount_value} OFF`}
+                              </span>
+                            </div>
+                            <p className="text-secondary small mb-0 mt-1" style={{ fontSize: '11px' }}>
+                              {isLowerTierDisabled 
+                                ? 'Disabled: A higher-value coupon is eligible for this order.'
+                                : (c.description || `Applicable on orders above ${formatCurrency(minVal)}`)}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={!isEligible}
+                            onClick={() => handleApplyCoupon(c.code)}
+                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
+                            style={{ fontSize: '11.5px' }}
+                          >
+                            Apply
+                          </button>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               )}
 

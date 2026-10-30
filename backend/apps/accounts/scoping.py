@@ -9,6 +9,8 @@ def allowed_branch_id(user):
     emp = get_active_employee(user)
     if emp is None:
         raise LookupError("Not an active staff member")
+    if emp.role == "SUPER_ADMIN":
+        return None
     return emp.branch_id
 
 

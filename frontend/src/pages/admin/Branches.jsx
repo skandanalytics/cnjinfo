@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import PageHeader from '../../components/layout/PageHeader';
-import Badge from '../../components/common/Badge';
 import Button from '../../components/common/Button';
 import Input from '../../components/common/Input';
 import Modal from '../../components/common/Modal';
@@ -19,7 +18,6 @@ import {
   FiUser, 
   FiClock, 
   FiLayers, 
-  FiCheckCircle, 
   FiAlertCircle, 
   FiStar,
   FiHome
@@ -56,8 +54,8 @@ export const Branches = () => {
     phone: '',
     email: '',
     managerName: '',
-    openingHours: '10:00 AM - 11:30 PM',
-    tablesCount: 20,
+    openingHours: '',
+    tablesCount: 0,
     status: 'Active',
     isMainBranch: false,
     image: ''
@@ -97,10 +95,11 @@ export const Branches = () => {
       phone: '',
       email: '',
       managerName: '',
-      openingHours: '10:00 AM - 11:30 PM',
+      openingHours: '',
+      tablesCount: 0,
       status: 'Active',
       isMainBranch: branches.length === 0,
-      image: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80'
+      image: ''
     });
     setErrorMessage('');
     setIsModalOpen(true);
@@ -125,7 +124,8 @@ export const Branches = () => {
       phone: branch.phone || '',
       email: branch.email || '',
       managerName: branch.managerName || '',
-      openingHours: branch.openingHours || '10:00 AM - 11:30 PM',
+      openingHours: branch.openingHours || '',
+      tablesCount: branch.tablesCount ?? branch.liveTables ?? 0,
       status: branch.status || 'Active',
       isMainBranch: Boolean(branch.isMainBranch),
       image: branch.image || ''
@@ -148,6 +148,10 @@ export const Branches = () => {
       setErrorMessage('Branch name is required.');
       return;
     }
+    if (/\d/.test(formData.name)) {
+      setErrorMessage('Branch name cannot contain numbers.');
+      return;
+    }
     if (!formData.address?.trim()) {
       setErrorMessage('Branch address is required.');
       return;
@@ -158,6 +162,23 @@ export const Branches = () => {
     }
     if (!formData.managerName?.trim()) {
       setErrorMessage('Branch manager name is required.');
+      return;
+    }
+    if (formData.managerName && /\d/.test(formData.managerName)) {
+      setErrorMessage('Branch manager name cannot contain numbers.');
+      return;
+    }
+    if (!formData.openingHours?.trim()) {
+      setErrorMessage('Opening hours are mandatory.');
+      return;
+    }
+    const cleanHours = formData.openingHours.replace(/\s/g, '').replace(/-/g, '').toLowerCase();
+    if (['00:00', '00:0000:00', '0:00', '00:00-00:00', '0:00-0:00'].includes(cleanHours)) {
+      setErrorMessage('Please enter valid opening hours (e.g. 10:00 AM - 11:30 PM).');
+      return;
+    }
+    if (!formData.image?.trim()) {
+      setErrorMessage('Branch image is mandatory. Please provide a valid image URL.');
       return;
     }
 
@@ -227,16 +248,19 @@ export const Branches = () => {
   });
 
   const getStatusBadge = (status) => {
-    switch (status) {
-      case 'Active':
-        return <Badge variant="success">Active</Badge>;
-      case 'Inactive':
-        return <Badge variant="secondary">Inactive</Badge>;
-      case 'Under Renovation':
-        return <Badge variant="warning">Under Renovation</Badge>;
-      default:
-        return <Badge variant="light">{status}</Badge>;
+    const isAct = status === 'Active';
+    if (isAct) {
+      return (
+        <span className="badge bg-success text-white fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
+          <span className="rounded-circle bg-white d-inline-block" style={{ width: '6px', height: '6px' }}></span> Open
+        </span>
+      );
     }
+    return (
+      <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
+        <span className="rounded-circle bg-white d-inline-block" style={{ width: '6px', height: '6px' }}></span> Closed
+      </span>
+    );
   };
 
   const modalFooter = (
@@ -307,6 +331,19 @@ export const Branches = () => {
               />
             </div>
 
+            {editingBranch && (
+              <div className="col-12 col-md-4">
+                <Input 
+                  label="Branch Code"
+                  name="code"
+                  placeholder="e.g. BR001"
+                  value={formData.code}
+                  disabled
+                  readOnly
+                  helpText="Original assigned branch code"
+                />
+              </div>
+            )}
             <div className="col-12 col-md-6">
               <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
                 Restaurant <span className="text-danger">*</span>
@@ -353,8 +390,8 @@ export const Branches = () => {
                 onChange={handleFormChange}
                 required
               >
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
+                <option value="Active">Open (Active)</option>
+                <option value="Inactive">Closed (Inactive)</option>
                 <option value="Under Renovation">Under Renovation</option>
               </select>
             </div>
@@ -445,22 +482,27 @@ export const Branches = () => {
 
             <div className="col-12 col-md-6">
               <Input 
-                label="Opening Hours"
+                label="Opening Hours *"
                 name="openingHours"
                 placeholder="e.g. 10:00 AM - 11:30 PM"
                 value={formData.openingHours}
                 onChange={handleFormChange}
+                required
               />
             </div>
 
             <div className="col-12">
               <Input 
-                label="Cover Image URL"
+                label="Cover Image URL *"
                 name="image"
-                placeholder="https://images.unsplash.com/..."
+                placeholder="https://images.unsplash.com/photo-..."
                 value={formData.image}
                 onChange={handleFormChange}
+                required
               />
+              {!formData.image && (
+                <div className="form-text text-danger small">Branch image upload or URL is mandatory.</div>
+              )}
             </div>
 
             <div className="col-12">
@@ -509,11 +551,7 @@ export const Branches = () => {
           backUrl="/admin/dashboard"
           actions={
             isAdmin && (
-              <Button 
-                onClick={handleOpenAdd} 
-                variant="primary" 
-                className="d-flex align-items-center gap-2 py-2 px-3.5 shadow-sm rounded-pill fw-bold"
-              >
+              <Button onClick={handleOpenAdd} variant="primary" className="d-flex align-items-center gap-2">
                 <FiPlus /> Add Branch
               </Button>
             )
@@ -521,8 +559,10 @@ export const Branches = () => {
         />
         <EmptyState 
           icon={<FiHome size={48} className="text-secondary" />}
-          title="No Branches Found"
-          description="Create a branch first to manage tables, meals, categories, employees, offers, and coupons."
+          title="No Branches Available"
+          description="Create your first restaurant branch to get started."
+          actionText="Add Branch"
+          onAction={handleOpenAdd}
         />
         {renderBranchModal()}
       </AdminLayout>
@@ -536,7 +576,7 @@ export const Branches = () => {
         showBackButton
         backUrl="/admin/dashboard"
         actions={
-          <div className="d-flex align-items-center gap-3 flex-wrap">
+          <div className="d-flex align-items-center gap-2.5 flex-wrap">
             {branches.length > 0 && (
               <>
                 <SearchBar 
@@ -560,8 +600,8 @@ export const Branches = () => {
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
                   <option value="All">All Statuses</option>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
+                  <option value="Active">Open (Active)</option>
+                  <option value="Inactive">Closed (Inactive)</option>
                   <option value="Under Renovation">Under Renovation</option>
                 </select>
               </>
@@ -592,141 +632,149 @@ export const Branches = () => {
         />
       ) : (
         <div className="row g-4">
-          {filteredBranches.map((branch) => (
-            <div key={branch.id} className="col-12 col-md-6 col-xl-4">
-              <div className="card h-100 border-0 shadow-sm rounded-4 overflow-hidden bg-white foodie-card transition-all position-relative">
-                {/* Branch Image Cover */}
-                <div className="position-relative" style={{ height: '160px' }}>
-                  <img 
-                    src={branch.image || 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80'} 
-                    alt={branch.name}
-                    className="w-100 h-100"
-                    style={{ objectFit: 'cover' }}
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&auto=format&fit=crop&q=80';
-                    }}
-                  />
-                  <div 
-                    className="position-absolute top-0 start-0 w-100 h-100" 
-                    style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%)' }} 
-                  />
+          {filteredBranches.map((branch) => {
+            const isInactive = branch.status !== 'Active';
+            return (
+              <div key={branch.id} className="col-12 col-md-6 col-xl-4">
+                <div className={`card h-100 border-0 shadow-sm rounded-4 overflow-hidden foodie-card transition-all position-relative ${isInactive ? 'bg-light-subtle opacity-75' : 'bg-white'}`}>
+                  {/* Branch Image Cover */}
+                  <div className="position-relative" style={{ height: '160px' }}>
+                    {branch.image ? (
+                      <img 
+                        src={branch.image} 
+                        alt={branch.name}
+                        className="w-100 h-100"
+                        style={{ objectFit: 'cover', filter: isInactive ? 'grayscale(40%)' : 'none' }}
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-100 h-100 bg-secondary d-flex align-items-center justify-content-center text-white-50">
+                        <FiHome size={40} />
+                      </div>
+                    )}
+                    <div 
+                      className="position-absolute top-0 start-0 w-100 h-100" 
+                      style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%)' }} 
+                    />
 
-                  {/* Main Branch Pill */}
-                  {branch.isMainBranch && (
-                    <div className="position-absolute top-0 start-0 m-3">
-                      <span className="badge bg-warning text-dark fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
-                        <FiStar className="fill-current" /> Main HQ Branch
+                    {/* Main Branch Pill */}
+                    {branch.isMainBranch && (
+                      <div className="position-absolute top-0 start-0 m-3">
+                        <span className="badge bg-warning text-dark fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
+                          <FiStar className="fill-current" /> Main HQ Branch
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Status Badge */}
+                    <div className="position-absolute top-0 end-0 m-3">
+                      {getStatusBadge(branch.status)}
+                    </div>
+
+                    {/* Branch Name & Code Overlay */}
+                    <div className="position-absolute bottom-0 start-0 p-3 text-white w-100">
+                      <span className="badge bg-danger bg-opacity-75 rounded-pill px-2 py-0.5 mb-1" style={{ fontSize: '10px' }}>
+                        {branch.code}
+                      </span>
+                      <h5 className="fw-bold text-white mb-0" style={{ wordBreak: 'break-word', fontSize: '1.05rem', lineHeight: '1.3' }} title={branch.name}>
+                        {branch.name}
+                      </h5>
+                    </div>
+                  </div>
+
+                  {/* Branch Details Body */}
+                  <div className="card-body p-3.5 d-flex flex-column gap-2">
+                    <div className="d-flex align-items-start text-secondary small">
+                      <FiMapPin className="text-danger mt-1 flex-shrink-0 me-2" size={15} />
+                      <span className="text-dark fw-medium line-clamp-2" style={{ fontSize: '12.5px' }}>
+                        {branch.address}
                       </span>
                     </div>
-                  )}
 
-                  {/* Status Badge */}
-                  <div className="position-absolute top-0 end-0 m-3">
-                    {getStatusBadge(branch.status)}
-                  </div>
-
-                  {/* Branch Name & Code Overlay */}
-                  <div className="position-absolute bottom-0 start-0 p-3 text-white w-100">
-                    <span className="badge bg-danger bg-opacity-75 rounded-pill px-2 py-0.5 mb-1" style={{ fontSize: '10px' }}>
-                      {branch.code}
-                    </span>
-                    <h5 className="fw-bold text-white mb-0 text-truncate" title={branch.name}>
-                      {branch.name}
-                    </h5>
-                  </div>
-                </div>
-
-                {/* Branch Details Body */}
-                <div className="card-body p-3.5 d-flex flex-column gap-2">
-                  <div className="d-flex align-items-start text-secondary small">
-                    <FiMapPin className="text-danger mt-1 flex-shrink-0 me-2" size={15} />
-                    <span className="text-dark fw-medium line-clamp-2" style={{ fontSize: '12.5px' }}>
-                      {branch.address}
-                    </span>
-                  </div>
-
-                  <div className="row g-2 pt-2 border-top border-light mt-1">
-                    <div className="col-6">
-                      <div className="d-flex align-items-center text-secondary small">
-                        <FiUser className="text-primary flex-shrink-0 me-2" size={14} />
-                        <span className="text-truncate fw-semibold" title={branch.managerName} style={{ fontSize: '12px' }}>
-                          {branch.managerName || 'Manager: N/A'}
-                        </span>
+                    <div className="row g-2 pt-2 border-top border-light mt-1">
+                      <div className="col-6">
+                        <div className="d-flex align-items-center text-secondary small">
+                          <FiUser className="text-primary flex-shrink-0 me-2" size={14} />
+                          <span className="text-truncate fw-semibold" title={branch.managerName} style={{ fontSize: '12px' }}>
+                            {branch.managerName || 'Manager: N/A'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="col-6">
+                        <div className="d-flex align-items-center text-secondary small">
+                          <FiLayers className="text-info flex-shrink-0 me-2" size={14} />
+                          <span className="fw-semibold text-dark" style={{ fontSize: '12px' }}>
+                            {branch.tablesCount || 0} Tables
+                          </span>
+                        </div>
+                      </div>
+                      <div className="col-6">
+                        <div className="d-flex align-items-center text-secondary small">
+                          <FiClock className="text-warning flex-shrink-0 me-2" size={14} />
+                          <span className="text-truncate" title={branch.openingHours} style={{ fontSize: '11.5px' }}>
+                            {branch.openingHours || 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="col-6">
+                        <div className="d-flex align-items-center text-secondary small">
+                          <FiPhone className="text-success flex-shrink-0 me-2" size={14} />
+                          <span className="text-truncate" title={branch.phone} style={{ fontSize: '11.5px' }}>
+                            {branch.phone || 'N/A'}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="col-12">
+                        <div className="d-flex align-items-center text-secondary small">
+                          <FiMail className="text-primary flex-shrink-0 me-2" size={14} />
+                          <a 
+                            href={branch.email ? `mailto:${branch.email}` : undefined}
+                            className="text-truncate text-secondary text-decoration-none fw-medium" 
+                            title={branch.email} 
+                            style={{ fontSize: '11.5px' }}
+                          >
+                            {branch.email || 'Email: N/A'}
+                          </a>
+                        </div>
                       </div>
                     </div>
-                    <div className="col-6">
-                      <div className="d-flex align-items-center text-secondary small">
-                        <FiLayers className="text-info flex-shrink-0 me-2" size={14} />
-                        <span className="fw-semibold text-dark" style={{ fontSize: '12px' }}>
-                          {branch.tablesCount || 0} Tables
-                        </span>
-                      </div>
-                    </div>
-                    <div className="col-6">
-                      <div className="d-flex align-items-center text-secondary small">
-                        <FiClock className="text-warning flex-shrink-0 me-2" size={14} />
-                        <span className="text-truncate" title={branch.openingHours} style={{ fontSize: '11.5px' }}>
-                          {branch.openingHours || '10 AM - 11 PM'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="col-6">
-                      <div className="d-flex align-items-center text-secondary small">
-                        <FiPhone className="text-success flex-shrink-0 me-2" size={14} />
-                        <span className="text-truncate" title={branch.phone} style={{ fontSize: '11.5px' }}>
-                          {branch.phone || 'N/A'}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="col-12">
-                      <div className="d-flex align-items-center text-secondary small">
-                        <FiMail className="text-primary flex-shrink-0 me-2" size={14} />
-                        <a 
-                          href={branch.email ? `mailto:${branch.email}` : undefined}
-                          className="text-truncate text-secondary text-decoration-none fw-medium" 
-                          title={branch.email} 
-                          style={{ fontSize: '11.5px' }}
+
+                    {/* Actions Footer */}
+                    {isAdmin && (
+                      <div className="d-flex align-items-center justify-content-between pt-3 border-top border-light mt-auto">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEdit(branch)}
+                          className="btn btn-sm btn-outline-danger d-flex align-items-center rounded-pill px-3 py-1 fw-bold shadow-xs transition-all"
+                          style={{ fontSize: '12px' }}
                         >
-                          {branch.email || 'Email: N/A'}
-                        </a>
+                          <FiEdit2 size={13} className="me-1.5" /> Edit Branch
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => openDelete(branch)}
+                          className="btn btn-sm btn-link text-danger p-0 text-decoration-none d-flex align-items-center"
+                          style={{ fontSize: '12px' }}
+                          title={`Delete branch ${branch.name}`}
+                        >
+                          <FiTrash2 size={13} className="me-1" /> Delete
+                        </button>
                       </div>
-                    </div>
+                    )}
                   </div>
-
-                  {/* Actions Footer */}
-                  {isAdmin && (
-                    <div className="d-flex align-items-center justify-content-between pt-3 border-top border-light mt-auto">
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(branch)}
-                        className="btn btn-sm btn-outline-danger d-flex align-items-center rounded-pill px-3 py-1 fw-bold shadow-xs transition-all"
-                        style={{ fontSize: '12px' }}
-                      >
-                        <FiEdit2 size={13} className="me-1.5" /> Edit Branch
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => openDelete(branch)}
-                        className="btn btn-sm btn-link text-danger p-0 text-decoration-none d-flex align-items-center"
-                        style={{ fontSize: '12px' }}
-                        title={`Delete branch ${branch.name}`}
-                      >
-                        <FiTrash2 size={13} className="me-1" /> Delete
-                      </button>
-                    </div>
-                  )}
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Add / Edit Branch Modal */}
       {renderBranchModal()}
 
-      {/* Success Modal Showing Generated Branch Code (Matches Screenshot 04) */}
+      {/* Success Modal Showing Generated Branch Code */}
       {createdSuccessBranch && (
         <Modal
           isOpen={!!createdSuccessBranch}
@@ -784,32 +832,43 @@ export const Branches = () => {
         </Modal>
       )}
 
+      {/* Delete Confirmation Modal */}
       {deletingBranch && (
         <Modal
-          isOpen={!!deletingBranch}
-          title="Delete Branch"
+          isOpen={Boolean(deletingBranch)}
+          title={`Delete Branch: ${deletingBranch.name}`}
           onClose={closeDelete}
           size="md"
-          footerActions={(
-            <>
-              <Button variant="light" onClick={closeDelete} disabled={deleteLoading}>Cancel</Button>
-              <Button variant="danger" onClick={handleDeleteConfirm} loading={deleteLoading}>Delete Branch</Button>
-            </>
-          )}
+          footerActions={
+            <div className="d-flex justify-content-end gap-2">
+              <Button variant="light" onClick={closeDelete} disabled={deleteLoading}>
+                Cancel
+              </Button>
+              <Button variant="danger" onClick={handleDeleteConfirm} loading={deleteLoading}>
+                Delete Branch
+              </Button>
+            </div>
+          }
         >
-          <p className="text-dark small mb-2">
-            Delete <strong>{deletingBranch.name}</strong> ({deletingBranch.code})?
-          </p>
-          <p className="text-secondary small mb-3">
-            Its employees, coupons, categories, dishes, stock records and tables are deleted. Past orders,
-            payments and bills are kept with the branch name. A branch with orders still in progress cannot be deleted.
-            If this is the primary branch, another remaining branch becomes primary automatically.
-          </p>
           {deleteError && (
-            <div className="alert alert-danger py-2 small mb-0 d-flex align-items-center gap-2">
+            <div className="alert alert-danger py-2 small mb-3 d-flex align-items-center gap-2">
               <FiAlertCircle /> {deleteError}
             </div>
           )}
+
+          <p className="text-secondary small mb-3">
+            Are you sure you want to delete <strong>{deletingBranch.name}</strong> ({deletingBranch.code})?
+          </p>
+
+          {deletingBranch.isMainBranch && (
+            <div className="alert alert-warning py-2 small mb-3">
+              <strong>Notice:</strong> This is currently marked as the Main HQ branch. Deleting it will permanently remove it. Another branch will not be automatically promoted as the main branch.
+            </div>
+          )}
+
+          <div className="alert alert-danger bg-danger-subtle border-0 text-danger py-2 small mb-0">
+            <strong>Warning:</strong> All tables, meal associations, and branch configuration tied to this branch will be permanently removed.
+          </div>
         </Modal>
       )}
     </AdminLayout>

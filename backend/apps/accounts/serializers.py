@@ -44,8 +44,9 @@ def user_payload(user):
             "user_type": user.user_type, "employee": None}
     emp = get_active_employee(user)
     if emp:
+        dept = "Management" if emp.role in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN) else emp.department
         data["employee"] = {
-            "employee_code": emp.employee_code, "role": emp.role, "department": emp.department,
+            "employee_code": emp.employee_code, "role": emp.role, "department": dept,
             "job_title": emp.job_title, "is_admin_level": emp.role in ADMIN_ROLES,
             "branch": {"id": emp.branch_id, "name": emp.branch.name} if emp.branch_id else None,
         }
@@ -108,6 +109,11 @@ class EmployeeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"password": "Password is required."})
 
         user_data = attrs.get("user", {})
+        name = user_data.get("name")
+        if name:
+            if any(ch.isdigit() for ch in name):
+                raise serializers.ValidationError({"name": "Employee name cannot contain numbers."})
+
         phone = user_data.get("phone")
         if phone:
             qs = User.objects.filter(phone=phone)
@@ -127,6 +133,8 @@ class EmployeeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"status": "You cannot deactivate your own account."})
 
         from .staff_catalog import validate_assignment
+        if role in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
+            attrs["department"] = "Management"
         department = attrs.get("department", inst.department if inst else "")
         job_title = attrs.get("job_title", inst.job_title if inst else "")
         bill_access = attrs.get("bill_access", inst.bill_access if inst else "")

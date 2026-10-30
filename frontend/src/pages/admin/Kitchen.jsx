@@ -368,7 +368,7 @@ export const Kitchen = () => {
             showBackButton
             actions={
               <div className="d-flex align-items-center gap-2 pe-2 pe-md-3">
-                {!isBranchRestricted && (
+                {(!isBranchRestricted && (user?.role === 'admin' || user?.role === 'super_admin' || user?.isSuperAdmin) && branches.length > 1) && (
                   <div className="d-flex align-items-center gap-2">
                     <span className="text-secondary small fw-semibold d-none d-md-inline">Branch:</span>
                     <select

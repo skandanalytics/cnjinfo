@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
@@ -15,6 +16,9 @@ class Category(models.Model):
     description = models.CharField(max_length=500, blank=True)  # short text shown under the category (SRS 3.1.3)
     display_order = models.PositiveIntegerField(default=0)
     is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -46,6 +50,9 @@ class Food(models.Model):
     # External image chosen by the admin. When set it is the dish's display image; uploading a new primary
     # FoodImage clears it so the most recent choice wins.
     image_url = models.URLField(max_length=1000, blank=True, default="")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

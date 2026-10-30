@@ -29,7 +29,9 @@ export const Offers = () => {
   const [search, setSearch] = useState('');
 
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [editingCouponTarget, setEditingCouponTarget] = useState(null);
   const [code, setCode] = useState('');
+  const [couponType, setCouponType] = useState('percentage'); // 'percentage' | 'Flat'
   const [discount, setDiscount] = useState('');
   const [minOrder, setMinOrder] = useState('');
   const [validity, setValidity] = useState('');
@@ -37,6 +39,32 @@ export const Offers = () => {
   const [couponError, setCouponError] = useState('');
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+
+  const handleOpenAddCoupon = () => {
+    setEditingCouponTarget(null);
+    setCode('');
+    setCouponType('percentage');
+    setDiscount('');
+    setMinOrder('');
+    setValidity('');
+    setAutoApply(false);
+    setCouponError('');
+    setIsAddOpen(true);
+  };
+
+  const handleEditCouponClick = (c) => {
+    setEditingCouponTarget(c);
+    setCode(c.code || '');
+    setCouponType(c.type === 'percentage' || c.discount_type === 'PERCENT' || c.discount_type === 'PERCENTAGE' ? 'percentage' : 'Flat');
+    setDiscount(String(c.discount != null ? c.discount : (c.discount_value != null ? c.discount_value : '')));
+    setMinOrder(String(c.minOrderValue != null ? c.minOrderValue : (c.minimum_order_amount != null ? c.minimum_order_amount : '')));
+    const rawVal = c.validity || c.valid_until || c.valid_to || '';
+    const dateStr = rawVal ? String(rawVal).slice(0, 10) : '';
+    setValidity(dateStr);
+    setAutoApply(Boolean(c.autoApply));
+    setCouponError('');
+    setIsAddOpen(true);
+  };
 
   // Editing & Deleting dish offer
   const [editingDish, setEditingDish] = useState(null);
@@ -146,17 +174,30 @@ export const Offers = () => {
       setCouponError('Minimum order value must be greater than the discount value.');
       return;
     }
+    if (couponType === 'percentage' && (discountNum <= 0 || discountNum > 100)) {
+      setCouponError('Discount percentage must be between 1 and 100%.');
+      return;
+    }
 
     try {
-      await couponService.createCoupon({
+      const payload = {
         code: code.toUpperCase(),
-        discount: parseInt(discount),
-        minOrderValue: parseInt(minOrder || '0'),
-        type: 'Flat',
+        discount: discountNum,
+        minOrderValue: minOrderNum,
+        type: couponType,
+        discount_type: couponType === 'percentage' ? 'PERCENT' : 'FLAT',
         validity,
         status: 'Active',
         autoApply,
-      });
+      };
+
+      if (editingCouponTarget) {
+        await couponService.updateCoupon(editingCouponTarget.id, payload);
+        setToastInfo({ show: true, message: `Coupon "${code.toUpperCase()}" updated successfully.`, type: 'success' });
+      } else {
+        await couponService.createCoupon(payload);
+        setToastInfo({ show: true, message: `Coupon "${code.toUpperCase()}" created successfully.`, type: 'success' });
+      }
 
       const freshCoupons = await couponService.getCoupons();
       setCoupons(freshCoupons);
@@ -165,9 +206,10 @@ export const Offers = () => {
       setMinOrder('');
       setValidity('');
       setAutoApply(false);
+      setEditingCouponTarget(null);
       setIsAddOpen(false);
     } catch (err) {
-      window.alert(err.message || 'The coupon could not be created.');
+      setCouponError(err.message || 'The coupon could not be saved.');
     }
   };
 
@@ -302,75 +344,8 @@ export const Offers = () => {
     );
   }
 
-  if (!loading && coupons.length === 0 && discountedDishes.length === 0) {
-    return (
-      <AdminLayout>
-        <PageHeader
-          title="Offers & Discounts"
-          showBackButton
-          actions={
-            <Button
-              onClick={() => { setCouponError(''); setIsAddOpen(true); }}
-              variant="primary"
-              className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill"
-            >
-              <FiPlus /> Add Coupon
-            </Button>
-          }
-        />
-        <EmptyState
-          title="No Offers, Discounts and Coupons"
-          description="There are currently no active coupons, vouchers, or discounts configured."
-          icon="bi-percent"
-        />
 
-        {/* Add Coupon Modal */}
-        <Modal isOpen={isAddOpen} title="Create Offer Coupon" onClose={() => setIsAddOpen(false)}>
-          <form onSubmit={handleCreateCoupon}>
-            <Input
-              label="Promo Coupon Code"
-              placeholder="e.g. MONSOON20"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              required
-            />
-            <Input
-              label="Discount Value (₹)"
-              type="number"
-              placeholder="e.g. 50"
-              value={discount}
-              onChange={(e) => setDiscount(e.target.value)}
-            />
-            <Input
-              label="Minimum Order Value (₹)"
-              type="number"
-              placeholder="e.g. 299"
-              value={minOrder}
-              onChange={(e) => setMinOrder(e.target.value)}
-              required
-            />
-            <Input
-              label="Valid Until"
-              type="date"
-              min={todayIso}
-              value={validity}
-              onChange={(e) => { setValidity(e.target.value); setCouponError(''); }}
-              required
-              error={couponError}
-            />
-            <div className="d-flex align-items-center justify-content-end gap-2 mt-4 pt-3 border-top">
-              <Button variant="outline" type="button" onClick={() => setIsAddOpen(false)} className="rounded-pill px-4">
-                Cancel
-              </Button>
-              <Button type="submit" variant="primary" className="rounded-pill px-4 fw-bold">
-                Create Coupon
-              </Button>
-            </div>
-          </form>
-        </Modal>
-      </AdminLayout>
-    );
-  }
+
 
   return (
     <AdminLayout>
@@ -409,7 +384,7 @@ export const Offers = () => {
             )}
             {activeTab === 'coupons' && (
               <Button
-                onClick={() => { setCouponError(''); setIsAddOpen(true); }}
+                onClick={handleOpenAddCoupon}
                 variant="primary"
                 className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill"
               >
@@ -639,6 +614,14 @@ export const Offers = () => {
                         <td className="text-end">
                           <div className="d-flex align-items-center justify-content-end gap-2">
                             <button
+                              onClick={() => handleEditCouponClick(c)}
+                              className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1"
+                              title="Edit Coupon"
+                              style={{ fontSize: '11px', opacity: 1 }}
+                            >
+                              <FiEdit2 size={13} /> Edit
+                            </button>
+                            <button
                               onClick={() => handleToggleStatus(c.id, c.code, c.status)}
                               className={`btn btn-sm rounded-pill px-3 fw-bold ${c.status === 'Active' ? 'btn-outline-secondary' : 'btn-outline-success'}`}
                               style={{ fontSize: '11px', opacity: 1 }}
@@ -647,7 +630,7 @@ export const Offers = () => {
                             </button>
                             <button
                               onClick={() => handleDeleteCouponClick(c.id, c.code)}
-                              className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-flex align-items-center gap-1"
+                              className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1"
                               title="Delete Coupon"
                               style={{ fontSize: '11px', opacity: 1 }}
                             >
@@ -689,8 +672,8 @@ export const Offers = () => {
         />
       )}
 
-      {/* Add Coupon Modal */}
-      <Modal isOpen={isAddOpen} title="Create Offer Coupon" onClose={() => setIsAddOpen(false)}>
+      {/* Add / Edit Coupon Modal */}
+      <Modal isOpen={isAddOpen} title={editingCouponTarget ? "Edit Offer Coupon" : "Create Offer Coupon"} onClose={() => { setIsAddOpen(false); setEditingCouponTarget(null); }}>
         <form onSubmit={handleCreateCoupon}>
           <Input
             label="Promo Coupon Code"
@@ -699,20 +682,68 @@ export const Offers = () => {
             onChange={(e) => setCode(e.target.value)}
             required
           />
-          <Input
-            label="Discount Value (₹)"
-            type="number"
-            placeholder="e.g. 50"
-            value={discount}
-            onChange={(e) => {
-              setDiscount(e.target.value);
-              if (couponError.includes('Minimum order value')) setCouponError('');
-            }}
-            required
-          />
+
+          <div className="mb-3">
+            <label className="form-label small fw-semibold text-secondary mb-1">Discount Type</label>
+            <div className="d-flex gap-2">
+              <button
+                type="button"
+                className={`btn btn-sm flex-fill rounded-pill py-1.5 fw-semibold ${couponType === 'percentage' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => {
+                  setCouponType('percentage');
+                  if (couponError.includes('percentage')) setCouponError('');
+                }}
+              >
+                Percentage (%)
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm flex-fill rounded-pill py-1.5 fw-semibold ${couponType === 'Flat' ? 'btn-primary' : 'btn-outline-secondary'}`}
+                onClick={() => {
+                  setCouponType('Flat');
+                  if (couponError.includes('percentage')) setCouponError('');
+                }}
+              >
+                Flat Amount (₹)
+              </button>
+            </div>
+          </div>
+
+          {couponType === 'percentage' ? (
+            <Input
+              label="Discount Percentage (%)"
+              type="number"
+              suffix="%"
+              placeholder="e.g. 20"
+              min="1"
+              max="100"
+              value={discount}
+              onChange={(e) => {
+                setDiscount(e.target.value);
+                if (couponError.includes('percentage') || couponError.includes('Minimum order value')) setCouponError('');
+              }}
+              required
+            />
+          ) : (
+            <Input
+              label="Discount Value (₹)"
+              type="number"
+              prefix="₹"
+              placeholder="e.g. 50"
+              min="1"
+              value={discount}
+              onChange={(e) => {
+                setDiscount(e.target.value);
+                if (couponError.includes('Minimum order value')) setCouponError('');
+              }}
+              required
+            />
+          )}
+
           <Input
             label="Minimum Order Value (₹)"
             type="number"
+            prefix="₹"
             placeholder="e.g. 299"
             value={minOrder}
             onChange={(e) => {
@@ -729,7 +760,7 @@ export const Offers = () => {
             value={validity}
             onChange={(e) => { setValidity(e.target.value); setCouponError(''); }}
             required
-            error={couponError && !couponError.includes('Minimum order value') ? couponError : undefined}
+            error={couponError && !couponError.includes('Minimum order value') && !couponError.includes('percentage') ? couponError : undefined}
           />
           {couponError && <div className="text-danger small fw-semibold mb-2">{couponError}</div>}
           <div className="form-check form-switch mb-3">
@@ -746,11 +777,11 @@ export const Offers = () => {
             </label>
           </div>
           <div className="d-flex align-items-center justify-content-end gap-2 mt-4 pt-3 border-top">
-            <Button variant="outline" type="button" onClick={() => setIsAddOpen(false)} className="rounded-pill px-4">
+            <Button variant="outline" type="button" onClick={() => { setIsAddOpen(false); setEditingCouponTarget(null); }} className="rounded-pill px-4">
               Cancel
             </Button>
             <Button type="submit" variant="primary" className="rounded-pill px-4 fw-bold">
-              Create Coupon
+              {editingCouponTarget ? 'Save Changes' : 'Create Coupon'}
             </Button>
           </div>
         </form>

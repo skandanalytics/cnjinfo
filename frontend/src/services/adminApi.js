@@ -692,6 +692,10 @@ export async function createCoupon(couponData) {
   if (minOrd <= disc) {
     throw new Error('Minimum order value must be greater than the discount value.');
   }
+  const isPercent = couponData.type === 'percentage' || couponData.discount_type === 'PERCENT' || couponData.discount_type === 'PERCENTAGE';
+  if (isPercent && (disc <= 0 || disc > 100)) {
+    throw new Error('Percent discount must be between 1 and 100.');
+  }
   if (!couponData.validity) {
     throw new Error('Valid until is required.');
   }
@@ -708,9 +712,9 @@ export async function createCoupon(couponData) {
       branch,
       code: String(couponData.code || '').trim().toUpperCase(),
       description: couponData.description || '',
-      discount_type: 'FLAT',
-      discount_value: couponData.discount,
-      min_order_value: couponData.minOrderValue || 0,
+      discount_type: isPercent ? 'PERCENT' : 'FLAT',
+      discount_value: disc,
+      min_order_value: minOrd,
       valid_from: from.toISOString(),
       valid_to: to.toISOString(),
       is_active: true,
@@ -719,6 +723,42 @@ export async function createCoupon(couponData) {
   });
   publishCatalogChange();
   return mapCoupon(created);
+}
+
+export async function updateCoupon(id, couponData) {
+  const disc = parseFloat(couponData.discount ?? couponData.discount_value ?? 0);
+  const minOrd = parseFloat(couponData.minOrderValue ?? couponData.min_order_value ?? 0);
+  if (minOrd <= disc) {
+    throw new Error('Minimum order value must be greater than the discount value.');
+  }
+  const isPercent = couponData.type === 'percentage' || couponData.discount_type === 'PERCENT' || couponData.discount_type === 'PERCENTAGE';
+  if (isPercent && (disc <= 0 || disc > 100)) {
+    throw new Error('Percent discount must be between 1 and 100.');
+  }
+
+  const payload = {
+    code: String(couponData.code || '').trim().toUpperCase(),
+    description: couponData.description || '',
+    discount_type: isPercent ? 'PERCENT' : 'FLAT',
+    discount_value: disc,
+    min_order_value: minOrd,
+    auto_apply: Boolean(couponData.autoApply),
+  };
+
+  if (couponData.validity) {
+    const match = String(couponData.validity).match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const to = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 23, 59, 59);
+      payload.valid_to = to.toISOString();
+    }
+  }
+
+  const updated = await staffJson(`/coupons/${id}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  publishCatalogChange({ resource: 'coupon', action: 'updated' });
+  return mapCoupon(updated);
 }
 
 export async function setCouponAutoApply(id, autoApply) {

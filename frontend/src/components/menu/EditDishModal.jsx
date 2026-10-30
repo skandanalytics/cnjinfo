@@ -45,12 +45,23 @@ export const EditDishModal = ({
   const handleAddTopping = () => {
     const trimmedName = toppingName.trim();
     const trimmedPrice = toppingPrice.trim();
-    if (!trimmedName || trimmedPrice === '' || isNaN(Number(trimmedPrice)) || Number(trimmedPrice) < 0) {
+    if (!trimmedName) {
+      setErrorMsg('Topping name is required.');
       return;
     }
-    setToppings(prev => [...prev, { name: trimmedName, extra_price: parseFloat(trimmedPrice) }]);
+    if (/^\d+$/.test(trimmedName)) {
+      setErrorMsg('Topping name cannot be numeric only.');
+      return;
+    }
+    if (trimmedPrice === '' || isNaN(Number(trimmedPrice)) || Number(trimmedPrice) < 0) {
+      setErrorMsg('Please enter a valid topping price.');
+      return;
+    }
+    const capName = trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1);
+    setToppings(prev => [...prev, { name: capName, extra_price: parseFloat(trimmedPrice) }]);
     setToppingName('');
     setToppingPrice('');
+    setErrorMsg('');
   };
 
   const handleRemoveTopping = (index) => {
@@ -165,7 +176,12 @@ export const EditDishModal = ({
   }, [dish, isOpen]);
 
   const handlePriceChange = (val) => {
-    setPrice(val);
+    let cleanVal = String(val || '').replace(/[eE+\-]/g, '');
+    if (cleanVal.length > 6) {
+      cleanVal = cleanVal.slice(0, 6);
+    }
+    setPrice(cleanVal);
+    val = cleanVal;
     const origPrice = parseFloat(val);
     const pct = parseFloat(discountPercent);
     if (!isNaN(origPrice) && origPrice > 0 && !isNaN(pct) && pct > 0) {
@@ -219,19 +235,33 @@ export const EditDishModal = ({
     e.preventDefault();
     setErrorMsg('');
 
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       setErrorMsg('Dish name is required.');
       return;
     }
+    if (/^\d+$/.test(trimmedName)) {
+      setErrorMsg('Dish name cannot be numeric only.');
+      return;
+    }
+    const capitalizedName = trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1);
+
     if (!category) {
       setErrorMsg('Please select a category.');
       return;
     }
     const origPrice = parseFloat(price);
-    if (isNaN(origPrice) || origPrice < 0) {
-      setErrorMsg('Price must be a positive number.');
+    if (isNaN(origPrice) || origPrice <= 0) {
+      setErrorMsg('Original price must be greater than 0.');
       return;
     }
+    if (origPrice > 999999) {
+      setErrorMsg('Original price cannot exceed 6 digits (maximum ₹999,999).');
+      return;
+    }
+
+    const trimmedDesc = description.trim();
+    const capitalizedDesc = trimmedDesc ? trimmedDesc.charAt(0).toUpperCase() + trimmedDesc.slice(1) : '';
     
     let discPrice = parseFloat(discountPrice) || 0;
     let discPct = parseFloat(discountPercent) || 0;
@@ -277,11 +307,11 @@ export const EditDishModal = ({
     setLoading(true);
     try {
       await onSave(dish.id, {
-        name: name.trim(),
+        name: capitalizedName,
         price: origPrice,
         discountPrice: discPrice,
         discountPercent: discPct,
-        description: description.trim(),
+        description: capitalizedDesc,
         category,
         type: foodType,
         foodType: foodType,
@@ -343,10 +373,15 @@ export const EditDishModal = ({
 
         {!pricingOnly && (
           <Input 
-            label="Dish Name" 
+            label="Dish Name *" 
             placeholder="e.g. Garlic Bread sticks" 
             value={name} 
-            onChange={(e) => setName(e.target.value)} 
+            onChange={(e) => {
+              const v = e.target.value;
+              if (v.length === 1) setName(v.toUpperCase());
+              else if (v.length > 1 && name.length === 0) setName(v.charAt(0).toUpperCase() + v.slice(1));
+              else setName(v);
+            }} 
             required 
           />
         )}
@@ -358,6 +393,9 @@ export const EditDishModal = ({
               type="number"
               placeholder="e.g. 199" 
               value={price} 
+              onKeyDown={(e) => {
+                if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
+              }}
               onChange={(e) => handlePriceChange(e.target.value)} 
               required 
             />
@@ -389,9 +427,20 @@ export const EditDishModal = ({
             <Input 
               label="Stock Quantity (Optional)" 
               type="number"
+              min="0"
               placeholder="e.g. 50" 
               value={stock} 
-              onChange={(e) => setStock(e.target.value)} 
+              onKeyDown={(e) => {
+                if (['-', '+', 'e', 'E'].includes(e.key)) {
+                  e.preventDefault();
+                }
+              }}
+              onChange={(e) => {
+                const val = e.target.value;
+                if (val === '' || Number(val) >= 0) {
+                  setStock(val);
+                }
+              }} 
             />
 
             <Select 
@@ -480,7 +529,12 @@ export const EditDishModal = ({
               label="Description" 
               placeholder="Detail recipe ingredients" 
               value={description} 
-              onChange={(e) => setDescription(e.target.value)} 
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v.length === 1) setDescription(v.toUpperCase());
+                else if (v.length > 1 && description.length === 0) setDescription(v.charAt(0).toUpperCase() + v.slice(1));
+                else setDescription(v);
+              }} 
             />
 
             {/* Toppings / Customizations Add-on Section */}

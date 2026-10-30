@@ -1,4 +1,4 @@
-﻿from django.db import transaction
+from django.db import transaction
 from django.db.models import Count, Q
 from rest_framework import status, viewsets
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
@@ -26,6 +26,15 @@ class CategoryViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, vi
     filterset_fields = ["branch", "is_active"]
     search_fields = ["name", "description"]
     ordering_fields = ["display_order", "name", "id"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_authenticated:
+            emp = getattr(user, "employee", None)
+            if emp and emp.role == "SUPER_ADMIN":
+                qs = qs.filter(Q(created_by=user) | Q(created_by__isnull=True))
+        return qs.distinct()
 
     def destroy(self, request, *args, **kwargs):
         """A category that still lists dishes is not deleted; the admin deletes or moves them first. Dishes that
@@ -61,6 +70,15 @@ class FoodViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, viewse
     filterset_fields = ["branch", "category", "diet_type", "is_active", "is_sold_out"]
     search_fields = ["name", "description", "ingredients"]
     ordering_fields = ["name", "price", "created_at"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_authenticated:
+            emp = getattr(user, "employee", None)
+            if emp and emp.role == "SUPER_ADMIN":
+                qs = qs.filter(Q(created_by=user) | Q(created_by__isnull=True))
+        return qs.distinct()
 
     def destroy(self, request, *args, **kwargs):
         """Deletes the dish. Past orders keep their item snapshot and the stock ledger keeps its rows."""
@@ -143,3 +161,11 @@ class DishDiscountViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin
     filterset_fields = ["food", "is_active", "discount_type"]
     search_fields = ["food__name"]
 
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_authenticated:
+            emp = getattr(user, "employee", None)
+            if emp and emp.role == "SUPER_ADMIN":
+                qs = qs.filter(Q(food__created_by=user) | Q(food__created_by__isnull=True))
+        return qs.distinct()

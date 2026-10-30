@@ -359,12 +359,12 @@ export const Users = () => {
               {/* Tabs */}
               <div className="d-flex flex-wrap gap-2">
                 {[
-                  { key: 'all', label: `All Staff (${stats.total})` },
-                  { key: 'kitchen', label: `Kitchen & Chefs (${stats.kitchenStaff})` },
-                  { key: 'floor', label: `Floor Stewards (${stats.floorStaff})` },
-                  { key: 'billing', label: `Cashiers & POS (${stats.billingStaff})` },
-                  { key: 'management', label: `Management & Admin (${stats.managementStaff})` }
-                ].map(tab => (
+                  { key: 'all', label: `All Staff (${stats.total})`, count: stats.total },
+                  { key: 'kitchen', label: `Kitchen & Chefs (${stats.kitchenStaff})`, count: stats.kitchenStaff },
+                  { key: 'floor', label: `Floor Stewards (${stats.floorStaff})`, count: stats.floorStaff },
+                  { key: 'billing', label: `Cashiers & POS (${stats.billingStaff})`, count: stats.billingStaff },
+                  { key: 'management', label: `Management & Admin (${stats.managementStaff})`, count: stats.managementStaff }
+                ].filter(tab => tab.key === 'all' || tab.count > 0).map(tab => (
                   <button
                     key={tab.key}
                     onClick={() => setSelectedTab(tab.key)}
@@ -442,9 +442,10 @@ export const Users = () => {
                     {filteredEmployees.map((u) => {
                       const empId = u.employeeId || `EMP-${u.id}`;
                       const initials = u.name ? u.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'E';
+                      const isInactive = u.status === 'INACTIVE' || u.status === 'SUSPENDED';
 
                       return (
-                        <tr key={u.id} className="small">
+                        <tr key={u.id} className={`small ${isInactive ? 'bg-light-subtle opacity-75' : ''}`}>
                           <td className="py-3">
                             <div className="d-flex align-items-center gap-3">
                               <div
@@ -681,21 +682,20 @@ export const Users = () => {
                     {!editingUser && (
                       <div className="col-12 col-md-6">
                         <label className="form-label small fw-bold text-secondary">Password *</label>
-                        <div className="position-relative">
+                        <div className="position-relative d-flex align-items-center">
                           <input
                             type={showPassword ? 'text' : 'password'}
                             required
                             minLength={4}
-                            className="form-control rounded-3"
-                            style={{ paddingRight: '42px' }}
-                            placeholder="Default is 123456"
+                            className="form-control rounded-3 pe-5"
+                            placeholder="Enter password"
                             value={formData.password || ''}
                             onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                           />
                           <button
                             type="button"
-                            className="btn btn-link position-absolute top-50 end-0 translate-middle-y text-secondary p-0 me-3 d-flex align-items-center justify-content-center"
-                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', zIndex: 5 }}
+                            className="btn btn-link position-absolute end-0 top-50 translate-middle-y text-secondary p-0 me-3 d-flex align-items-center justify-content-center"
+                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', zIndex: 5, width: '24px', height: '24px' }}
                             onClick={() => setShowPassword((prev) => !prev)}
                             aria-label={showPassword ? 'Hide password' : 'Show password'}
                             title={showPassword ? 'Hide password' : 'Show password'}

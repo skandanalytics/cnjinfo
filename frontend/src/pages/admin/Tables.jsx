@@ -363,6 +363,15 @@ export const Tables = () => {
     navigate(`${targetUrl}?table=${table.id}`);
   };
 
+  const handleQrRefresh = (tableId, newStatus) => {
+    if (tableId != null) {
+      setTables((prev) => prev.map((t) => (t.id === tableId ? { ...t, qr_is_active: newStatus } : t)));
+      if (qrModalTable?.id === tableId) {
+        setQrModalTable((prev) => (prev ? { ...prev, qr_is_active: newStatus } : prev));
+      }
+    }
+  };
+
   const [selectedLocation, setSelectedLocation] = useState('ALL');
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('ALL');
 
@@ -617,7 +626,7 @@ export const Tables = () => {
           isOpen={!!qrModalTable}
           table={qrModalTable}
           onClose={() => setQrModalTable(null)}
-          onRefresh={fetchTables}
+          onRefresh={handleQrRefresh}
         />
       )}
 

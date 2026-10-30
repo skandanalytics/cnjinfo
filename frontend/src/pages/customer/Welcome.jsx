@@ -209,8 +209,16 @@ export const Welcome = () => {
         }
         rememberScannedTableQr(qrParam);
         if (branch?.id) {
-          sessionStorage.setItem('foodie_public_branch', String(branch.id));
+          const bId = String(branch.id);
+          const prevBranch = sessionStorage.getItem('foodie_public_branch');
+          if (prevBranch && prevBranch !== bId) {
+            import('../../services/productService').then(({ clearStaticProductCache }) => clearStaticProductCache());
+          }
+          sessionStorage.setItem('foodie_public_branch', bId);
+          localStorage.setItem('foodie_public_branch', bId);
           sessionStorage.setItem('foodie_branch_source', 'qr');
+          localStorage.setItem('foodie_branch_source', 'qr');
+          sessionStorage.setItem('foodie_table_qr', qrParam);
         }
         const ctx = {
           tableNumber: table.table_number, tableId: table.id,

@@ -25,10 +25,14 @@ class CategorySerializer(BranchBoundSerializerMixin, serializers.ModelSerializer
         validators = []
 
     def validate_name(self, value):
-        name = value.strip()
+        name = (value or "").strip()
+        if not name:
+            raise serializers.ValidationError("Category name is required.")
+        if name.isdigit():
+            raise serializers.ValidationError("Category name cannot be numeric only.")
         if name.lower() in {"all", "all categories", "all category"}:
             raise serializers.ValidationError("Cannot create a category named 'All Categories'. This is a reserved aggregate view.")
-        return name
+        return name[0].upper() + name[1:] if len(name) > 1 else name.upper()
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
@@ -112,6 +116,14 @@ class CustomizationSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
         validators = []
 
+    def validate_name(self, value):
+        name = (value or "").strip()
+        if not name:
+            raise serializers.ValidationError("Topping name is required.")
+        if name.isdigit():
+            raise serializers.ValidationError("Topping name cannot be numeric only.")
+        return name[0].upper() + name[1:] if len(name) > 1 else name.upper()
+
     def validate_food(self, food):
         allowed = allowed_branch_id(self.context["request"].user)
         if allowed is not None and food.branch_id != allowed:
@@ -188,6 +200,36 @@ class FoodSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
             food.inventory = inv
         return food
 
+    def update(self, instance, validated_data):
+        initial_stock = validated_data.pop("initial_stock", None)
+        if initial_stock is None and "stock" in self.initial_data:
+            try:
+                raw_stock = self.initial_data.get("stock")
+                if raw_stock is not None and str(raw_stock).strip() != "":
+                    val = int(raw_stock)
+                    if val < 0:
+                        raise serializers.ValidationError({"stock": "Stock quantity must be 0 or more."})
+                    initial_stock = val
+            except (TypeError, ValueError):
+                pass
+        food = super().update(instance, validated_data)
+        if initial_stock is not None and initial_stock >= 0:
+            from apps.inventory.models import InventoryItem
+            from apps.inventory import services
+            user = None
+            if self.context.get("request"):
+                user = self.context["request"].user
+            inv, created = InventoryItem.objects.get_or_create(
+                food=food,
+                defaults={"branch": food.branch, "quantity": initial_stock}
+            )
+            if not created and inv.quantity != initial_stock:
+                services.adjust_stock(inv, initial_stock, user, "Updated from dish form")
+            elif created and user:
+                services.set_initial_stock(inv, user)
+            food.inventory = inv
+        return food
+
     def get_discounted_price(self, obj):
         _, amount = current_discount(obj)
         return str(money(obj.price - amount))
@@ -212,15 +254,33 @@ class FoodSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
     def get_primary_image(self, obj):
         return display_image(obj, self.context.get("request"))
 
+    def validate_name(self, value):
+        name = (value or "").strip()
+        if not name:
+            raise serializers.ValidationError("Dish name is required.")
+        if name.isdigit():
+            raise serializers.ValidationError("Dish name cannot be numeric only.")
+        return name[0].upper() + name[1:] if len(name) > 1 else name.upper()
+
+    def validate_description(self, value):
+        desc = (value or "").strip()
+        if not desc:
+            return ""
+        return desc[0].upper() + desc[1:] if len(desc) > 1 else desc.upper()
+
     def validate_image_url(self, value):
         value = (value or "").strip()
+        if not value and not self.instance:
+            raise serializers.ValidationError("Dish image is mandatory.")
         if value and value.split(":", 1)[0].lower() not in ALLOWED_IMAGE_URL_SCHEMES:
             raise serializers.ValidationError("Image URL must start with http:// or https://.")
         return value
 
     def validate_price(self, value):
-        if value < 0:
-            raise serializers.ValidationError("Price cannot be negative.")
+        if value is None or value <= 0:
+            raise serializers.ValidationError("Price must be greater than zero.")
+        if value > 999999.99:
+            raise serializers.ValidationError("Original price cannot exceed 6 digits (maximum 999,999.99).")
         return value
 
     def validate(self, attrs):

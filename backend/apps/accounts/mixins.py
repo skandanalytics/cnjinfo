@@ -63,7 +63,11 @@ class AuditedMixin:
                      self._branch_of(obj), changes or {}, client_ip(self.request))
 
     def perform_create(self, serializer):
-        obj = serializer.save()
+        kwargs = {}
+        model = getattr(getattr(serializer, "Meta", None), "model", None)
+        if model and hasattr(model, "created_by") and getattr(self.request, "user", None) and self.request.user.is_authenticated:
+            kwargs["created_by"] = self.request.user
+        obj = serializer.save(**kwargs)
         self.audit("create", obj)
 
     def perform_update(self, serializer):

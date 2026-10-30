@@ -18,7 +18,7 @@ import Pagination from '../../components/common/Pagination';
 import { productService, clearStaticProductCache } from '../../services/productService';
 import { menuService } from '../../services/menuService';
 import { useAuth } from '../../hooks/useAuth';
-import { FiPlus, FiArrowLeft, FiGrid, FiLayers, FiEdit2, FiTrash2, FiCheckCircle, FiSearch, FiX } from 'react-icons/fi';
+import { FiPlus, FiArrowLeft, FiGrid, FiLayers, FiEdit2, FiTrash2, FiCheckCircle } from 'react-icons/fi';
 import { getFrontendCategoryName, normalizeCategoryName, isDishInCategory } from '../../utils/categoryUtils';
 
 const ITEMS_PER_PAGE = 8;
@@ -32,12 +32,11 @@ export const MenuEditor = () => {
 
   const [allMenus, setAllMenus] = useState([]);
   const [menu, setMenu] = useState(null);
-  const [selectedCategory, setSelectedCategory] = useState(menuId || 'all');
+  const [selectedCategories, setSelectedCategories] = useState(() => (menuId && menuId !== 'all' ? [menuId] : []));
   const [dishes, setDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedFoodTypes, setSelectedFoodTypes] = useState([]); // array of 'veg' | 'non-veg' | 'vegan'
-  const [statusFilter, setStatusFilter] = useState('all'); // 'all' | 'in_stock' | 'low_stock' | 'out_of_stock'
   const [offersOnly, setOffersOnly] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -58,7 +57,7 @@ export const MenuEditor = () => {
   // Reset to page 1 on filter changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, selectedFoodTypes, statusFilter, offersOnly, selectedCategory]);
+  }, [search, selectedFoodTypes, offersOnly, selectedCategories]);
 
   const fetchDetails = async (showLoading = true) => {
     if (showLoading) setLoading(true);
@@ -77,12 +76,11 @@ export const MenuEditor = () => {
         );
         if (matchedMenu) {
           setMenu(matchedMenu);
-          setSelectedCategory(matchedMenu.name);
+          setSelectedCategories([matchedMenu.name]);
         } else {
-          setSelectedCategory(menuId);
+          setSelectedCategories([menuId]);
         }
       } else {
-        setSelectedCategory('all');
         setMenu(null);
       }
     } catch (e) {
@@ -217,7 +215,7 @@ export const MenuEditor = () => {
     clearStaticProductCache();
     window.dispatchEvent(new CustomEvent('foodie_categories_updated'));
     await fetchDetails();
-    setSelectedCategory(updated?.name || newName.trim());
+    setSelectedCategories([updated?.name || newName.trim()]);
     navigate(`/admin/menus/${catToRename.id}`);
   };
 
@@ -234,7 +232,7 @@ export const MenuEditor = () => {
       setDeletingCategory(null);
       clearStaticProductCache();
       window.dispatchEvent(new CustomEvent('foodie_categories_updated'));
-      setSelectedCategory('all');
+      setSelectedCategories([]);
       await fetchDetails();
       navigate('/admin/menus');
     } catch (e) {
@@ -265,21 +263,32 @@ export const MenuEditor = () => {
     return Array.from(map.values());
   }, [allMenus, dishes]);
 
-  const isAllSelected = !selectedCategory || selectedCategory === 'all' || selectedCategory === 'All';
+  const isAllSelected = selectedCategories.length === 0;
 
-  const currentCategoryObj = isAllSelected ? null : categoriesList.find(c =>
-    String(c.id) === String(selectedCategory) ||
-    normalizeCategoryName(c.name) === normalizeCategoryName(selectedCategory) ||
-    normalizeCategoryName(c.originalName) === normalizeCategoryName(selectedCategory)
-  );
+  // Selected category objects
+  const selectedCategoryObjs = React.useMemo(() => {
+    if (isAllSelected) return [];
+    return categoriesList.filter(c =>
+      selectedCategories.some(sc =>
+        String(c.id) === String(sc) ||
+        normalizeCategoryName(c.name) === normalizeCategoryName(sc) ||
+        normalizeCategoryName(c.originalName) === normalizeCategoryName(sc)
+      )
+    );
+  }, [categoriesList, selectedCategories, isAllSelected]);
 
-  const currentCategoryName = isAllSelected ? 'All Categories' : (currentCategoryObj ? currentCategoryObj.name : selectedCategory);
-  const currentNorm = normalizeCategoryName(currentCategoryName);
+  // When exactly one category is selected, keep reference for single-category actions (rename, delete banner)
+  const currentCategoryObj = selectedCategoryObjs.length === 1 ? selectedCategoryObjs[0] : null;
+  const currentCategoryName = isAllSelected
+    ? 'All Categories'
+    : selectedCategoryObjs.length === 1
+    ? selectedCategoryObjs[0].name
+    : `${selectedCategoryObjs.length} Categories Selected`;
 
-  // 1. Filter dishes that belong to selected category (or all if All)
+  // 1. Filter dishes that belong to ANY of the selected categories (or all if isAllSelected)
   const menuDishes = dishes.filter((dish) => {
     if (isAllSelected) return true;
-    return isDishInCategory(dish, currentCategoryObj || { name: currentCategoryName, originalName: currentCategoryName });
+    return selectedCategoryObjs.some(cat => isDishInCategory(dish, cat));
   });
 
   // Food type presence in current menu dishes
@@ -316,13 +325,8 @@ export const MenuEditor = () => {
     if (selectedFoodTypes.length > 0) {
       matchesFoodType = selectedFoodTypes.includes(dishFoodType);
     }
-    let matchesStatus = true;
-    if (statusFilter === 'in_stock') {
-      matchesStatus = Number(dish.stock) >= 6 && !dish.is_sold_out && dish.status !== 'Out of Stock';
-    } else if (statusFilter === 'low_stock') {
-      matchesStatus = Number(dish.stock) > 0 && Number(dish.stock) < 6 && !dish.is_sold_out;
-    } else if (statusFilter === 'out_of_stock') {
-      matchesStatus = Number(dish.stock) <= 0 || dish.status === 'Out of Stock' || Boolean(dish.is_sold_out);
+    if (offersOnly) {
+      matchesFoodType = matchesFoodType && Boolean(dish.hasDiscount || dish.discountPercent > 0 || (dish.discountPrice > 0 && dish.discountPrice < dish.price));
     }
 
     const term = search.trim().toLowerCase();
@@ -330,7 +334,7 @@ export const MenuEditor = () => {
       (dish.name && dish.name.toLowerCase().includes(term)) ||
       (dish.description && dish.description.toLowerCase().includes(term));
 
-    return matchesFoodType && matchesStatus && matchesSearch;
+    return matchesFoodType && matchesSearch;
   });
 
   const totalPages = Math.ceil(filteredDishes.length / ITEMS_PER_PAGE);
@@ -344,12 +348,26 @@ export const MenuEditor = () => {
 
   const handleCategorySelect = (cat) => {
     if (cat === 'all') {
-      setSelectedCategory('all');
-      navigate('/admin/menus');
-    } else {
-      setSelectedCategory(cat.name);
-      navigate(`/admin/menus/${cat.id}`);
+      setSelectedCategories([]);
+      return;
     }
+
+    const catKey = cat.name || cat;
+    const catNorm = normalizeCategoryName(catKey);
+
+    setSelectedCategories((prev) => {
+      const isAlreadySelected = prev.some(
+        c => normalizeCategoryName(c) === catNorm || String(c) === String(cat.id)
+      );
+
+      if (isAlreadySelected) {
+        return prev.filter(
+          c => normalizeCategoryName(c) !== catNorm && String(c) !== String(cat.id)
+        );
+      } else {
+        return [...prev, catKey];
+      }
+    });
   };
 
   if ((loading && dishes.length === 0) || branchesLoading) {
@@ -374,8 +392,7 @@ export const MenuEditor = () => {
   return (
     <AdminLayout>
       <PageHeader
-        title="Menu Management"
-        subtitle="Manage your dishes, categories and offers."
+        title={!hasCategories ? 'Add Category' : isAllSelected ? 'Add Menu' : `Add Menu — ${currentCategoryName}`}
         showBackButton
         backUrl="/admin/dashboard"
         actions={
@@ -388,112 +405,25 @@ export const MenuEditor = () => {
               >
                 <FiPlus /> Add Category
               </Button>
+
+              {hasCategories && (
+                <>
+                  <Button
+                    onClick={() => {
+                      setIsAddOpen(true);
+                      setComboMode(false);
+                    }}
+                    variant="outline"
+                    className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold"
+                  >
+                    <FiPlus /> Add Dish
+                  </Button>
+                </>
+              )}
             </div>
           )
         }
       />
-
-      {/* Unified Filter Bar Matching Reference Panel 5 */}
-      <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white">
-        <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
-          {/* Search Box */}
-          <div className="flex-grow-1" style={{ minWidth: '240px', maxWidth: '420px' }}>
-            <div className="position-relative">
-              <FiSearch className="position-absolute top-50 start-0 translate-middle-y ms-3 text-secondary" />
-              <input
-                type="text"
-                className="form-control rounded-pill ps-5 bg-light border-light-subtle shadow-xs"
-                style={{ height: '42px', fontSize: '13px' }}
-                placeholder="Search dishes (e.g. roll, pizza, burger...)"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
-                <button
-                  type="button"
-                  className="btn btn-sm position-absolute top-50 end-0 translate-middle-y me-2 text-secondary p-0"
-                  onClick={() => setSearch('')}
-                >
-                  <FiX />
-                </button>
-              )}
-            </div>
-          </div>
-
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            {/* Category Dropdown */}
-            <select
-              aria-label="Filter dishes by category"
-              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
-              style={{ width: 'auto', minWidth: '150px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
-              value={selectedCategory}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === 'all') {
-                  handleCategorySelect('all');
-                } else {
-                  const targetCat = categoriesList.find(c => String(c.id) === val || c.name === val) || { name: val };
-                  handleCategorySelect(targetCat);
-                }
-              }}
-            >
-              <option value="all">All Categories</option>
-              {categoriesList.map((cat) => (
-                <option key={cat.id || cat.name} value={cat.name}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
-
-            {/* Food Type Dropdown */}
-            <select
-              aria-label="Filter dishes by food type"
-              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
-              style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
-              value={selectedFoodTypes.length === 1 ? selectedFoodTypes[0] : 'all'}
-              onChange={(e) => {
-                if (e.target.value === 'all') setSelectedFoodTypes([]);
-                else setSelectedFoodTypes([e.target.value]);
-              }}
-            >
-              <option value="all">All Food Types</option>
-              <option value="veg">Veg</option>
-              <option value="non-veg">Non-Veg</option>
-              <option value="vegan">Vegan</option>
-            </select>
-
-            {/* Status Dropdown */}
-            <select
-              aria-label="Filter dishes by stock status"
-              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
-              style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All States</option>
-              <option value="in_stock">In Stock</option>
-              <option value="low_stock">Low Stock</option>
-              <option value="out_of_stock">Out of Stock</option>
-            </select>
-
-            {/* Add Menu Button */}
-            {isAdmin && hasBranches && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddOpen(true);
-                  setComboMode(false);
-                }}
-                className="btn btn-danger rounded-pill px-4 fw-bold d-flex align-items-center gap-2 shadow-sm"
-                style={{ height: '42px', backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)' }}
-              >
-                <FiPlus size={16} />
-                <span>+ Add Menu</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
 
       {/* Categories Selector Bar: Only Text, Highlighted When Active */}
       {hasCategories && (
@@ -526,10 +456,9 @@ export const MenuEditor = () => {
 
               {/* Dynamic Category Text Pills */}
               {categoriesList.map((cat) => {
-                const isSelected = !isAllSelected && (
-                  String(cat.id) === String(selectedCategory) ||
-                  normalizeCategoryName(cat.name) === currentNorm ||
-                  normalizeCategoryName(cat.originalName) === currentNorm
+                const catNorm = normalizeCategoryName(cat.name);
+                const isSelected = selectedCategories.some(
+                  c => normalizeCategoryName(c) === catNorm || String(c) === String(cat.id)
                 );
 
                 const countInCat = dishes.filter(d => isDishInCategory(d, cat)).length;
@@ -546,7 +475,14 @@ export const MenuEditor = () => {
                       style={{ fontSize: '13px', cursor: 'pointer', maxWidth: '220px' }}
                     >
                       <span className="text-truncate">{cat.name}</span>
-                      <span className="badge rounded-pill bg-white text-secondary border flex-shrink-0" style={{ fontSize: '10px' }}>{countInCat}</span>
+                      <span
+                        className={`badge rounded-pill border flex-shrink-0 ${
+                          isSelected ? 'bg-white text-danger fw-bold' : 'bg-white text-secondary'
+                        }`}
+                        style={{ fontSize: '10px' }}
+                      >
+                        {countInCat}
+                      </span>
                     </button>
                   </span>
                 );
@@ -591,13 +527,19 @@ export const MenuEditor = () => {
 
                 <button
                   type="button"
+                  disabled={menuDishes.length > 0}
                   onClick={() => {
+                    if (menuDishes.length > 0) return;
                     setCategoryDeleteError('');
                     setDeletingCategory(currentCategoryObj || { name: currentCategoryName, originalName: currentCategoryName });
                   }}
-                  className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1.5 py-1.5 px-3 rounded-pill fw-bold shadow-xs transition-all bg-white text-danger border-danger"
-                  style={{ fontSize: '12px' }}
-                  title={`Delete category "${currentCategoryName}"`}
+                  className={`btn btn-sm d-flex align-items-center gap-1.5 py-1.5 px-3 rounded-pill fw-bold shadow-xs transition-all ${
+                    menuDishes.length > 0
+                      ? 'btn-light text-muted border border-secondary-subtle opacity-50'
+                      : 'btn-outline-danger bg-white text-danger border-danger'
+                  }`}
+                  style={{ fontSize: '12px', cursor: menuDishes.length > 0 ? 'not-allowed' : 'pointer' }}
+                  title={menuDishes.length > 0 ? `Cannot delete category "${currentCategoryName}" because it contains ${menuDishes.length} dish(es). Remove or reassign them first.` : `Delete category "${currentCategoryName}"`}
                 >
                   <FiTrash2 size={13} className="me-1" />
                   <span>Delete Category</span>
@@ -608,7 +550,129 @@ export const MenuEditor = () => {
         </div>
       )}
 
+      {/* Search and Food Type Filter Section */}
+      {hasCategories && (dishes || []).length > 0 && menuDishes.length > 0 && (
+        <div className="row g-3 align-items-center mb-4">
+          <div className="col-12 col-md-6 col-lg-5">
+            <SearchBar
+              placeholder={`Search dishes in ${currentCategoryName}...`}
+              value={search}
+              onChange={setSearch}
+              records={(dishes || []).map((dish) => ({
+                id: dish.id,
+                label: dish.name,
+                title: dish.name,
+                subtitle: [dish.category, Number(dish.stock) <= 0 ? 'Out of Stock' : `${dish.stock ?? 0} in stock`].filter(Boolean).join(' · '),
+                price: dish.price,
+                image: dish.image,
+                searchText: [dish.name, dish.category, dish.foodType].filter(Boolean).join(' '),
+              }))}
+              onSelectSuggestion={(item) => {
+                const dish = (dishes || []).find((row) => String(row.id) === String(item?.id));
+                if (!dish) return;
+                if (dish.category) {
+                  setSelectedCategories([dish.category]);
+                }
+                setSearch(dish.name);
+              }}
+            />
+          </div>
+          <div className="col-12 col-md-6 col-lg-7 d-flex align-items-center gap-2">
+            <span className="small fw-semibold text-secondary me-1 flex-shrink-0" style={{ fontSize: '13px' }}>Food Type:</span>
 
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => { setSelectedFoodTypes([]); setOffersOnly(false); }}
+                className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${selectedFoodTypes.length === 0 && !offersOnly
+                  ? 'bg-danger text-white border-danger shadow-sm'
+                  : 'bg-white text-secondary border-light-subtle shadow-sm'
+                  }`}
+                style={{ fontSize: '12px', cursor: 'pointer' }}
+              >
+                All ({menuDishes.length})
+              </button>
+
+              {hasVegDishes && (
+                <label
+                  htmlFor="admin-food-filter-veg"
+                  className={`food-type-control food-type-control-veg ${
+                    selectedFoodTypes.includes('veg') ? 'is-selected-veg' : ''
+                  }`}
+                  style={{ fontSize: '12px' }}
+                >
+                  <input
+                    type="checkbox"
+                    id="admin-food-filter-veg"
+                    checked={selectedFoodTypes.includes('veg')}
+                    onChange={() => handleFoodTypeToggle('veg')}
+                    className="food-type-checkbox checkbox-veg"
+                    aria-label="Filter Vegetarian"
+                  />
+                  <span className="veg-badge ms-0.5"></span>
+                  <span className="ms-0.5">Veg</span>
+                </label>
+              )}
+
+              {hasNonVegDishes && (
+                <label
+                  htmlFor="admin-food-filter-non-veg"
+                  className={`food-type-control food-type-control-non-veg ${
+                    selectedFoodTypes.includes('non-veg') ? 'is-selected-non-veg' : ''
+                  }`}
+                  style={{ fontSize: '12px' }}
+                >
+                  <input
+                    type="checkbox"
+                    id="admin-food-filter-non-veg"
+                    checked={selectedFoodTypes.includes('non-veg')}
+                    onChange={() => handleFoodTypeToggle('non-veg')}
+                    className="food-type-checkbox checkbox-non-veg"
+                    aria-label="Filter Non-Vegetarian"
+                  />
+                  <span className="non-veg-badge ms-0.5"></span>
+                  <span className="ms-0.5">Non-Veg</span>
+                </label>
+              )}
+
+              {hasVeganDishes && (
+                <label
+                  htmlFor="admin-food-filter-vegan"
+                  className={`food-type-control food-type-control-vegan ${
+                    selectedFoodTypes.includes('vegan') ? 'is-selected-vegan' : ''
+                  }`}
+                  style={{ fontSize: '12px' }}
+                >
+                  <input
+                    type="checkbox"
+                    id="admin-food-filter-vegan"
+                    checked={selectedFoodTypes.includes('vegan')}
+                    onChange={() => handleFoodTypeToggle('vegan')}
+                    className="food-type-checkbox checkbox-vegan"
+                    aria-label="Filter Vegan"
+                  />
+                  <span className="vegan-badge ms-0.5"></span>
+                  <span className="ms-0.5">Vegan</span>
+                </label>
+              )}
+
+              {hasOffersDishes && (
+                <button
+                  type="button"
+                  onClick={() => setOffersOnly((prev) => !prev)}
+                  className={`btn btn-sm d-flex align-items-center gap-1 rounded-pill px-3.5 py-1.5 fw-bold transition-all border ${offersOnly
+                    ? 'bg-danger text-white border-danger shadow-sm'
+                    : 'bg-white text-danger border-danger-subtle shadow-sm'
+                    }`}
+                  style={{ fontSize: '12px', cursor: 'pointer' }}
+                >
+                  <span>🔥 Offers</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Grid */}
       {filteredDishes.length === 0 ? (

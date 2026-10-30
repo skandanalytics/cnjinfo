@@ -277,6 +277,44 @@ export const couponService = {
     return newCoupon;
   },
 
+  updateCoupon: async (id, couponData) => {
+    const { isStaffScreen, updateCoupon, explain } = await import('./adminApi');
+    if (isStaffScreen()) {
+      try { return await updateCoupon(id, couponData); } catch (err) { throw new Error(explain(err)); }
+    }
+    const cleanCode = String(couponData.code || '').trim().toUpperCase();
+    const discountVal = parseFloat(couponData.discount || couponData.discount_value || 0);
+    const minVal = parseFloat(couponData.minOrderValue || couponData.minimum_order_amount || 0);
+    if (minVal <= discountVal) {
+      throw new Error('Minimum order value must be greater than the discount value.');
+    }
+    const isPct = couponData.type === 'percentage' || couponData.discount_type === 'PERCENT' || couponData.discount_type === 'PERCENTAGE';
+    if (isPct && (discountVal <= 0 || discountVal > 100)) {
+      throw new Error('Percent discount must be between 1 and 100.');
+    }
+    let stored = getStoredCoupons() || mockCoupons;
+    const updated = stored.map(c => {
+      if (c.id === id || String(c.id) === String(id) || String(c.code).toUpperCase() === cleanCode) {
+        return {
+          ...c,
+          code: cleanCode,
+          discount: discountVal,
+          discount_value: discountVal,
+          type: isPct ? 'percentage' : 'fixed',
+          discount_type: isPct ? 'PERCENTAGE' : 'FIXED',
+          minOrderValue: minVal,
+          minimum_order_amount: minVal,
+          expiryDate: couponData.validity || c.expiryDate,
+          validity: couponData.validity || c.validity,
+          autoApply: Boolean(couponData.autoApply),
+        };
+      }
+      return c;
+    });
+    setStoredCoupons(updated);
+    return updated.find(c => c.id === id || String(c.code).toUpperCase() === cleanCode);
+  },
+
   setAutoApply: async (id, autoApply) => {
     const { isStaffScreen, setCouponAutoApply, explain } = await import('./adminApi');
     if (!isStaffScreen()) {

@@ -11,12 +11,15 @@ export const Input = ({
   required = false,
   maxLength,
   className = '',
+  suffix,
+  prefix,
   ...props
 }) => {
   const [showPassword, setShowPassword] = useState(false);
 
   const isPassword = type === 'password';
   const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
+  const hasAddon = Boolean(suffix || prefix);
 
   return (
     <div className={`mb-3 ${className}`}>
@@ -25,10 +28,15 @@ export const Input = ({
           {label} {required && <span className="text-danger">*</span>}
         </label>
       )}
-      <div className="position-relative">
+      <div className={hasAddon ? 'input-group' : 'position-relative'}>
+        {prefix && (
+          <span className="input-group-text bg-light text-dark fw-bold border-end-0">
+            {prefix}
+          </span>
+        )}
         <input
           type={inputType}
-          className={`form-control rounded-3 py-2 ${isPassword ? 'pe-5' : ''} ${error ? 'is-invalid' : ''}`}
+          className={`form-control ${hasAddon ? '' : 'rounded-3'} py-2 ${isPassword ? 'pe-5' : ''} ${error ? 'is-invalid' : ''}`}
           placeholder={placeholder}
           value={value}
           onChange={onChange}
@@ -36,6 +44,11 @@ export const Input = ({
           required={required}
           {...props}
         />
+        {suffix && (
+          <span className="input-group-text bg-light text-dark fw-bold border-start-0 fs-6" style={{ minWidth: '44px', justifyContent: 'center' }}>
+            {suffix}
+          </span>
+        )}
         {isPassword && (
           <button
             type="button"
@@ -49,8 +62,9 @@ export const Input = ({
           </button>
         )}
       </div>
-      {error && <div className="invalid-feedback d-block mt-1 small">{error}</div>}
+      {error && <div className="invalid-feedback d-block mt-1">{error}</div>}
     </div>
   );
 };
+
 export default Input;

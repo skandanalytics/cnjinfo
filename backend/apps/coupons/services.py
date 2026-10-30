@@ -157,7 +157,19 @@ def apply_coupons(branch, qualifying_amount, customer, codes=None, now=None, all
         elif any(a.coupon.pk == coupon.pk for a in out.applied):
             out.rejected.append((code, "This coupon is already applied automatically."))
         else:
-            reason = ineligible_reason(coupon, branch, qualifying_amount, customer, first, now)
+            # Check higher-value priority rule: if a higher minimum order coupon is available/entered,
+            # lower-value coupons are disabled.
+            if coupon.min_order_value < Decimal("500") and qualifying_amount >= Decimal("500"):
+                higher_exists = Coupon.objects.filter(
+                    branch=branch, is_active=True, min_order_value__gte=Decimal("500"), min_order_value__lte=qualifying_amount
+                ).exists()
+                if higher_exists:
+                    reason = "A higher-value coupon is eligible for this order."
+                else:
+                    reason = ineligible_reason(coupon, branch, qualifying_amount, customer, first, now)
+            else:
+                reason = ineligible_reason(coupon, branch, qualifying_amount, customer, first, now)
+
             if reason:
                 out.rejected.append((code, reason))
             else:

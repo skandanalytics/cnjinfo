@@ -12,12 +12,15 @@ export const QRDisplayModal = ({
   table,
   onRefresh
 }) => {
-  const [qrRecord, setQrRecord] = useState(null);
-  const [qrCode, setQrCode] = useState('');
+  const [qrRecord, setQrRecord] = useState(() => (
+    table ? { id: table.id, is_active: table.qr_is_active !== false } : null
+  ));
+  const [qrCode, setQrCode] = useState(() => table?.qr_code || '');
   const [qrDataUrl, setQrDataUrl] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => !table?.qr_code);
   const [updating, setUpdating] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
   
   const [customHost, setCustomHost] = useState(getQrBaseHost);
   const [isEditingHost, setIsEditingHost] = useState(false);
@@ -25,13 +28,20 @@ export const QRDisplayModal = ({
 
   // Sync state if modal reopens
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && table) {
       const host = getQrBaseHost();
       setCustomHost(host);
       setTempHost(host);
       setIsEditingHost(false);
+      setErrorMsg('');
+      setSuccessMsg('');
+      if (table.qr_code) {
+        setQrCode(table.qr_code);
+        setQrRecord({ id: table.id, is_active: table.qr_is_active !== false });
+        setLoading(false);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, table]);
 
   const { targetUrl, validation } = buildTableQrUrl({
     tableId: table?.id || table?.number,
@@ -79,10 +89,8 @@ export const QRDisplayModal = ({
   useEffect(() => {
     if (!table || !isOpen) return undefined;
     let active = true;
-    setLoading(true);
+    if (!table.qr_code) setLoading(true);
     setErrorMsg('');
-    setQrCode('');
-    setQrRecord(null);
     import('../../services/staffClient').then(({ staffJson }) => staffJson(`/tables/${table.id}/`))
       .then((saved) => {
         if (!active) return;
@@ -94,9 +102,9 @@ export const QRDisplayModal = ({
       })
       .catch((err) => {
         if (!active) return;
-        setQrRecord(null);
-        setQrCode('');
-        setErrorMsg(err.message || 'The saved QR status could not be loaded.');
+        if (!table.qr_code) {
+          setErrorMsg(err.message || 'The saved QR status could not be loaded.');
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -108,18 +116,23 @@ export const QRDisplayModal = ({
     if (!table?.id || updating) return;
     setUpdating(true);
     setErrorMsg('');
+    setSuccessMsg('');
+    const targetState = !isActive;
     try {
       const { staffJson } = await import('../../services/staffClient');
       const saved = await staffJson(`/tables/${table.id}/`, {
         method: 'PATCH',
-        body: JSON.stringify({ qr_is_active: !isActive }),
+        body: JSON.stringify({ qr_is_active: targetState }),
       });
-      setQrRecord((prev) => ({ ...(prev || {}), id: table.id, is_active: saved.qr_is_active !== false }));
-      if (onRefresh) onRefresh();
+      const resolvedActive = saved.qr_is_active !== false;
+      setQrRecord((prev) => ({ ...(prev || {}), id: table.id, is_active: resolvedActive }));
+      setSuccessMsg(`QR Code for Table ${table.number || table.id} has been ${resolvedActive ? 'enabled' : 'disabled'}.`);
+      if (onRefresh) onRefresh(table.id, resolvedActive);
     } catch (err) {
       setErrorMsg(err.message || 'Unable to update the QR status.');
+    } finally {
+      setUpdating(false);
     }
-    setUpdating(false);
   };
 
   const handlePrint = () => {
@@ -187,8 +200,14 @@ export const QRDisplayModal = ({
           disabled={updating || isActive === null}
           className="d-flex align-items-center gap-1.5 rounded-pill px-3 fw-bold"
         >
-          {isActive ? <FiToggleRight className="text-danger fs-5" /> : <FiToggleLeft className="text-secondary fs-5" />}
-          {isActive ? 'Disable QR' : 'Enable QR'}
+          {updating ? (
+            <span className="spinner-border spinner-border-sm text-primary me-1" role="status" aria-hidden="true" style={{ width: '14px', height: '14px', borderWidth: '2px' }} />
+          ) : isActive ? (
+            <FiToggleRight className="text-success fs-5" />
+          ) : (
+            <FiToggleLeft className="text-secondary fs-5" />
+          )}
+          {updating ? (isActive ? 'Disabling QR...' : 'Enabling QR...') : (isActive ? 'Disable QR' : 'Enable QR')}
         </Button>
       )}
       {isActive && qrCode && (
@@ -209,8 +228,17 @@ export const QRDisplayModal = ({
         </div>
       ) : (
         <div className="text-center py-2">
+          {successMsg && (
+            <div className="alert alert-success py-2 small fw-semibold mb-3 d-flex align-items-center justify-content-between">
+              <span>{successMsg}</span>
+              <button type="button" className="btn-close btn-close-sm" onClick={() => setSuccessMsg('')} aria-label="Close" style={{ fontSize: '10px' }} />
+            </div>
+          )}
           {errorMsg && (
-            <div className="alert alert-danger py-2 small fw-semibold mb-3">{errorMsg}</div>
+            <div className="alert alert-danger py-2 small fw-semibold mb-3 d-flex align-items-center justify-content-between">
+              <span>{errorMsg}</span>
+              <button type="button" className="btn-close btn-close-sm" onClick={() => setErrorMsg('')} aria-label="Close" style={{ fontSize: '10px' }} />
+            </div>
           )}
 
           {isHostLocal && (

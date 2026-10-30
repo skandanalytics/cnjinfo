@@ -1,3 +1,4 @@
+import re
 from django.db import transaction
 from rest_framework import serializers
 
@@ -32,7 +33,8 @@ def canonicalize_location(value):
 class BranchSerializer(serializers.ModelSerializer):
     tables_count = serializers.SerializerMethodField()
     email = serializers.EmailField(required=False, allow_blank=True, max_length=254)
-    cover_image_url = serializers.URLField(required=False, allow_blank=True, max_length=1000)
+    cover_image_url = serializers.URLField(required=False, allow_blank=False, max_length=1000)
+    opening_hours = serializers.CharField(required=True, allow_blank=False, max_length=150)
 
     class Meta:
         model = Branch
@@ -60,16 +62,38 @@ class BranchSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(str(exc))
 
     def validate_name(self, value):
-        qs = Branch.objects.filter(name__iexact=value.strip())
+        val = value.strip()
+        if not val:
+            raise serializers.ValidationError("Branch name is required.")
+        if any(ch.isdigit() for ch in val):
+            raise serializers.ValidationError("Branch name cannot contain numbers.")
+        qs = Branch.objects.filter(name__iexact=val)
         if self.instance:
             qs = qs.exclude(pk=self.instance.pk)
         if qs.exists():
             raise serializers.ValidationError("A branch with this name already exists.")
-        return value.strip()
+        return val
+
+    def validate_manager_name(self, value):
+        val = (value or "").strip()
+        if val and any(ch.isdigit() for ch in val):
+            raise serializers.ValidationError("Manager name cannot contain numbers.")
+        return val
+
+    def validate_opening_hours(self, value):
+        val = (value or "").strip()
+        if not val:
+            raise serializers.ValidationError("Opening hours are required.")
+        clean_val = val.replace(" ", "").replace("-", "").lower()
+        if clean_val in ("00:00", "00:0000:00", "0:00", "00:00-00:00", "0:00-0:00"):
+            raise serializers.ValidationError("Please provide valid opening hours.")
+        return val
 
     def validate_cover_image_url(self, value):
         value = (value or "").strip()
-        if value and value.split(":", 1)[0].lower() not in ("http", "https"):
+        if not value:
+            raise serializers.ValidationError("Branch image is mandatory.")
+        if value.split(":", 1)[0].lower() not in ("http", "https"):
             raise serializers.ValidationError("Cover image URL must start with http:// or https://.")
         return value
 
@@ -123,19 +147,24 @@ class TableSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
     branch = serializers.PrimaryKeyRelatedField(queryset=Branch.objects.all(), required=False)
     branch_name = serializers.CharField(source="branch.name", read_only=True)
     qr_url = serializers.SerializerMethodField()
+    has_active_order = serializers.SerializerMethodField()
     active_order_id = serializers.SerializerMethodField()
     active_order = serializers.SerializerMethodField()
 
     class Meta:
         model = DiningTable
         fields = ["id", "branch", "branch_name", "table_number", "capacity", "location", "table_view", "status",
-                  "is_active", "qr_code", "qr_is_active", "qr_url", "active_order_id", "active_order", "created_at"]
+                  "is_active", "qr_code", "qr_is_active", "qr_url", "has_active_order", "active_order_id", "active_order", "created_at"]
         # Status changes go through the dedicated set-status action so lifecycle rules are always applied.
         read_only_fields = ["id", "status", "qr_code", "created_at"]
         validators = []
 
     def get_qr_url(self, obj):
         return qr_url(obj)
+
+    def get_has_active_order(self, obj):
+        from apps.orders.models import Order
+        return Order.objects.filter(table=obj, status__in=Order.ACTIVE_STATUSES).exists()
 
     def get_active_order_id(self, obj):
         from apps.orders.models import Order
