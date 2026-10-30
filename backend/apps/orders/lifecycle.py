@@ -529,8 +529,15 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
         coupon_codes = [c.strip() for c in str(coupon_code).split(",") if c.strip()]
     else:
         coupon_codes = []
+
+    # If explicit 'NONE' passed, do not auto-apply coupons
+    allow_auto = True
+    if any(str(c).upper() == "NONE" for c in coupon_codes):
+        coupon_codes = [c for c in coupon_codes if str(c).upper() != "NONE"]
+        allow_auto = False
+
     try:
-        priced = price_order(branch, lines, order_type, customer, coupon_codes, service_tax_enabled=service_tax_enabled)
+        priced = price_order(branch, lines, order_type, customer, coupon_codes, allow_auto=allow_auto, service_tax_enabled=service_tax_enabled)
     except PricingError as exc:
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
 

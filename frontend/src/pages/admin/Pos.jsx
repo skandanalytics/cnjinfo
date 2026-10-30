@@ -50,7 +50,7 @@ export const Pos = () => {
 
   // Filtering & Search
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [selectedCategories, setSelectedCategories] = useState([]);
   const [foodTypeFilter, setFoodTypeFilter] = useState({
     veg: false,
     'non-veg': false,
@@ -67,6 +67,7 @@ export const Pos = () => {
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponCodeInput, setCouponCodeInput] = useState('');
   const [couponError, setCouponError] = useState('');
+  const userDismissedCouponRef = useRef(false);
 
   const [serviceTaxEnabled, setServiceTaxEnabled] = useState(() => {
     try {
@@ -610,9 +611,14 @@ export const Pos = () => {
         if (!matchesName && !matchesDesc) return false;
       }
 
-      // Category filter
-      if (selectedCategory !== 'ALL') {
-        if (dish.category !== selectedCategory) return false;
+      // Category filter (multi-select)
+      if (selectedCategories.length > 0) {
+        const dishCat = String(dish.category || '').trim().toLowerCase();
+        const matchesAnyCat = selectedCategories.some(cat => {
+          const c = String(cat).trim().toLowerCase();
+          return dishCat === c;
+        });
+        if (!matchesAnyCat) return false;
       }
 
       // Food type filter
@@ -624,7 +630,7 @@ export const Pos = () => {
 
       return true;
     });
-  }, [dishes, searchQuery, selectedCategory, foodTypeFilter]);
+  }, [dishes, searchQuery, selectedCategories, foodTypeFilter]);
 
   // Cart Management
   const findCartIndex = (dishId, options = [], instructions = '') => {
@@ -953,6 +959,67 @@ export const Pos = () => {
     };
   }, [cartItems, orderType, appliedCoupon]);
 
+  // Auto-apply eligible coupon when cart changes
+  useEffect(() => {
+    if (cartItems.length === 0) {
+      userDismissedCouponRef.current = false;
+      if (appliedCoupon?.isAutomatic) {
+        setAppliedCoupon(null);
+      }
+      return;
+    }
+
+    if (userDismissedCouponRef.current) {
+      return;
+    }
+
+    // Calculate current merchandise subtotal
+    const merchandise = cartItems.reduce((sum, item) => {
+      const p = item.dish?.price || 0;
+      const d = (item.dish?.hasDiscount || item.dish?.discountPercent > 0 || (item.dish?.discountPrice > 0 && item.dish?.discountPrice < p))
+        ? (item.dish.discountPrice > 0 ? (p - item.dish.discountPrice) : ((p * (item.dish.discountPercent || 0)) / 100))
+        : 0;
+      const itemFinalPrice = Math.max(0, p - d);
+      const optTotal = (item.options || []).reduce((s, o) => s + (Number(o?.price) || 0), 0);
+      return sum + ((itemFinalPrice + optTotal) * item.quantity);
+    }, 0);
+
+    // Find all active auto-apply coupons eligible for this merchandise
+    const eligibleAutoCoupons = (coupons || []).filter(c => {
+      const isAuto = Boolean(c.autoApply || c.auto_apply);
+      const isActive = c.status !== 'Inactive' && c.is_active !== false;
+      const minOrder = Number(c.minOrderValue || c.minimum_order_amount || 0);
+      return isAuto && isActive && merchandise >= minOrder;
+    });
+
+    if (eligibleAutoCoupons.length > 0) {
+      // Pick the coupon that gives highest discount
+      const best = eligibleAutoCoupons.reduce((prev, curr) => {
+        const getDisc = (cpn) => {
+          let val = 0;
+          if (cpn.type === 'percentage' || cpn.discount_type === 'PERCENTAGE') {
+            const pct = Number(cpn.discount || cpn.discount_value || 0);
+            val = (merchandise * pct) / 100;
+            const maxD = Number(cpn.maxDiscount || cpn.maximum_discount || 0);
+            if (maxD > 0) val = Math.min(val, maxD);
+          } else {
+            val = Number(cpn.discount || cpn.discount_value || 0);
+          }
+          return val;
+        };
+        return getDisc(curr) > getDisc(prev) ? curr : prev;
+      });
+
+      if (!appliedCoupon || appliedCoupon.isAutomatic) {
+        if (!appliedCoupon || String(appliedCoupon.code).toUpperCase() !== String(best.code).toUpperCase()) {
+          setAppliedCoupon({ ...best, isAutomatic: true });
+        }
+      }
+    } else if (appliedCoupon?.isAutomatic) {
+      setAppliedCoupon(null);
+    }
+  }, [cartItems, coupons, appliedCoupon]);
+
   // Apply Coupon
   const handleApplyCoupon = (code) => {
     setCouponError('');
@@ -961,6 +1028,10 @@ export const Pos = () => {
       return;
     }
     const cleanCode = code.trim().toUpperCase();
+    if (appliedCoupon && String(appliedCoupon.code || '').trim().toUpperCase() === cleanCode) {
+      setCouponError('This coupon is already applied.');
+      return;
+    }
     const found = coupons.find(c => String(c.code).toUpperCase() === cleanCode);
     if (!found) {
       setCouponError('Invalid coupon code.');
@@ -975,12 +1046,14 @@ export const Pos = () => {
       setCouponError(`Minimum order amount of ${formatCurrency(minOrder)} required.`);
       return;
     }
-    setAppliedCoupon(found);
+    userDismissedCouponRef.current = false;
+    setAppliedCoupon({ ...found, isAutomatic: false });
     setCouponCodeInput('');
     setShowCouponModal(false);
   };
 
   const handleRemoveCoupon = () => {
+    userDismissedCouponRef.current = true;
     setAppliedCoupon(null);
     setCouponError('');
   };
@@ -1041,7 +1114,7 @@ export const Pos = () => {
       branch: Number(selectedBranchId),
       items: itemsPayload,
       idempotency_key: idempotencyKey,
-      coupon_code: appliedCoupon ? appliedCoupon.code : '',
+      coupon_code: appliedCoupon ? appliedCoupon.code : (userDismissedCouponRef.current ? 'NONE' : ''),
       customer_phone: resolvedPhone,
       customer_name: resolvedName,
       payment_method: 'CASH',
@@ -1062,6 +1135,7 @@ export const Pos = () => {
       });
 
       // Clear current cart & inputs
+      userDismissedCouponRef.current = false;
       setCartItems([]);
       setAppliedCoupon(null);
       setCustomerPhone('');
@@ -1230,27 +1304,36 @@ export const Pos = () => {
               {/* Category Bar */}
               <div className="d-flex align-items-center gap-2 overflow-auto py-1 scrollbar-hidden">
                 {categories.map((cat, idx) => {
-                  const isCatSelected = selectedCategory === cat;
+                  const isAll = cat === 'ALL';
+                  const isCatSelected = isAll 
+                    ? selectedCategories.length === 0 
+                    : selectedCategories.includes(cat);
+
+                  const handleCategoryToggle = () => {
+                    if (isAll) {
+                      setSelectedCategories([]);
+                    } else {
+                      setSelectedCategories(prev => 
+                        prev.includes(cat) 
+                          ? prev.filter(c => c !== cat) 
+                          : [...prev, cat]
+                      );
+                    }
+                  };
+
                   return (
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => setSelectedCategory(cat)}
-                      className={`btn btn-sm rounded-pill text-nowrap px-3 py-1.5 fw-semibold transition-all d-flex align-items-center gap-2 ${
+                      onClick={handleCategoryToggle}
+                      className={`btn btn-sm rounded-pill text-nowrap px-3 py-1.5 fw-semibold transition-all d-flex align-items-center ${
                         isCatSelected
-                          ? 'btn-danger shadow-xs'
+                          ? 'btn-danger text-white shadow-xs'
                           : 'btn-outline-secondary border-light-subtle bg-white text-dark'
                       }`}
                       style={{ fontSize: '12.5px' }}
                     >
-                      <input
-                        type="checkbox"
-                        className="form-check-input m-0"
-                        checked={isCatSelected}
-                        readOnly
-                        style={{ pointerEvents: 'none', cursor: 'pointer' }}
-                      />
-                      <span>{cat === 'ALL' ? '🍽️ All Dishes' : cat}</span>
+                      <span>{isAll ? '🍽️ All Dishes' : cat}</span>
                     </button>
                   );
                 })}
@@ -1543,17 +1626,8 @@ export const Pos = () => {
           {/* RIGHT: Order Panel & Checkout Actions (Independent Scroll Area) */}
           <aside className={`pos-order-panel ${mobilePosTab !== 'order' ? 'd-none d-lg-flex' : ''}`}>
             
-            {/* Back Button / Navigation */}
-            <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white">
-              <button
-                type="button"
-                onClick={() => navigate(-1)}
-                className="btn btn-sm btn-light rounded-pill px-2.5 py-1 text-dark fw-bold d-inline-flex align-items-center gap-1.5"
-                style={{ fontSize: '11.5px' }}
-                title="Go Back"
-              >
-                <span>&larr; Back</span>
-              </button>
+            {/* Order Summary Header */}
+            <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white" style={{ minHeight: '45px' }}>
               <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
                 Order Summary
               </span>
@@ -1861,10 +1935,13 @@ export const Pos = () => {
 
               {appliedCoupon ? (
                 <div className="p-2.5 rounded-3 bg-success-subtle border border-success-subtle d-flex align-items-center justify-content-between">
-                  <div className="d-flex align-items-center gap-2 text-success">
-                    <FiTag size={14} />
-                    <strong style={{ fontSize: '12px' }}>{appliedCoupon.code}</strong>
-                    <span className="small ms-1">(-{formatCurrency(billSummary.couponDiscount)})</span>
+                  <div className="d-flex align-items-center gap-2">
+                    <FiTag size={14} className="text-success" />
+                    <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 fw-bold" style={{ fontSize: '10px' }}>
+                      Applied
+                    </span>
+                    <strong className="text-dark" style={{ fontSize: '12px' }}>{appliedCoupon.code}</strong>
+                    <span className="text-success small fw-semibold">(-{formatCurrency(billSummary.couponDiscount)})</span>
                   </div>
                   <button
                     type="button"
@@ -2390,12 +2467,20 @@ style={{ cursor: isOccupied ? 'not-allowed' : 'pointer', minHeight: '80px' }}
                       const meetsMin = billSummary.merchandise >= minVal;
                       const isLowerTierDisabled = hasEligibleHigherTier && minVal < 500;
                       const isEligible = meetsMin && !isLowerTierDisabled && (c.status === 'Active' || c.is_active !== false);
+                      const isApplied = Boolean(
+                        appliedCoupon && 
+                        String(appliedCoupon.code || '').trim().toUpperCase() === String(c.code || '').trim().toUpperCase()
+                      );
 
                       return (
                         <div 
                           key={c.code}
                           className={`p-3 rounded-3 border d-flex align-items-center justify-content-between gap-3 ${
-                            isEligible ? 'bg-white border-light-subtle' : 'bg-light border-light-subtle opacity-75'
+                            isApplied
+                              ? 'bg-white border-success shadow-xs'
+                              : isEligible 
+                                ? 'bg-white border-light-subtle' 
+                                : 'bg-light border-light-subtle opacity-75'
                           }`}
                         >
                           <div>
@@ -2416,15 +2501,24 @@ style={{ cursor: isOccupied ? 'not-allowed' : 'pointer', minHeight: '80px' }}
                             </p>
                           </div>
 
-                          <button
-                            type="button"
-                            disabled={!isEligible}
-                            onClick={() => handleApplyCoupon(c.code)}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
-                            style={{ fontSize: '11.5px' }}
-                          >
-                            Apply
-                          </button>
+                          {isApplied ? (
+                            <span 
+                              className="badge bg-success-subtle text-success border border-success-subtle px-2.5 py-1.5 fw-bold flex-shrink-0" 
+                              style={{ fontSize: '11.5px' }}
+                            >
+                              Applied
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!isEligible || isApplied}
+                              onClick={() => handleApplyCoupon(c.code)}
+                              className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold flex-shrink-0"
+                              style={{ fontSize: '11.5px' }}
+                            >
+                              Apply
+                            </button>
+                          )}
                         </div>
                       );
                     });
@@ -2462,7 +2556,12 @@ style={{ cursor: isOccupied ? 'not-allowed' : 'pointer', minHeight: '80px' }}
               <p className="text-muted small mb-3">
                 {placedOrder.order_type === 'TAKEAWAY' || placedOrder.orderType === 'Takeaway'
                   ? 'Takeaway Order ticket dispatched to kitchen'
-                  : `Table ${tableService.getCanonicalTableNumber(placedOrder.table_label || placedOrder.table)} ticket dispatched to kitchen`}
+                  : (() => {
+                      const rawT = placedOrder.table_label || placedOrder.table_number || placedOrder.table;
+                      const num = tableService.getCanonicalTableNumber(rawT);
+                      const short = num ? (num.replace(/^T0*/i, 'T') || num) : '';
+                      return `Table ${short || num} ticket dispatched to kitchen`;
+                    })()}
               </p>
 
               <div className="p-3 rounded-3 bg-light text-start mb-4">

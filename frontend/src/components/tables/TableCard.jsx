@@ -111,7 +111,7 @@ export const TableCard = ({
 
       {/* Footer Action Buttons */}
       {showActions && (
-        <div className="d-flex gap-1.5 justify-content-end pt-2.5 border-top flex-wrap align-items-center mt-auto flex-shrink-0">
+        <div className="d-flex justify-content-end align-items-center pt-2.5 border-top mt-auto flex-shrink-0 flex-nowrap" style={{ gap: '8px' }}>
           {hasDishes && onViewQR && (
             <button 
               type="button"
@@ -120,12 +120,12 @@ export const TableCard = ({
                 e.preventDefault();
                 onViewQR(table);
               }} 
-              className="table-card-btn btn btn-outline-dark"
+              className="table-card-btn btn btn-outline-dark d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0"
               title="View Table QR Code"
-              style={{ fontSize: '11.5px', padding: '4px 8px' }}
+              style={{ fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
             >
               <i className="bi bi-qr-code me-1"></i>
-              QR Code
+              <span>QR Code</span>
             </button>
           )}
           {!isOccupied && !isReserved && (
@@ -138,11 +138,11 @@ export const TableCard = ({
                 onStatusChange(table.id, 'Reserved');
               }} 
               disabled={!hasDishes}
-              className={`table-card-btn btn ${!hasDishes ? 'btn-outline-secondary opacity-50' : 'btn-outline-warning'}`}
-              style={{ cursor: !hasDishes ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px' }}
+              className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${!hasDishes ? 'btn-outline-secondary opacity-50' : 'btn-outline-warning'}`}
+              style={{ cursor: !hasDishes ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
               title={!hasDishes ? "Cannot reserve: menu categories and dishes required" : "Reserve Table"}
             >
-              Reserve
+              <span>Reserve</span>
             </button>
           )}
           {(isOccupied || isReserved) && (
@@ -155,11 +155,11 @@ export const TableCard = ({
                 onStatusChange(table.id, 'Available');
               }} 
               disabled={hasUnfinishedOrders}
-              className={`table-card-btn btn ${hasUnfinishedOrders ? 'btn-outline-secondary opacity-50' : 'btn-outline-success'}`}
-              style={{ cursor: hasUnfinishedOrders ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px' }}
+              className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${hasUnfinishedOrders ? 'btn-outline-secondary opacity-50' : 'btn-outline-success'}`}
+              style={{ cursor: hasUnfinishedOrders ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
               title={hasUnfinishedOrders ? "Cannot vacate: active order in progress" : (isReserved ? "Release Reservation / Vacate" : "Vacate Table")}
             >
-              Vacate
+              <span>Vacate</span>
             </button>
           )}
           <button 
@@ -171,12 +171,12 @@ export const TableCard = ({
               onSelect(table);
             }} 
             disabled={isTakeOrderDisabled}
-            className={`table-card-btn btn ${isTakeOrderDisabled ? 'btn-secondary opacity-50' : 'btn-danger shadow-xs'}`}
-            style={{ cursor: isTakeOrderDisabled ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px' }}
+            className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${isTakeOrderDisabled ? 'btn-secondary opacity-50' : 'btn-danger shadow-xs'}`}
+            style={{ cursor: isTakeOrderDisabled ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
             title={getTakeOrderTooltip()}
           >
             <FiShoppingCart size={12} className="me-1" />
-            Take Order
+            <span>Take Order</span>
           </button>
         </div>
       )}

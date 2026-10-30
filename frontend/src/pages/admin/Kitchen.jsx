@@ -18,7 +18,7 @@ export const Kitchen = () => {
   const [actionError, setActionError] = useState('');
   const [eBillOrder, setEBillOrder] = useState(null);
   const [branches, setBranches] = useState([]);
-  const [activeStageTab, setActiveStageTab] = useState('ALL');
+  const [activeStageTab, setActiveStageTab] = useState('READY');
   const headerRef = useRef(null);
   const [gridHeight, setGridHeight] = useState(null);
 
@@ -412,43 +412,13 @@ export const Kitchen = () => {
           )}
         </div>
 
-        {/* Panel 11 Kitchen Status Tabs */}
+        {/* Kitchen Status Tabs */}
         <div className="card rounded-4 border-0 shadow-sm p-2.5 mb-3 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
-          <div className="d-flex align-items-center gap-1.5 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setActiveStageTab('ALL')}
-              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
-                activeStageTab === 'ALL' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
-              }`}
-              style={{ fontSize: '12px' }}
-            >
-              All Stages
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveStageTab('NEW')}
-              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
-                activeStageTab === 'NEW' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
-              }`}
-              style={{ fontSize: '12px' }}
-            >
-              New ({pendingOrders.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveStageTab('PREPARING')}
-              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
-                activeStageTab === 'PREPARING' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
-              }`}
-              style={{ fontSize: '12px' }}
-            >
-              Preparing ({preparingOrders.length})
-            </button>
+          <div className="d-flex align-items-center gap-2 flex-wrap">
             <button
               type="button"
               onClick={() => setActiveStageTab('READY')}
-              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border-0 ${
                 activeStageTab === 'READY' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
               }`}
               style={{ fontSize: '12px' }}
@@ -458,7 +428,7 @@ export const Kitchen = () => {
             <button
               type="button"
               onClick={() => setActiveStageTab('COMPLETED')}
-              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border-0 ${
                 activeStageTab === 'COMPLETED' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
               }`}
               style={{ fontSize: '12px' }}
