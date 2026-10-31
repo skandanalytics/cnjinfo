@@ -15,7 +15,14 @@ export const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successNotice, setSuccessNotice] = useState(location.state?.successMessage || '');
+  const [successNotice, setSuccessNotice] = useState(() => {
+    if (location.state?.successMessage) return location.state.successMessage;
+    const searchParams = new URLSearchParams(location.search);
+    if (searchParams.get('expired') === '1') {
+      return 'Your session has expired due to 60 minutes of inactivity. Please log in again.';
+    }
+    return '';
+  });
 
   useEffect(() => {
     let active = true;
