@@ -55,10 +55,11 @@ def _release_if_idle(table):
     if table is None:
         return
     table = DiningTable.objects.select_for_update().get(pk=table.pk)
+    # An unpaid order must not release a table until paid or cancelled
     still = Order.objects.filter(
         models.Q(table=table) | models.Q(parent_order__table=table),
-        status__in=Order.ACTIVE_STATUSES,
-    ).exists()
+        models.Q(status__in=Order.ACTIVE_STATUSES) | ~models.Q(payment_status=Order.PaymentStatus.PAID),
+    ).exclude(status=Order.Status.CANCELLED).exists()
     if not still and table.status == DiningTable.Status.OCCUPIED:
         table.status = DiningTable.Status.AVAILABLE
         table.save(update_fields=["status", "updated_at"])

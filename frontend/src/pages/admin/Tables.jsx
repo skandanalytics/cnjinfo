@@ -569,7 +569,10 @@ export const Tables = () => {
                   const activeOrderForTable = (orders || []).find(o => {
                     if (!o) return false;
                     const INACTIVE_STATUSES = ['completed', 'cancelled', 'canceled', 'cancel', 'done', 'settled', 'delivered', 'rejected', 'void', 'voided'];
-                    const isActive = !INACTIVE_STATUSES.includes(String(o.status || '').toLowerCase().trim());
+                    const isCancelled = ['cancelled', 'canceled', 'cancel', 'rejected', 'void', 'voided'].includes(String(o.status || '').toLowerCase().trim());
+                    if (isCancelled) return false;
+                    const isUnpaid = String(o.paymentStatus || o.payment_status || '').toUpperCase() !== 'PAID';
+                    const isActive = !INACTIVE_STATUSES.includes(String(o.status || '').toLowerCase().trim()) || isUnpaid;
                     if (!isActive) return false;
 
                     const rawVal = o.tableNumber || o.table_number || o.table_no || (typeof o.table === 'object' ? (o.table?.number || o.table?.table_number || o.table?.id) : o.table);

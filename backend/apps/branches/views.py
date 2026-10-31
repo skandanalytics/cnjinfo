@@ -92,12 +92,12 @@ class TableViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, views
     search_fields = ["table_number", "location"]
 
     def get_queryset(self):
-        # Auto-reconcile idle occupied tables: any occupied table with no active orders becomes AVAILABLE
+        # Auto-reconcile idle occupied tables: any occupied table with no active or unpaid orders becomes AVAILABLE
         try:
             active_table_ids = Order.objects.filter(
-                Q(status__in=Order.ACTIVE_STATUSES),
+                Q(status__in=Order.ACTIVE_STATUSES) | ~Q(payment_status=Order.PaymentStatus.PAID),
                 Q(table__isnull=False) | Q(parent_order__table__isnull=False)
-            ).values_list("table_id", flat=True)
+            ).exclude(status=Order.Status.CANCELLED).values_list("table_id", flat=True)
             idle_occupied = DiningTable.objects.filter(
                 status=DiningTable.Status.OCCUPIED
             ).exclude(id__in=active_table_ids)
