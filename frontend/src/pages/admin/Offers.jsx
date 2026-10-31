@@ -298,7 +298,7 @@ export const Offers = () => {
       await fetchData();
     } catch (e) {
       console.error("Failed to delete dish offer:", e);
-      alert("Failed to delete dish offer. Please try again.");
+      window.alert(e?.message || "Failed to delete dish offer. Please try again.");
       await fetchData();
     }
     setDeleteLoading(false);
