@@ -18,7 +18,6 @@ export const Kitchen = () => {
   const [actionError, setActionError] = useState('');
   const [eBillOrder, setEBillOrder] = useState(null);
   const [branches, setBranches] = useState([]);
-  const [activeStageTab, setActiveStageTab] = useState('READY');
   const headerRef = useRef(null);
   const [gridHeight, setGridHeight] = useState(null);
 
@@ -380,7 +379,7 @@ export const Kitchen = () => {
                         setSelectedBranch(targetId);
                       }}
                       className="form-select form-select-sm rounded-pill border-secondary-subtle fw-semibold ps-3 pe-4 py-1.5"
-                      style={{ minWidth: '270px', fontSize: '13px', cursor: 'pointer', backgroundColor: '#ffffff' }}
+                      style={{ width: '220px', minWidth: '200px', height: '38px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#ffffff' }}
                       aria-label="Filter Kitchen by Branch"
                     >
                       {branches.map(b => {
@@ -397,6 +396,7 @@ export const Kitchen = () => {
                 <button
                   type="button"
                   className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1"
+                  style={{ height: '38px', minWidth: '38px' }}
                   onClick={() => fetchOrders(true)}
                   title="Refresh Kitchen Queue from Backend"
                   aria-label="Refresh Kitchen Queue"
@@ -410,32 +410,6 @@ export const Kitchen = () => {
           {actionError && (
             <div className="alert alert-warning small py-2 mb-3" role="alert">{actionError}</div>
           )}
-        </div>
-
-        {/* Kitchen Status Tabs */}
-        <div className="card rounded-4 border-0 shadow-sm p-2.5 mb-3 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={() => setActiveStageTab('READY')}
-              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border-0 ${
-                activeStageTab === 'READY' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
-              }`}
-              style={{ fontSize: '12px' }}
-            >
-              Ready ({readyOrders.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveStageTab('COMPLETED')}
-              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border-0 ${
-                activeStageTab === 'COMPLETED' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
-              }`}
-              style={{ fontSize: '12px' }}
-            >
-              Completed ({completedOrders.length})
-            </button>
-          </div>
         </div>
 
         {loading ? (
@@ -530,7 +504,7 @@ export const Kitchen = () => {
                             size="sm"
                             variant="outline"
                             className="py-1 px-3 fw-bold shadow-xs rounded-pill"
-                            style={{ fontSize: '11.5px' }}
+                            style={{ fontSize: '11.5px', minHeight: '32px' }}
                           >
                             Reject
                           </Button>
@@ -541,7 +515,7 @@ export const Kitchen = () => {
                             size="sm"
                             variant="primary"
                             className="py-1 px-3 fw-bold shadow-xs rounded-pill"
-                            style={{ fontSize: '11.5px' }}
+                            style={{ fontSize: '11.5px', minHeight: '32px' }}
                           >
                             Start Preparing
                           </Button>
@@ -640,7 +614,9 @@ export const Kitchen = () => {
                           className="py-1 px-3 fw-bold shadow-xs rounded-pill"
                           style={{
                             backgroundColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14',
-                            borderColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14'
+                            borderColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14',
+                            fontSize: '11.5px',
+                            minHeight: '32px'
                           }}
                         >
                           {isTakeawayOrder(ord) ? 'Mark Serving' : 'Mark Ready'}
@@ -732,7 +708,7 @@ export const Kitchen = () => {
                           size="sm"
                           variant="primary"
                           className="py-1 px-3 fw-bold shadow-xs rounded-pill"
-                          style={{ backgroundColor: '#198754', borderColor: '#198754' }}
+                          style={{ backgroundColor: '#198754', borderColor: '#198754', fontSize: '11.5px', minHeight: '32px' }}
                         >
                           Mark Serving
                         </Button>
@@ -814,8 +790,8 @@ export const Kitchen = () => {
                           <Button
                             size="sm"
                             variant="primary"
-                            className="py-1 px-3 text-nowrap"
-                            style={{ fontSize: '12px', whiteSpace: 'nowrap', borderRadius: '999px' }}
+                            className="py-1 px-3 text-nowrap fw-bold shadow-xs rounded-pill"
+                            style={{ fontSize: '11.5px', whiteSpace: 'nowrap', minHeight: '32px' }}
                             onClick={() => handleAction(ord.id, 'Completed')}
                           >
                             Mark Completed
@@ -825,7 +801,7 @@ export const Kitchen = () => {
                           type="button"
                           onClick={() => setEBillOrder(ord)}
                           className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold btn btn-sm d-inline-flex align-items-center text-nowrap"
-                          style={{ fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap', height: '31px' }}
+                          style={{ fontSize: '11.5px', cursor: 'pointer', whiteSpace: 'nowrap', height: '32px', minHeight: '32px' }}
                         >
                           <i className="bi bi-receipt me-1"></i>View E-Bill
                         </button>
