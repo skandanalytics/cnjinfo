@@ -145,3 +145,102 @@
     transition: margin-left 0.2s ease;
   }
 }
+
+/* Comprehensive Admin Viewport Adaptations across 1920px, 1366px, 1280px, 768px, 390px, 360px */
+
+/* Large desktop (>= 1400px) */
+@media (min-width: 1400px) {
+  .admin-main-content {
+    max-width: 100%;
+  }
+}
+
+/* Standard laptop & small laptop (992px to 1366px) */
+@media (max-width: 1366px) {
+  .admin-main-content {
+    padding: 20px 24px !important;
+  }
+  .pos-dish-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)) !important;
+  }
+}
+
+/* Tablet viewports (768px to 991.98px) */
+@media (min-width: 768px) and (max-width: 991.98px) {
+  .admin-main-content {
+    padding: 16px 20px !important;
+  }
+  .table-responsive {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Mobile & Small Mobile viewports (<= 767.98px down to 360px) */
+@media (max-width: 767.98px) {
+  /* Prevent horizontal layout shifts */
+  .admin-wrapper {
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+
+  .admin-main-content {
+    padding: 12px 14px !important;
+    width: 100vw !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Toolbar controls wrap cleanly on narrow screens */
+  .d-flex.flex-wrap {
+    gap: 8px !important;
+  }
+
+  /* Standardize search inputs on mobile */
+  .search-bar-container,
+  input[type="search"],
+  .form-control {
+    max-width: 100% !important;
+  }
+
+  /* Modals scale gracefully down to 360px */
+  .modal-dialog {
+    margin: 8px auto !important;
+    max-width: calc(100vw - 16px) !important;
+  }
+
+  .modal-content {
+    border-radius: 16px !important;
+  }
+
+  /* Table cards and grids full-width on mobile */
+  .tables-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Prevent text overlapping or clipping */
+  h1, h2, h3, h4, h5, h6 {
+    word-break: break-word;
+  }
+
+  .badge {
+    white-space: normal;
+    text-align: center;
+  }
+}
+
+/* Small mobile (<= 390px and down to 360px) */
+@media (max-width: 390px) {
+  .admin-main-content {
+    padding: 8px 10px !important;
+  }
+  .btn {
+    font-size: 11px !important;
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+  }
+  .form-select, .form-control {
+    font-size: 11.5px !important;
+  }
+}
