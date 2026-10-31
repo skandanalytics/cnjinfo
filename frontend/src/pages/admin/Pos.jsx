@@ -63,11 +63,43 @@ export const Pos = () => {
   const [selectedTable, setSelectedTable] = useState(null);
   const [customerPhone, setCustomerPhone] = useState('');
   const [customerName, setCustomerName] = useState('');
-  const [cartItems, setCartItems] = useState([]);
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [cartItems, setCartItems] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed?.items)) return parsed.items;
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached POS cart:', e);
+    }
+    return [];
+  });
+  const [appliedCoupon, setAppliedCoupon] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.coupon) return parsed.coupon;
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached POS coupon:', e);
+    }
+    return null;
+  });
   const [couponCodeInput, setCouponCodeInput] = useState('');
   const [couponError, setCouponError] = useState('');
   const userDismissedCouponRef = useRef(false);
+  const [hasSavedCart, setHasSavedCart] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed?.items) && parsed.items.length > 0;
+      }
+    } catch (e) { }
+    return false;
+  });
 
   const [serviceTaxEnabled, setServiceTaxEnabled] = useState(() => {
     try {
@@ -87,6 +119,54 @@ export const Pos = () => {
     window.addEventListener('foodie_service_tax_changed', handleTaxSync);
     return () => window.removeEventListener('foodie_service_tax_changed', handleTaxSync);
   }, []);
+
+  // Sync cart state automatically to sessionStorage
+  useEffect(() => {
+    try {
+      if (cartItems.length > 0) {
+        const payload = {
+          items: cartItems,
+          orderType,
+          coupon: appliedCoupon,
+          tableId: selectedTable?.id || null,
+          customerPhone,
+          customerName,
+          branchId: selectedBranchId,
+          timestamp: Date.now(),
+        };
+        sessionStorage.setItem('foodie_pos_cart', JSON.stringify(payload));
+        setHasSavedCart(true);
+      } else {
+        sessionStorage.removeItem('foodie_pos_cart');
+        setHasSavedCart(false);
+      }
+    } catch (e) {
+      console.warn('Failed to save POS cart to sessionStorage:', e);
+    }
+  }, [cartItems, orderType, appliedCoupon, selectedTable, customerPhone, customerName, selectedBranchId]);
+
+  const handleContinueSavedCart = () => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed?.items) && parsed.items.length > 0) {
+          setCartItems(parsed.items);
+          if (parsed.orderType) setOrderType(parsed.orderType);
+          if (parsed.coupon) setAppliedCoupon(parsed.coupon);
+          if (parsed.customerPhone) setCustomerPhone(parsed.customerPhone);
+          if (parsed.customerName) setCustomerName(parsed.customerName);
+          if (parsed.tableId && tables && tables.length > 0) {
+            const tbl = tables.find(t => String(t.id) === String(parsed.tableId));
+            if (tbl) setSelectedTable(tbl);
+          }
+          setToast({ show: true, message: 'Saved cart restored successfully.', type: 'info' });
+        }
+      }
+    } catch (e) {
+      console.error('Failed to continue saved cart:', e);
+    }
+  };
 
   // Modals
   const [customizingItem, setCustomizingItem] = useState(null); // { dish, cartIndex, selectedOptions: [], specialInstructions: '' }
@@ -1136,6 +1216,8 @@ export const Pos = () => {
 
       // Clear current cart & inputs
       userDismissedCouponRef.current = false;
+      try { sessionStorage.removeItem('foodie_pos_cart'); } catch (e) { }
+      setHasSavedCart(false);
       setCartItems([]);
       setAppliedCoupon(null);
       setCustomerPhone('');
@@ -1161,6 +1243,8 @@ export const Pos = () => {
     if (cartItems.length > 0 && !window.confirm('Are you sure you want to clear this order?')) {
       return;
     }
+    try { sessionStorage.removeItem('foodie_pos_cart'); } catch (e) { }
+    setHasSavedCart(false);
     setCartItems([]);
     setAppliedCoupon(null);
     setParentOrder(null);
@@ -1213,7 +1297,6 @@ export const Pos = () => {
         <header className="pos-topbar bg-white border-bottom px-4 py-3 d-flex align-items-center justify-content-between flex-wrap gap-3 flex-shrink-0">
           <div className="d-flex align-items-center gap-3">
             <h5 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
-              <span className="badge bg-danger rounded-circle p-1.5" style={{ fontSize: '13px' }}>🍔</span>
               <span>POS / Take Order</span>
             </h5>
             
@@ -1238,7 +1321,7 @@ export const Pos = () => {
           </div>
 
           {/* Search Input */}
-          <div className="d-flex align-items-center gap-2 flex-grow-1" style={{ maxWidth: '440px' }}>
+          <div className="d-flex align-items-center gap-2" style={{ width: '320px', maxWidth: '100%' }}>
             <div className="position-relative w-100">
               <FiSearch className="position-absolute text-muted" style={{ left: '16px', top: '12px' }} />
               <input
@@ -1380,7 +1463,7 @@ export const Pos = () => {
                   {hasNonVeg && (
                     <label 
                       onClick={() => toggleFoodType('non-veg')}
-                      className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
+                      className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-2 cursor-pointer user-select-none border ${
                         foodTypeFilter['non-veg'] 
                           ? 'bg-danger-subtle border-danger text-danger fw-bold' 
                           : 'bg-white border-light-subtle text-secondary'
@@ -1388,7 +1471,7 @@ export const Pos = () => {
                       style={{ cursor: 'pointer', fontSize: '11.5px' }}
                     >
                       <span className="non-veg-badge" style={{ transform: 'scale(0.8)' }}></span>
-                      <span>Non-Veg</span>
+                      <span className="ms-0.5">Non-Veg</span>
                     </label>
                   )}
 
@@ -1639,29 +1722,29 @@ export const Pos = () => {
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('DINE_IN')}
-                  className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-1.5 transition-all ${
+                  className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-2 transition-all ${
                     orderType === 'DINE_IN'
                       ? 'btn-danger text-white shadow-xs'
                       : 'btn-white text-muted border-0 bg-white'
                   }`}
                   style={{ fontSize: '12px', height: '34px' }}
                 >
-                  <FiLayers size={13} />
-                  <span>Table Dine-In</span>
+                  <FiLayers size={14} className="flex-shrink-0" />
+                  <span className="ms-0.5">Table Dine-In</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('TAKEAWAY')}
-                  className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-1.5 transition-all ${
+                  className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-2 transition-all ${
                     orderType === 'TAKEAWAY'
                       ? 'btn-danger text-white shadow-xs'
                       : 'btn-white text-muted border-0 bg-white'
                   }`}
                   style={{ fontSize: '12px', height: '34px' }}
                 >
-                  <FiShoppingBag size={13} />
-                  <span>Takeaway</span>
+                  <FiShoppingBag size={14} className="flex-shrink-0" />
+                  <span className="ms-0.5">Takeaway</span>
                 </button>
               </div>
             </div>
@@ -1828,13 +1911,29 @@ export const Pos = () => {
                   <FiShoppingBag size={28} className="mb-2 text-secondary opacity-50" />
                   <p className="small mb-0 fw-bold text-dark" style={{ fontSize: '12.5px' }}>No dishes in order ticket.</p>
                   <p className="text-secondary small mb-0 mt-1" style={{ fontSize: '11px' }}>Click dishes from the menu to add items.</p>
+                  {hasSavedCart && (
+                    <div className="mt-3">
+                      <button
+                        type="button"
+                        onClick={handleContinueSavedCart}
+                        className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center gap-1.5 shadow-xs"
+                        style={{ fontSize: '12px' }}
+                      >
+                        <FiRefreshCw size={13} />
+                        <span>Continue Saved Order</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="d-flex flex-column gap-2">
                   {cartItems.map((item, idx) => {
-                    const basePrice = Number(item.dish.price || item.dish.sellingPrice || 0);
+                    const originalBase = Number(item.dish.price || 0);
+                    const effectiveBase = Number(item.dish.sellingPrice || item.dish.discountPrice || item.dish.price || 0);
+                    const hasDishDiscount = Boolean(item.dish.hasDiscount && item.dish.price > effectiveBase);
                     const optionsTotal = (item.options || []).reduce((acc, opt) => acc + Number(opt.extra_price ?? opt.price ?? 0), 0);
-                    const itemUnitPrice = basePrice + optionsTotal;
+                    const itemUnitPrice = effectiveBase + optionsTotal;
+                    const originalUnitPrice = originalBase + optionsTotal;
                     const lineTotal = itemUnitPrice * item.quantity;
                     const ft = normalizeFoodType(item.dish.foodType || item.dish.type);
 
@@ -1849,8 +1948,16 @@ export const Pos = () => {
                               ></span>
                               <strong className="text-dark small text-truncate" style={{ fontSize: '13px' }}>{item.dish.name}</strong>
                             </div>
-                            <div className="text-muted small mt-0.5" style={{ fontSize: '11.5px' }}>
-                              {formatCurrency(itemUnitPrice)} × {item.quantity}
+                            <div className="text-muted small mt-0.5 d-flex align-items-center gap-1.5 flex-wrap" style={{ fontSize: '11.5px' }}>
+                              {hasDishDiscount ? (
+                                <>
+                                  <span className="text-decoration-line-through text-muted small">{formatCurrency(originalUnitPrice)}</span>
+                                  <span className="fw-semibold text-danger">{formatCurrency(itemUnitPrice)}</span>
+                                </>
+                              ) : (
+                                <span>{formatCurrency(itemUnitPrice)}</span>
+                              )}
+                              <span>× {item.quantity}</span>
                             </div>
                           </div>
 
@@ -2067,7 +2174,7 @@ export const Pos = () => {
                   ) : (
                     <>
                       <FiCheck size={18} />
-                      <span>Save Order</span>
+                      <span>Confirm Order</span>
                     </>
                   )}
                 </button>

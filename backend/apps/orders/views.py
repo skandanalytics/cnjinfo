@@ -66,8 +66,15 @@ class QuoteView(APIView):
             if customer is None:
                 customer = NewCustomer()
         lines = [Line(i["food"], i["quantity"], list(i["options"]), i["special_instructions"]) for i in d["items"]]
+        coupon_codes = d.get("coupon_codes", [])
+        allow_auto = True
+        if any(str(c).upper() == "NONE" for c in coupon_codes):
+            coupon_codes = [c for c in coupon_codes if str(c).upper() != "NONE"]
+            allow_auto = False
+
         try:
-            result = price_order(branch, lines, d["order_type"], customer, d["coupon_codes"],
+            result = price_order(branch, lines, d["order_type"], customer, coupon_codes,
+                                 allow_auto=allow_auto,
                                  service_tax_enabled=d.get("service_tax_enabled", True))
         except PricingError as exc:
             return Response({"detail": "Cart cannot be priced.", "errors": exc.errors}, status=400)
