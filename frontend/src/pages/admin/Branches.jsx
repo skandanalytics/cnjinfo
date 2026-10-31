@@ -119,13 +119,13 @@ export const Branches = () => {
     setFormData({
       name: branch.name || '',
       code: branch.code || '',
-      city: branch.city || 'Bangalore',
+      city: branch.city || '',
       address: branch.address || '',
       phone: branch.phone || '',
       email: branch.email || '',
       managerName: branch.managerName || '',
       openingHours: branch.openingHours || '',
-      tablesCount: branch.tablesCount ?? branch.liveTables ?? 0,
+      tablesCount: (branch.tablesCount > 0 ? branch.tablesCount : (branch.liveTables ?? 0)),
       status: branch.status || 'Active',
       isMainBranch: Boolean(branch.isMainBranch),
       image: branch.image || ''
@@ -248,6 +248,13 @@ export const Branches = () => {
   });
 
   const getStatusBadge = (status) => {
+    if (status === 'Under Renovation') {
+      return (
+        <span className="badge bg-warning text-dark fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
+          <span className="rounded-circle bg-dark d-inline-block" style={{ width: '6px', height: '6px' }}></span> Under Renovation
+        </span>
+      );
+    }
     const isAct = status === 'Active';
     if (isAct) {
       return (
@@ -314,7 +321,7 @@ export const Branches = () => {
           )}
 
           <div className="row g-3">
-            {/* Row 1: Branch Name * | Restaurant * */}
+            {/* Row 1: Branch Name * | Branch Code / Restaurant * */}
             <div className="col-12 col-md-6">
               <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
                 Branch Name <span className="text-danger">*</span>
@@ -331,32 +338,35 @@ export const Branches = () => {
               />
             </div>
 
-            {editingBranch && (
-              <div className="col-12 col-md-4">
-                <Input 
-                  label="Branch Code"
-                  name="code"
-                  placeholder="e.g. BR001"
+            {editingBranch ? (
+              <div className="col-12 col-md-6">
+                <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+                  Branch Code (System Generated)
+                </label>
+                <input 
+                  type="text"
+                  className="form-control bg-light rounded-3"
                   value={formData.code}
                   disabled
                   readOnly
-                  helpText="Original assigned branch code"
+                  style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
                 />
               </div>
+            ) : (
+              <div className="col-12 col-md-6">
+                <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+                  Restaurant <span className="text-danger">*</span>
+                </label>
+                <select 
+                  className="form-select rounded-3"
+                  style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
+                  value="Foodie Restaurant"
+                  disabled
+                >
+                  <option value="Foodie Restaurant">Foodie Restaurant</option>
+                </select>
+              </div>
             )}
-            <div className="col-12 col-md-6">
-              <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
-                Restaurant <span className="text-danger">*</span>
-              </label>
-              <select 
-                className="form-select rounded-3"
-                style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
-                value="Foodie Restaurant"
-                disabled
-              >
-                <option value="Foodie Restaurant">Foodie Restaurant</option>
-              </select>
-            </div>
 
             {/* Row 2: Location * | Status * */}
             <div className="col-12 col-md-6">
@@ -369,11 +379,8 @@ export const Branches = () => {
                 className="form-control rounded-3"
                 style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
                 placeholder="Tumakuru, Karnataka"
-                value={formData.city || formData.address}
-                onChange={(e) => {
-                  handleFormChange(e);
-                  setFormData(prev => ({ ...prev, city: e.target.value, address: prev.address || e.target.value }));
-                }}
+                value={formData.city}
+                onChange={handleFormChange}
                 required
               />
             </div>
@@ -396,21 +403,7 @@ export const Branches = () => {
               </select>
             </div>
 
-            {editingBranch && (
-              <div className="col-12">
-                <label className="form-label text-secondary small mb-1">
-                  Branch Code (System Generated)
-                </label>
-                <input 
-                  type="text"
-                  className="form-control bg-light rounded-3"
-                  value={formData.code}
-                  disabled
-                  readOnly
-                  style={{ height: '38px', fontSize: '13px' }}
-                />
-              </div>
-            )}
+
 
             <div className="col-12">
               <label className="form-label text-secondary fw-semibold small">
@@ -590,12 +583,12 @@ export const Branches = () => {
                     subtitle: [branch.code, branch.status].filter(Boolean).join(' · '),
                     searchText: [branch.name, branch.code, branch.city, branch.status, branch.address].filter(Boolean).join(' '),
                   }))}
-                  style={{ width: '260px' }}
+                  style={{ width: '320px', height: '38px' }}
                 />
 
                 <select 
-                  className="form-select form-select-sm rounded-pill px-3 py-1.5"
-                  style={{ width: '170px', height: '38px' }}
+                  className="form-select form-select-sm rounded-pill px-3 py-1.5 fw-semibold border-light-subtle shadow-xs bg-light text-dark"
+                  style={{ width: 'auto', minWidth: '170px', height: '38px', fontSize: '13px' }}
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                 >
@@ -706,7 +699,7 @@ export const Branches = () => {
                         <div className="d-flex align-items-center text-secondary small">
                           <FiLayers className="text-info flex-shrink-0 me-2" size={14} />
                           <span className="fw-semibold text-dark" style={{ fontSize: '12px' }}>
-                            {branch.tablesCount || 0} Tables
+                            {(branch.tablesCount > 0 ? branch.tablesCount : (branch.liveTables ?? 0))} Tables
                           </span>
                         </div>
                       </div>
@@ -747,10 +740,10 @@ export const Branches = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(branch)}
-                          className="btn btn-sm btn-outline-danger d-flex align-items-center rounded-pill px-3 py-1 fw-bold shadow-xs transition-all"
-                          style={{ fontSize: '12px' }}
+                          className="btn btn-sm btn-outline-danger d-inline-flex align-items-center rounded-pill px-3 py-1.5 fw-bold shadow-xs transition-all gap-1.5"
+                          style={{ fontSize: '12px', height: '32px' }}
                         >
-                          <FiEdit2 size={13} className="me-1.5" /> Edit Branch
+                          <FiEdit2 size={13} /> Edit Branch
                         </button>
 
                         <button

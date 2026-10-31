@@ -50,23 +50,31 @@ export const TableCard = ({
     } ${isInactive ? 'opacity-75' : ''}`}>
       {/* Top Header: Table Short Name & Availability Indicator */}
       <div className="d-flex align-items-center justify-content-between mb-2.5 pb-2 border-bottom flex-shrink-0">
-        <div className="d-flex align-items-center" style={{ gap: '8px' }}>
+        <div className="d-flex align-items-center gap-2 flex-wrap">
           <FiLayers size={17} className="text-secondary flex-shrink-0" />
           <span className="fw-bold text-dark text-nowrap fs-6" style={{ letterSpacing: '-0.2px' }}>
             {shortNum}
           </span>
-          <span
-            className="rounded-circle d-inline-block flex-shrink-0"
-            style={{
-              width: '9px',
-              height: '9px',
-              backgroundColor: statusColor,
-              boxShadow: `0 0 0 2.5px ${statusColor}33`,
-            }}
-            title={statusLabel}
-            aria-label={`Table status: ${statusLabel}`}
-            role="status"
-          />
+          <div className="d-inline-flex align-items-center gap-1.5 ms-1">
+            <span
+              className="rounded-circle d-inline-block flex-shrink-0"
+              style={{
+                width: '8px',
+                height: '8px',
+                backgroundColor: statusColor,
+                boxShadow: `0 0 0 2.5px ${statusColor}33`,
+              }}
+              title={statusLabel}
+              aria-label={`Table status: ${statusLabel}`}
+              role="status"
+            />
+            <span 
+              className="fw-bold small text-capitalize" 
+              style={{ fontSize: '11px', color: statusColor, letterSpacing: '0.2px' }}
+            >
+              {statusLabel}
+            </span>
+          </div>
         </div>
         <div className="d-flex align-items-center flex-shrink-0" style={{ gap: '6px' }}>
           {isAdmin && (
