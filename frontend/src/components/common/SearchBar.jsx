@@ -199,7 +199,8 @@ export const SearchBar = ({
         ref={inputRef}
         type="text"
         disabled={disabled}
-        className="form-control rounded-pill py-2.5 ps-5 pe-5 text-dark border border-light-subtle shadow-sm"
+        className="form-control rounded-pill ps-5 pe-5 text-dark border border-light-subtle shadow-sm"
+        style={{ height: style?.height || '38px', fontSize: '13px' }}
         placeholder={placeholder}
         value={value || ''}
         onChange={(event) => {

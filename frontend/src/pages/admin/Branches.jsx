@@ -19,6 +19,7 @@ import {
   FiClock, 
   FiLayers, 
   FiAlertCircle, 
+  FiCheckCircle,
   FiStar,
   FiHome
 } from 'react-icons/fi';
@@ -569,7 +570,7 @@ export const Branches = () => {
         showBackButton
         backUrl="/admin/dashboard"
         actions={
-          <div className="d-flex align-items-center gap-2.5 flex-wrap">
+          <div className="d-flex align-items-center gap-3 flex-wrap">
             {branches.length > 0 && (
               <>
                 <SearchBar 
@@ -583,7 +584,7 @@ export const Branches = () => {
                     subtitle: [branch.code, branch.status].filter(Boolean).join(' · '),
                     searchText: [branch.name, branch.code, branch.city, branch.status, branch.address].filter(Boolean).join(' '),
                   }))}
-                  style={{ width: '320px', height: '38px' }}
+                  style={{ width: '360px', height: '38px' }}
                 />
 
                 <select 
@@ -604,7 +605,8 @@ export const Branches = () => {
               <Button 
                 onClick={handleOpenAdd} 
                 variant="primary" 
-                className="d-flex align-items-center gap-2 py-2 px-3.5 shadow-sm rounded-pill fw-bold"
+                className="d-flex align-items-center justify-content-center gap-2 px-3.5 shadow-sm rounded-pill fw-bold text-nowrap"
+                style={{ height: "38px", fontSize: "13px" }}
               >
                 <FiPlus /> Add Branch
               </Button>
@@ -741,9 +743,10 @@ export const Branches = () => {
                           type="button"
                           onClick={() => handleOpenEdit(branch)}
                           className="btn btn-sm btn-outline-danger d-inline-flex align-items-center rounded-pill px-3 py-1.5 fw-bold shadow-xs transition-all gap-1.5"
-                          style={{ fontSize: '12px', height: '32px' }}
+                          style={{ fontSize: '12px', height: '32px', gap: '6px' }}
                         >
-                          <FiEdit2 size={13} /> Edit Branch
+                          <FiEdit2 size={13} className="flex-shrink-0" />
+                          <span>Edit Branch</span>
                         </button>
 
                         <button

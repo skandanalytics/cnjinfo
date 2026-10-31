@@ -10,21 +10,24 @@ export const ConfirmModal = ({
   onClose,
   confirmText = "Yes, Confirm",
   cancelText = "Cancel",
-  loading = false
+  loading = false,
+  size = "md"
 }) => {
   const footerActions = (
-    <div className="d-flex align-items-center justify-content-end gap-3 w-100">
+    <div className="d-flex align-items-center justify-content-end gap-3 w-100 flex-wrap">
       <button
         type="button"
         onClick={onClose}
         disabled={loading}
-        className="btn rounded-pill px-4 fw-bold"
+        className="btn rounded-pill px-4 fw-bold text-nowrap d-inline-flex align-items-center justify-content-center"
         style={{
           height: '40px',
+          minWidth: '100px',
           backgroundColor: '#FFFFFF',
           color: 'var(--primary-color, #C8102E)',
           border: '1.5px solid var(--primary-color, #C8102E)',
-          fontSize: '13px'
+          fontSize: '13px',
+          whiteSpace: 'nowrap'
         }}
       >
         {cancelText}
@@ -33,12 +36,14 @@ export const ConfirmModal = ({
         type="button"
         onClick={onConfirm}
         disabled={loading}
-        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm"
+        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm text-nowrap d-inline-flex align-items-center justify-content-center"
         style={{
           height: '40px',
+          minWidth: '130px',
           backgroundColor: 'var(--primary-color, #C8102E)',
           borderColor: 'var(--primary-color, #C8102E)',
-          fontSize: '13px'
+          fontSize: '13px',
+          whiteSpace: 'nowrap'
         }}
       >
         {loading ? 'Please wait...' : confirmText}
@@ -47,9 +52,10 @@ export const ConfirmModal = ({
   );
 
   return (
-    <Modal isOpen={isOpen} title={title} onClose={onClose} footerActions={footerActions} size="sm">
-      <p className="text-secondary small mb-0">{message}</p>
+    <Modal isOpen={isOpen} title={title} onClose={onClose} footerActions={footerActions} size={size}>
+      <p className="text-secondary small mb-0" style={{ lineHeight: '1.6' }}>{message}</p>
     </Modal>
   );
 };
+
 export default ConfirmModal;

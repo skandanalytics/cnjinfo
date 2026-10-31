@@ -8,6 +8,7 @@ import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
 import EBillModal from '../../components/orders/EBillModal';
+import Toast from '../../components/common/Toast';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const Kitchen = () => {
@@ -17,6 +18,7 @@ export const Kitchen = () => {
   const [updatingAction, setUpdatingAction] = useState(null);
   const [actionError, setActionError] = useState('');
   const [eBillOrder, setEBillOrder] = useState(null);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'add' });
   const [branches, setBranches] = useState([]);
   const headerRef = useRef(null);
   const [gridHeight, setGridHeight] = useState(null);

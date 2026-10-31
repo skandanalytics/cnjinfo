@@ -694,7 +694,7 @@ export const Users = () => {
                           />
                           <button
                             type="button"
-                            className="btn btn-link position-absolute end-0 top-50 translate-middle-y text-secondary p-0 me-3 d-flex align-items-center justify-content-center"
+                            className="password-toggle-btn position-absolute end-0 top-50 text-secondary p-0 me-3 d-flex align-items-center justify-content-center"
                             style={{ border: 'none', background: 'transparent', cursor: 'pointer', zIndex: 5, width: '24px', height: '24px', transform: 'translateY(-50%)', margin: 0, padding: 0 }}
                             onClick={() => setShowPassword((prev) => !prev)}
                             aria-label={showPassword ? 'Hide password' : 'Show password'}

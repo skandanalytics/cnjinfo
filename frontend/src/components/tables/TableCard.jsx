@@ -55,25 +55,19 @@ export const TableCard = ({
           <span className="fw-bold text-dark text-nowrap fs-6" style={{ letterSpacing: '-0.2px' }}>
             {shortNum}
           </span>
-          <div className="d-inline-flex align-items-center gap-1.5 ms-1">
+          <div className="d-inline-flex align-items-center ms-1">
             <span
               className="rounded-circle d-inline-block flex-shrink-0"
               style={{
-                width: '8px',
-                height: '8px',
+                width: '10px',
+                height: '10px',
                 backgroundColor: statusColor,
-                boxShadow: `0 0 0 2.5px ${statusColor}33`,
+                boxShadow: `0 0 0 3px ${statusColor}33`,
               }}
               title={statusLabel}
               aria-label={`Table status: ${statusLabel}`}
               role="status"
             />
-            <span 
-              className="fw-bold small text-capitalize" 
-              style={{ fontSize: '11px', color: statusColor, letterSpacing: '0.2px' }}
-            >
-              {statusLabel}
-            </span>
           </div>
         </div>
         <div className="d-flex align-items-center flex-shrink-0" style={{ gap: '6px' }}>
@@ -119,7 +113,7 @@ export const TableCard = ({
 
       {/* Footer Action Buttons */}
       {showActions && (
-        <div className="d-flex justify-content-end align-items-center pt-2.5 border-top mt-auto flex-shrink-0 flex-nowrap" style={{ gap: '8px' }}>
+        <div className="table-card-actions d-flex justify-content-end align-items-center pt-2.5 border-top mt-auto flex-shrink-0 flex-wrap" style={{ gap: '6px' }}>
           {hasDishes && onViewQR && (
             <button 
               type="button"
@@ -128,9 +122,9 @@ export const TableCard = ({
                 e.preventDefault();
                 onViewQR(table);
               }} 
-              className="table-card-btn btn btn-outline-dark d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0"
+              className="table-card-btn btn btn-outline-dark d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1"
               title="View Table QR Code"
-              style={{ fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
+              style={{ fontSize: '11.5px', padding: '4px 8px', height: '32px' }}
             >
               <i className="bi bi-qr-code me-1"></i>
               <span>QR Code</span>
@@ -146,8 +140,8 @@ export const TableCard = ({
                 onStatusChange(table.id, 'Reserved');
               }} 
               disabled={!hasDishes}
-              className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${!hasDishes ? 'btn-outline-secondary opacity-50' : 'btn-outline-warning'}`}
-              style={{ cursor: !hasDishes ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
+              className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 ${!hasDishes ? 'btn-outline-secondary opacity-50' : 'btn-outline-warning'}`}
+              style={{ cursor: !hasDishes ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px', height: '32px' }}
               title={!hasDishes ? "Cannot reserve: menu categories and dishes required" : "Reserve Table"}
             >
               <span>Reserve</span>
@@ -163,8 +157,8 @@ export const TableCard = ({
                 onStatusChange(table.id, 'Available');
               }} 
               disabled={hasUnfinishedOrders}
-              className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${hasUnfinishedOrders ? 'btn-outline-secondary opacity-50' : 'btn-outline-success'}`}
-              style={{ cursor: hasUnfinishedOrders ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
+              className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 ${hasUnfinishedOrders ? 'btn-outline-secondary opacity-50' : 'btn-outline-success'}`}
+              style={{ cursor: hasUnfinishedOrders ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px', height: '32px' }}
               title={hasUnfinishedOrders ? "Cannot vacate: active order in progress" : (isReserved ? "Release Reservation / Vacate" : "Vacate Table")}
             >
               <span>Vacate</span>
@@ -179,8 +173,8 @@ export const TableCard = ({
               onSelect(table);
             }} 
             disabled={isTakeOrderDisabled}
-            className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${isTakeOrderDisabled ? 'btn-secondary opacity-50' : 'btn-danger shadow-xs'}`}
-            style={{ cursor: isTakeOrderDisabled ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
+            className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 ${isTakeOrderDisabled ? 'btn-secondary opacity-50' : 'btn-danger shadow-xs'}`}
+            style={{ cursor: isTakeOrderDisabled ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 8px', height: '32px' }}
             title={getTakeOrderTooltip()}
           >
             <FiShoppingCart size={12} className="me-1" />

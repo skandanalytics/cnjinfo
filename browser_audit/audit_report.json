@@ -1,0 +1,582 @@
+{
+  "timestamp": "2026-10-31T09:45:54.304Z",
+  "pagesTested": [
+    {
+      "page": "Dashboard",
+      "url": "http://localhost:5173/admin/dashboard",
+      "data": {
+        "title": "foodie",
+        "url": "http://localhost:5173/admin/dashboard",
+        "hasSearchAnything": false,
+        "hasDarkModeToggle": false,
+        "pageTextSnippet": "F Foodie Admin Dashboard POS / Take Order Orders Tables Kitchen Queue Menu Management Inventory Branches Employees Coupons Settings F foodie_admin Admin F foodie_admin Admin Dashboard Welcome back! Here's what's happening today. 31 Oct 2026 Total Revenue ₹885.00 +100% from last week Pending Order",
+        "headings": [
+          "Dashboard"
+        ],
+        "buttons": [
+          "View All",
+          "View All"
+        ],
+        "inputsCount": 0,
+        "tablesCount": 0,
+        "cardsCount": 8
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\dashboard_1440.png"
+    },
+    {
+      "page": "Branches",
+      "url": "http://localhost:5173/admin/branches",
+      "data": {
+        "title": "foodie",
+        "url": "http://localhost:5173/admin/branches",
+        "hasSearchAnything": false,
+        "hasDarkModeToggle": false,
+        "pageTextSnippet": "F Foodie Admin Dashboard POS / Take Order Orders Tables Kitchen Queue Menu Management Inventory Branches Employees Coupons Settings F foodie_admin Admin F foodie_admin Admin Manage Branches All Statuses Open (Active) Closed (Inactive) Under Renovation Add Branch Main HQ Branch Open BR005 Foodie Dow",
+        "headings": [
+          "Manage Branches"
+        ],
+        "buttons": [
+          "Add Branch",
+          "Edit Branch",
+          "Delete",
+          "Edit Branch",
+          "Delete"
+        ],
+        "inputsCount": 1,
+        "tablesCount": 0,
+        "cardsCount": 4
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\branches_1440.png"
+    },
+    {
+      "page": "Tables",
+      "url": "http://localhost:5173/admin/tables",
+      "data": {
+        "title": "foodie",
+        "url": "http://localhost:5173/admin/tables",
+        "hasSearchAnything": false,
+        "hasDarkModeToggle": false,
+        "pageTextSnippet": "F Foodie Admin Dashboard POS / Take Order Orders Tables Kitchen Queue Menu Management Inventory Branches Employees Coupons Settings F foodie_admin Admin F foodie_admin Admin Tables Takeaway Order Add Table All Locations Indoor Main Available (5) Occupied (3) T1 Capacity: 4 Diners Location: Indoor M",
+        "headings": [
+          "Tables"
+        ],
+        "buttons": [
+          "Takeaway Order",
+          "Add Table",
+          "Available (5)",
+          "Occupied (3)",
+          "QR Code",
+          "Reserve",
+          "Take Order",
+          "QR Code"
+        ],
+        "inputsCount": 0,
+        "tablesCount": 0,
+        "cardsCount": 41
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\tables_1440.png"
+    },
+    {
+      "page": "Employees",
+      "url": "http://localhost:5173/admin/users",
+      "data": {
+        "title": "foodie",
+        "url": "http://localhost:5173/admin/users",
+        "hasSearchAnything": false,
+        "hasDarkModeToggle": false,
+        "pageTextSnippet": "F Foodie Admin Dashboard POS / Take Order Orders Tables Kitchen Queue Menu Management Inventory Branches Employees Coupons Settings F foodie_admin Admin F foodie_admin Admin Employee Directory & Staff Add New Employee All Staff (4) Floor Stewards (2) Management & Admin (2) All Branches Foodie Downt",
+        "headings": [
+          "Employee Directory & Staff"
+        ],
+        "buttons": [
+          "Add New Employee",
+          "All Staff (4)",
+          "Floor Stewards (2)",
+          "Management & Admin (2)"
+        ],
+        "inputsCount": 1,
+        "tablesCount": 1,
+        "cardsCount": 1
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\employees_1440.png"
+    },
+    {
+      "page": "Offers",
+      "url": "http://localhost:5173/admin/offers",
+      "data": {
+        "title": "foodie",
+        "url": "http://localhost:5173/admin/offers",
+        "hasSearchAnything": false,
+        "hasDarkModeToggle": false,
+        "pageTextSnippet": "F Foodie Admin Dashboard POS / Take Order Orders Tables Kitchen Queue Menu Management Inventory Branches Employees Coupons Settings F foodie_admin Admin F foodie_admin Admin Offers & Discounts Dish Discounts & Special Offers (1) Promo Vouchers & Coupons (1) Active Dish Discounts & Offers Special d",
+        "headings": [
+          "Offers & Discounts"
+        ],
+        "buttons": [
+          "Dish Discounts & Special Offers (1)",
+          "Promo Vouchers & Coupons (1)",
+          "Edit",
+          "Delete"
+        ],
+        "inputsCount": 1,
+        "tablesCount": 1,
+        "cardsCount": 1
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\offers_1440.png"
+    },
+    {
+      "page": "POS",
+      "url": "http://localhost:5173/admin/pos",
+      "data": {
+        "title": "foodie",
+        "url": "http://localhost:5173/admin/pos",
+        "hasSearchAnything": false,
+        "hasDarkModeToggle": false,
+        "pageTextSnippet": "F Foodie Admin Dashboard POS / Take Order Orders Tables Kitchen Queue Menu Management Inventory Branches Employees Coupons Settings F foodie_admin Admin F foodie_admin Admin POS / Take Order Branch: Foodie Downtown (Bangalore) Foodie sub branch (Bangalore) 🍽️ All Dishes Burgers Breakfast Meals Pas",
+        "headings": [],
+        "buttons": [
+          "🍽️ Dishes (2)",
+          "🛒 Order Ticket (0)",
+          "🍽️ All Dishes",
+          "Burgers",
+          "Breakfast",
+          "Meals",
+          "Pasta",
+          "Pizza"
+        ],
+        "inputsCount": 4,
+        "tablesCount": 0,
+        "cardsCount": 4
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\pos_1440.png"
+    },
+    {
+      "page": "Orders",
+      "url": "http://localhost:5173/admin/orders",
+      "data": {
+        "title": "foodie",
+        "url": "http://localhost:5173/admin/orders",
+        "hasSearchAnything": false,
+        "hasDarkModeToggle": false,
+        "pageTextSnippet": "F Foodie Admin Dashboard POS / Take Order Orders Tables Kitchen Queue Menu Management Inventory Branches Employees Coupons Settings F foodie_admin Admin F foodie_admin Admin Manage Orders & Bills All Branches Foodie Downtown Foodie sub branch All Payments Unpaid Paid All Employees foodie_admin Prav",
+        "headings": [
+          "Manage Orders & Bills"
+        ],
+        "buttons": [
+          "All",
+          "Dine-In",
+          "Takeaway",
+          "All",
+          "Pending",
+          "Preparing",
+          "Ready",
+          "Serving"
+        ],
+        "inputsCount": 1,
+        "tablesCount": 1,
+        "cardsCount": 2
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\orders_1440.png"
+    },
+    {
+      "page": "Kitchen",
+      "url": "http://localhost:5173/admin/kitchen",
+      "data": {
+        "title": "foodie",
+        "url": "http://localhost:5173/admin/kitchen",
+        "hasSearchAnything": false,
+        "hasDarkModeToggle": false,
+        "pageTextSnippet": "F Foodie Admin Dashboard POS / Take Order Orders Tables Kitchen Queue Menu Management Inventory Branches Employees Coupons Settings F foodie_admin Admin F foodie_admin Admin Kitchen Queue & Live Status Monitor Branch: Foodie Downtown Foodie sub branch New Tickets 0 No New Tickets Pending orders ap",
+        "headings": [
+          "Kitchen Queue & Live Status Monitor"
+        ],
+        "buttons": [
+          "Mark Ready",
+          "Mark Ready",
+          "Mark Ready",
+          "View E-Bill",
+          "View E-Bill",
+          "View E-Bill",
+          "View E-Bill",
+          "View E-Bill"
+        ],
+        "inputsCount": 0,
+        "tablesCount": 0,
+        "cardsCount": 4
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\kitchen_1440.png"
+    }
+  ],
+  "responsiveAudit": [
+    {
+      "page": "Dashboard",
+      "viewport": "1920x1080 Desktop",
+      "width": 1920,
+      "height": 1080,
+      "metrics": {
+        "scrollWidth": 1914,
+        "clientWidth": 1914,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\dashboard_1920x1080.png"
+    },
+    {
+      "page": "POS",
+      "viewport": "1920x1080 Desktop",
+      "width": 1920,
+      "height": 1080,
+      "metrics": {
+        "scrollWidth": 1920,
+        "clientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\pos_1920x1080.png"
+    },
+    {
+      "page": "Orders",
+      "viewport": "1920x1080 Desktop",
+      "width": 1920,
+      "height": 1080,
+      "metrics": {
+        "scrollWidth": 1914,
+        "clientWidth": 1914,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\orders_1920x1080.png"
+    },
+    {
+      "page": "Branches",
+      "viewport": "1920x1080 Desktop",
+      "width": 1920,
+      "height": 1080,
+      "metrics": {
+        "scrollWidth": 1920,
+        "clientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\branches_1920x1080.png"
+    },
+    {
+      "page": "Kitchen",
+      "viewport": "1920x1080 Desktop",
+      "width": 1920,
+      "height": 1080,
+      "metrics": {
+        "scrollWidth": 1920,
+        "clientWidth": 1920,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\kitchen_1920x1080.png"
+    },
+    {
+      "page": "Dashboard",
+      "viewport": "1366x768 Laptop",
+      "width": 1366,
+      "height": 768,
+      "metrics": {
+        "scrollWidth": 1366,
+        "clientWidth": 1366,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\dashboard_1366x768.png"
+    },
+    {
+      "page": "POS",
+      "viewport": "1366x768 Laptop",
+      "width": 1366,
+      "height": 768,
+      "metrics": {
+        "scrollWidth": 1366,
+        "clientWidth": 1366,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\pos_1366x768.png"
+    },
+    {
+      "page": "Orders",
+      "viewport": "1366x768 Laptop",
+      "width": 1366,
+      "height": 768,
+      "metrics": {
+        "scrollWidth": 1360,
+        "clientWidth": 1360,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\orders_1366x768.png"
+    },
+    {
+      "page": "Branches",
+      "viewport": "1366x768 Laptop",
+      "width": 1366,
+      "height": 768,
+      "metrics": {
+        "scrollWidth": 1366,
+        "clientWidth": 1366,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\branches_1366x768.png"
+    },
+    {
+      "page": "Kitchen",
+      "viewport": "1366x768 Laptop",
+      "width": 1366,
+      "height": 768,
+      "metrics": {
+        "scrollWidth": 1366,
+        "clientWidth": 1366,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\kitchen_1366x768.png"
+    },
+    {
+      "page": "Dashboard",
+      "viewport": "768x1024 Tablet",
+      "width": 768,
+      "height": 1024,
+      "metrics": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\dashboard_768x1024.png"
+    },
+    {
+      "page": "POS",
+      "viewport": "768x1024 Tablet",
+      "width": 768,
+      "height": 1024,
+      "metrics": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\pos_768x1024.png"
+    },
+    {
+      "page": "Orders",
+      "viewport": "768x1024 Tablet",
+      "width": 768,
+      "height": 1024,
+      "metrics": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\orders_768x1024.png"
+    },
+    {
+      "page": "Branches",
+      "viewport": "768x1024 Tablet",
+      "width": 768,
+      "height": 1024,
+      "metrics": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\branches_768x1024.png"
+    },
+    {
+      "page": "Kitchen",
+      "viewport": "768x1024 Tablet",
+      "width": 768,
+      "height": 1024,
+      "metrics": {
+        "scrollWidth": 768,
+        "clientWidth": 768,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\kitchen_768x1024.png"
+    },
+    {
+      "page": "Dashboard",
+      "viewport": "390x844 Mobile",
+      "width": 390,
+      "height": 844,
+      "metrics": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\dashboard_390x844.png"
+    },
+    {
+      "page": "POS",
+      "viewport": "390x844 Mobile",
+      "width": 390,
+      "height": 844,
+      "metrics": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\pos_390x844.png"
+    },
+    {
+      "page": "Orders",
+      "viewport": "390x844 Mobile",
+      "width": 390,
+      "height": 844,
+      "metrics": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\orders_390x844.png"
+    },
+    {
+      "page": "Branches",
+      "viewport": "390x844 Mobile",
+      "width": 390,
+      "height": 844,
+      "metrics": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\branches_390x844.png"
+    },
+    {
+      "page": "Kitchen",
+      "viewport": "390x844 Mobile",
+      "width": 390,
+      "height": 844,
+      "metrics": {
+        "scrollWidth": 390,
+        "clientWidth": 390,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\kitchen_390x844.png"
+    },
+    {
+      "page": "Dashboard",
+      "viewport": "360x800 Small Mobile",
+      "width": 360,
+      "height": 800,
+      "metrics": {
+        "scrollWidth": 360,
+        "clientWidth": 360,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\dashboard_360x800.png"
+    },
+    {
+      "page": "POS",
+      "viewport": "360x800 Small Mobile",
+      "width": 360,
+      "height": 800,
+      "metrics": {
+        "scrollWidth": 360,
+        "clientWidth": 360,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\pos_360x800.png"
+    },
+    {
+      "page": "Orders",
+      "viewport": "360x800 Small Mobile",
+      "width": 360,
+      "height": 800,
+      "metrics": {
+        "scrollWidth": 360,
+        "clientWidth": 360,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\orders_360x800.png"
+    },
+    {
+      "page": "Branches",
+      "viewport": "360x800 Small Mobile",
+      "width": 360,
+      "height": 800,
+      "metrics": {
+        "scrollWidth": 360,
+        "clientWidth": 360,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\branches_360x800.png"
+    },
+    {
+      "page": "Kitchen",
+      "viewport": "360x800 Small Mobile",
+      "width": 360,
+      "height": 800,
+      "metrics": {
+        "scrollWidth": 360,
+        "clientWidth": 360,
+        "hasHorizontalOverflow": false,
+        "paddingLeft": "0px",
+        "paddingRight": "0px"
+      },
+      "screenshot": "D:\\curser\\foodie\\browser_audit\\screenshots\\kitchen_360x800.png"
+    }
+  ],
+  "posChecks": {
+    "searchInputFound": false,
+    "searchWidth": "none",
+    "confirmButtonText": "Not found",
+    "hasBurgerEmoji": false,
+    "cartKeySaved": null
+  },
+  "kitchenChecks": {
+    "hasPending": false,
+    "hasPreparing": false,
+    "hasReady": false,
+    "hasServing": false,
+    "hasSeparateStageTabs": false
+  },
+  "orderChecks": {
+    "pageTitle": "Foodie",
+    "filterPills": [],
+    "showBillButtonsCount": 0,
+    "hasServiceTaxToggleInToolbar": false
+  }
+}

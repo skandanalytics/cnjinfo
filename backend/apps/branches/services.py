@@ -22,26 +22,19 @@ from .models import Branch, DiningTable, TableView
 
 
 class BranchDeleteError(Exception):
-    def __init__(self, detail, code="cannot_delete", status_code=409):
+    def __init__(self, detail, code="cannot_delete", status_code=409, http_status=None):
         super().__init__(detail)
         self.detail = detail
         self.code = code
-        self.status_code = status_code
+        self.status_code = http_status or status_code
+        self.http_status = self.status_code
 
 
 def _freeze_invoices(branch):
-    """Stamp missing invoice metadata so historical financial records remain intact after branch removal."""
-    for inv in Invoice.objects.filter(branch=branch, branch_name=""):
-        inv.branch_name = branch.name
-        inv.branch_code = branch.code
-        inv.branch_address = branch.address
-        inv.branch_phone = branch.phone
-        inv.branch_email = branch.email
-        inv.branch_gstin = branch.gstin
-        inv.save(update_fields=["branch_name", "branch_code", "branch_address", "branch_phone", "branch_email",
-                                "branch_gstin"])
-    Invoice.objects.filter(branch=branch).update(branch=None)
-
+    """Invoice model links to Order, not directly to Branch.
+    Historical orders have their branch/table/dish details preserved in _detach_history
+    and Invoice.snapshot contains the immutable frozen bill."""
+    pass
 
 def _detach_history(branch):
     """Clear FKs on retained rows. MySQL FKs are NO ACTION, so the parent cannot be deleted otherwise."""
@@ -80,8 +73,7 @@ def delete_branch(branch_id, actor, replacement_id=None, ip=None):
     if branch is None:
         raise BranchDeleteError("Branch not found.", "not_found", 404)
     if Order.objects.filter(branch=branch, status__in=Order.ACTIVE_STATUSES).exists():
-        raise BranchDeleteError("This branch has orders that are still in progress. Complete or cancel them "
-                                "before deleting the branch.", "active_orders")
+        raise BranchDeleteError("This branch has orders still in progress. Please complete or cancel them before deleting the branch.", "active_orders", 409)
 
     # Do not automatically assign another branch as the main branch after deletion unless explicitly requested.
     replacement = None

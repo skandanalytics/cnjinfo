@@ -183,10 +183,18 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding: 24px;
 }
 
 .kitchen-queue-header {
   flex-shrink: 0;
+  margin-bottom: 20px;
+}
+
+.kitchen-queue-header .border-bottom {
+  border-bottom: 1px solid var(--border-color, #e5e7eb) !important;
+  padding-bottom: 16px !important;
+  margin-bottom: 0 !important;
 }
 
 .kitchen-queue-grid {
@@ -256,6 +264,7 @@
   .kitchen-queue-page {
     overflow: visible;
     height: auto !important;
+    padding: 16px;
   }
 
   .kitchen-queue-grid {
@@ -412,15 +421,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  height: 34px;
-  padding: 0 14px;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px;
   font-size: 11.5px;
   font-weight: 600;
   border-radius: 20px;
   white-space: nowrap;
+  min-width: 0;
   transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease, color 180ms ease !important;
   will-change: transform;
+}
+
+.table-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
 }
 
 .table-card-btn:hover:not(:disabled):not(.disabled) {
@@ -583,3 +600,19 @@
   }
 }
 
+
+/* Stable Password Toggle Button */
+.password-toggle-btn {
+  transform: translateY(-50%) !important;
+  transition: opacity 0.15s ease !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.password-toggle-btn:hover,
+.password-toggle-btn:focus,
+.password-toggle-btn:active {
+  transform: translateY(-50%) !important;
+  opacity: 0.8;
+  color: var(--primary-color, #dc3545) !important;
+}

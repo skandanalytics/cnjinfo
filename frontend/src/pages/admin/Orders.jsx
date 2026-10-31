@@ -11,6 +11,7 @@ import { OrderContext } from '../../context/OrderContext';
 import { restaurantService } from '../../services/restaurantService';
 import { useAuth } from '../../hooks/useAuth';
 import EBillModal from '../../components/orders/EBillModal';
+import Toast from '../../components/common/Toast';
 import { FiEye, FiGrid, FiList } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
@@ -26,6 +27,7 @@ export const Orders = () => {
   const [employeeFilter, setEmployeeFilter] = useState('ALL');
   const [employees, setEmployees] = useState([]);
   const [eBillOrder, setEBillOrder] = useState(null);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'add' });
 
   const getInitialTab = () => {
     const p = (searchParams.get('status') || searchParams.get('tab') || '').toLowerCase();
@@ -549,6 +551,8 @@ export const Orders = () => {
         />
       )}
 
+      <Toast show={toast.show} message={toast.message} type={toast.type} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
+
       {/* E-Bill Modal */}
       {eBillOrder && (
         <EBillModal
@@ -568,11 +572,19 @@ export const Orders = () => {
               window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
               setEBillOrder(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
               setSelectedOrder(prev => (prev && String(prev.id) === String(targetId)) ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : prev);
-              window.alert(`Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`);
+              setToast({
+                show: true,
+                message: `Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`,
+                type: 'add'
+              });
             } catch (err) {
               console.error('Failed to complete order on Proceed to Bill:', err);
               const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
-              window.alert(msg);
+              setToast({
+                show: true,
+                message: msg,
+                type: 'remove'
+              });
               throw err;
             }
           }}

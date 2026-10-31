@@ -22,6 +22,7 @@ import { useCart } from '../../hooks/useCart';
 import { OrderContext } from '../../context/OrderContext';
 import TrackOrderModal from '../../components/orders/TrackOrderModal';
 import EBillModal from '../../components/orders/EBillModal';
+import Toast from '../../components/common/Toast';
 import { orderService } from '../../services/orderService';
 
 export const Tables = () => {

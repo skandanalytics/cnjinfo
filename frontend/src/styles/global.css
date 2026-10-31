@@ -580,6 +580,8 @@ input::-ms-clear {
   font-family: "Segoe UI", "Nirmala UI", "Noto Sans", sans-serif;
   font-size: 14px;
   line-height: 1.4;
+  padding: 16px 20px;
+  box-sizing: border-box;
 }
 .foodie-invoice-head {
   display: flex;
@@ -1125,4 +1127,4 @@ input[type="checkbox"].foodie-checkbox.checkbox-vegan:focus-visible {
 
 .animate-fade-in {
   animation: foodieFadeIn var(--transition-normal) forwards;
-}
+}
