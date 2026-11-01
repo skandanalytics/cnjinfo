@@ -27,26 +27,26 @@ export const Sidebar = () => {
         maxWidth: width, 
         flex: `0 0 ${width}`,
         zIndex: 1000,
-        backgroundColor: '#111827',
-        color: '#94A3B8',
+        backgroundColor: 'var(--sidebar-bg, #101B29)',
+        color: 'var(--sidebar-text, #94A3B8)',
         display: 'flex',
         flexDirection: 'column',
         boxShadow: '0 0 25px rgba(0, 0, 0, 0.3)',
         transition: 'all 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
         overflowY: 'auto',
         overflowX: 'hidden',
-        borderRight: '1px solid #1F2937'
+        borderRight: '1px solid var(--sidebar-border, #182638)'
       }}
     >
       {/* Brand Header */}
       <NavLink 
         to={isEmployee ? "/employee/dashboard" : "/admin/dashboard"}
-        className="px-3 py-3.5 border-bottom d-flex align-items-center gap-2.5 text-decoration-none"
-        style={{ borderColor: '#1F2937', cursor: 'pointer' }}
+        className="px-3 py-3 border-bottom d-flex align-items-center gap-2.5 text-decoration-none"
+        style={{ borderColor: '#182638', cursor: 'pointer' }}
       >
         <span 
-          className="rounded-3 d-flex align-items-center justify-content-center fw-extrabold text-white flex-shrink-0 shadow-sm"
-          style={{ width: '36px', height: '36px', backgroundColor: 'var(--primary-color, #C8102E)', fontSize: '18px' }}
+          className="rounded-circle d-flex align-items-center justify-content-center fw-extrabold text-white flex-shrink-0 shadow-sm"
+          style={{ width: '36px', height: '36px', backgroundColor: 'var(--primary-color, #F20D2D)', fontSize: '18px' }}
         >
           F
         </span>
@@ -135,11 +135,11 @@ export const Sidebar = () => {
 
       {/* User Footer Context */}
       {!sidebarCollapsed && (
-        <div className="p-3 border-top mt-auto" style={{ borderColor: '#1F2937' }}>
+        <div className="p-3 border-top mt-auto" style={{ borderColor: '#182638' }}>
           <div className="d-flex align-items-center gap-2">
             <div 
               className="rounded-circle d-flex align-items-center justify-content-center text-white fw-bold flex-shrink-0"
-              style={{ width: '32px', height: '32px', backgroundColor: 'var(--primary-color, #C8102E)', fontSize: '13px' }}
+              style={{ width: '32px', height: '32px', backgroundColor: 'var(--primary-color, #F20D2D)', fontSize: '13px' }}
             >
               {user?.name?.charAt(0).toUpperCase() || 'A'}
             </div>
@@ -147,7 +147,7 @@ export const Sidebar = () => {
               <span className="d-block text-white fw-semibold small text-truncate" style={{ fontSize: '12px' }}>
                 {user?.name || (isEmployee ? 'Staff' : 'foodieadmin')}
               </span>
-              <span className="d-block text-secondary small text-truncate" style={{ fontSize: '11px', color: '#94A3B8' }}>
+              <span className="d-block small text-truncate" style={{ fontSize: '11px', color: '#94A3B8' }}>
                 {isEmployee ? 'Employee' : 'Admin'}
               </span>
             </div>

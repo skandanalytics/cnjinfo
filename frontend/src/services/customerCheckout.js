@@ -97,8 +97,14 @@ export async function placeOrder(orderType, paymentMethod) {
   const branch = customerBranchId();
   const key = checkoutKeyFor(review.cart?.id ?? null);
   const parentOrderId = sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id');
+  const customerPhone = sessionStorage.getItem('customer_mobile') || localStorage.getItem('customer_mobile') || '';
+  const customerName = sessionStorage.getItem('customer_name') || localStorage.getItem('customer_name') || '';
   const payload = {
-    branch, idempotency_key: key, payment_method: toApiPaymentMethod(paymentMethod),
+    branch,
+    idempotency_key: key,
+    payment_method: toApiPaymentMethod(paymentMethod),
+    ...(customerPhone ? { customer_phone: customerPhone } : {}),
+    ...(customerName ? { customer_name: customerName } : {}),
   };
   if (parentOrderId && String(orderType).toLowerCase() !== 'takeaway') {
     payload.parent_order = Number(parentOrderId);
@@ -108,6 +114,8 @@ export async function placeOrder(orderType, paymentMethod) {
     const res = await api.post('/orders/', payload);
     sessionStorage.removeItem(CHECKOUT_KEY);
     if (!res.data?.id) throw new Error('The server did not return an order id.');
+    sessionStorage.setItem('foodie_last_placed_order', JSON.stringify(res.data));
+    localStorage.setItem('foodie_last_placed_order', JSON.stringify(res.data));
     if (String(orderType).toLowerCase() !== 'takeaway') {
       const rootId = res.data.parent_order || res.data.parent_order_id || parentOrderId || res.data.id;
       sessionStorage.setItem('foodie_parent_order_id', String(rootId));
@@ -136,6 +144,8 @@ export async function placeOrder(orderType, paymentMethod) {
         const retryRes = await api.post('/orders/', payload);
         sessionStorage.removeItem(CHECKOUT_KEY);
         if (!retryRes.data?.id) throw new Error('The server did not return an order id.');
+        sessionStorage.setItem('foodie_last_placed_order', JSON.stringify(retryRes.data));
+        localStorage.setItem('foodie_last_placed_order', JSON.stringify(retryRes.data));
         if (String(orderType).toLowerCase() !== 'takeaway') {
           const rootId = retryRes.data.parent_order || retryRes.data.parent_order_id || retryRes.data.id;
           sessionStorage.setItem('foodie_parent_order_id', String(rootId));

@@ -1,0 +1,72 @@
+
+--- PAGE 1 ---
+Only consider this bugs only  
+28-10-2026 
+ 
+ 01:-It is showing only main branch dish but not  showing sub branch dish  
+ 
+02:-Customer select table no T01 if I click proceed to payment  it is showing  table no T10  
+
+--- PAGE 2 ---
+ 
+03 in customer page in showing coupon but  this coupon is inactive  showing is not need  
+ 
+04 Browser categories icon is so difference  
+ 
+
+--- PAGE 3 ---
+ 
+05 only showing in veg and non veg food icon only but all item select create in all icon button  
+ 
+06:- only showing in added item and the not showing in another item or  add more item  
+
+--- PAGE 4 ---
+ 
+07:-In the customer page showing in 3 food item but admin page show in 4 item 1 item is not showing  
+ 
+ 
+
+--- PAGE 5 ---
+ 
+08:- in this caustomer page showing in when we are deliting the item redirect in home page but not 
+going in home page  
+ 
+ 
+ 
+
+--- PAGE 6 ---
+09 diffrence in both image  while scrolling page  in  not reducing in serch bar and top all icons  
+ 
+10:- in this customer page   order bill summary is calculating  incorrectly  
+ 
+ 
+11 :- customer  was select in takeaway but order bill summary in showing in packing charges and service 
+charges both are applicable is not correct formate  
+
+--- PAGE 7 ---
+ 
+12:- in this customer page is showing in payment status is so far unpaid color also changed in red color 
+and the  show this type is better  ( payment status :- Unpaid /pending ) 
+
+--- PAGE 8 ---
+ 
+13 :- customer order was takeaway but  bill was thank you for dining  so difference ( Thank you for 
+foodie  visit again )is best 
+
+--- PAGE 9 ---
+   
+ 
+14:- In this customer bill  when we are taking take away order bill is showing is incorrectly  
+(199+1575+490+135=2399 but showing is 2899 and extra  topings  amount calculate is not calculate  
+
+--- PAGE 10 ---
+ 
+  15:- This  is download bill payment status was correct  but date and time is difference  now time 
+3:45pm but showing 6:36pm and date  now 27-10-2026 but showing is 13-10-2026 
+
+--- PAGE 11 ---
+ 
+ 
+ 
+  16:- This  is download bill payment status was  in correct high space  
+ 

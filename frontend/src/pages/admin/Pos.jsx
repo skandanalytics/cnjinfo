@@ -22,7 +22,12 @@ import Toast from '../../components/common/Toast';
 import { 
   FiSearch, FiX, FiPlus, FiMinus, FiTrash2, FiShoppingBag, 
   FiLayers, FiTag, FiCheck, FiDollarSign, FiClock, FiPercent,
+<<<<<<< HEAD
   FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw, FiChevronLeft
+=======
+  FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw,
+  FiGrid, FiList, FiShoppingCart, FiCreditCard, FiSave, FiChevronDown
+>>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
 } from 'react-icons/fi';
 import { getShortTableNumber } from '../../components/tables/TableCard';
 
@@ -56,9 +61,14 @@ export const Pos = () => {
     'non-veg': false,
     vegan: false,
   });
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
+  const [selectedFoodType, setSelectedFoodType] = useState('ALL'); // 'ALL' | 'VEG' | 'NON_VEG'
+  const [availabilityFilter, setAvailabilityFilter] = useState('ALL'); // 'ALL' | 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK'
+  const [posViewMode, setPosViewMode] = useState('grid');
 
   // POS Order State
   const initialType = (searchParams.get('type') || '').toLowerCase() === 'takeaway' ? 'TAKEAWAY' : 'DINE_IN';
+<<<<<<< HEAD
   const [orderType, setOrderType] = useState(() => {
     try {
       const stored = sessionStorage.getItem('foodie_pos_cart');
@@ -123,6 +133,14 @@ export const Pos = () => {
     }
     return null;
   });
+=======
+  const [orderType, setOrderType] = useState(initialType);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [customerPhone, setCustomerPhone] = useState('');
+  const [customerName, setCustomerName] = useState('');
+  const [cartItems, setCartItems] = useState([]);
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+>>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
   const [couponCodeInput, setCouponCodeInput] = useState('');
   const [couponError, setCouponError] = useState('');
   const userDismissedCouponRef = useRef(false);
@@ -136,25 +154,6 @@ export const Pos = () => {
     } catch (e) { }
     return false;
   });
-
-  const [serviceTaxEnabled, setServiceTaxEnabled] = useState(() => {
-    try {
-      const saved = localStorage.getItem('foodie_service_tax_enabled');
-      return saved !== null ? saved !== 'false' : true;
-    } catch (e) {
-      return true;
-    }
-  });
-
-  useEffect(() => {
-    const handleTaxSync = (e) => {
-      if (typeof e.detail?.enabled === 'boolean') {
-        setServiceTaxEnabled(e.detail.enabled);
-      }
-    };
-    window.addEventListener('foodie_service_tax_changed', handleTaxSync);
-    return () => window.removeEventListener('foodie_service_tax_changed', handleTaxSync);
-  }, []);
 
   // Sync cart state automatically to sessionStorage
   useEffect(() => {
@@ -201,9 +200,28 @@ export const Pos = () => {
         }
       }
     } catch (e) {
-      console.error('Failed to continue saved cart:', e);
+      console.warn('Failed to restore saved cart:', e);
     }
   };
+
+  const [serviceTaxEnabled, setServiceTaxEnabled] = useState(() => {
+    try {
+      const saved = localStorage.getItem('foodie_service_tax_enabled');
+      return saved !== null ? saved !== 'false' : true;
+    } catch (e) {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    const handleTaxSync = (e) => {
+      if (typeof e.detail?.enabled === 'boolean') {
+        setServiceTaxEnabled(e.detail.enabled);
+      }
+    };
+    window.addEventListener('foodie_service_tax_changed', handleTaxSync);
+    return () => window.removeEventListener('foodie_service_tax_changed', handleTaxSync);
+  }, []);
 
   // Modals
   const [customizingItem, setCustomizingItem] = useState(null); // { dish, cartIndex, selectedOptions: [], specialInstructions: '' }
@@ -729,6 +747,31 @@ export const Pos = () => {
     setFoodTypeFilter(prev => ({ ...prev, [type]: !prev[type] }));
   };
 
+  // Category Counts for Category Pills
+  const categoryCounts = useMemo(() => {
+    const counts = { ALL: dishes.length };
+    dishes.forEach(d => {
+      const cat = (d.category || '').trim();
+      if (cat) {
+        counts[cat] = (counts[cat] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [dishes]);
+
+  const getCategoryIcon = (catName) => {
+    const c = String(catName).toLowerCase();
+    if (c === 'all' || c === 'all dishes') return <FiGrid size={15} />;
+    if (c.includes('chat') || c.includes('snack')) return <span>🍲</span>;
+    if (c.includes('main') || c.includes('curry')) return <span>🍛</span>;
+    if (c.includes('south') || c.includes('dosa') || c.includes('idli')) return <span>🥞</span>;
+    if (c.includes('beverage') || c.includes('drink') || c.includes('tea') || c.includes('coffee')) return <span>☕</span>;
+    if (c.includes('fast') || c.includes('burger') || c.includes('pizza')) return <span>🍔</span>;
+    if (c.includes('rice') || c.includes('biryani')) return <span>🍚</span>;
+    if (c.includes('dessert') || c.includes('sweet')) return <span>🍰</span>;
+    return <FiLayers size={14} />;
+  };
+
   // Filtered Dishes
   const filteredDishes = useMemo(() => {
     return dishes.filter(dish => {
@@ -737,11 +780,15 @@ export const Pos = () => {
         const query = searchQuery.toLowerCase().trim();
         const matchesName = String(dish.name || '').toLowerCase().includes(query);
         const matchesDesc = String(dish.description || '').toLowerCase().includes(query);
-        if (!matchesName && !matchesDesc) return false;
+        const matchesCat = String(dish.category || '').toLowerCase().includes(query);
+        if (!matchesName && !matchesDesc && !matchesCat) return false;
       }
 
-      // Category filter (multi-select)
-      if (selectedCategories.length > 0) {
+      // Category filter (selected category from pill or dropdown)
+      if (selectedCategory && selectedCategory !== 'ALL') {
+        const dishCat = String(dish.category || '').trim().toLowerCase();
+        if (dishCat !== String(selectedCategory).trim().toLowerCase()) return false;
+      } else if (selectedCategories.length > 0) {
         const dishCat = String(dish.category || '').trim().toLowerCase();
         const matchesAnyCat = selectedCategories.some(cat => {
           const c = String(cat).trim().toLowerCase();
@@ -750,16 +797,30 @@ export const Pos = () => {
         if (!matchesAnyCat) return false;
       }
 
-      // Food type filter
-      const activeTypes = Object.entries(foodTypeFilter).filter(([_, active]) => active).map(([t]) => t);
-      if (activeTypes.length > 0) {
-        const dishType = normalizeFoodType(dish.foodType || dish.type);
-        if (!activeTypes.includes(dishType)) return false;
+      // Food type filter (All, Veg, Non-Veg)
+      if (selectedFoodType === 'VEG' || foodTypeFilter.veg) {
+        const dt = normalizeFoodType(dish.foodType || dish.type);
+        if (dt !== 'veg' && dt !== 'vegan') return false;
+      } else if (selectedFoodType === 'NON_VEG' || foodTypeFilter['non-veg']) {
+        const dt = normalizeFoodType(dish.foodType || dish.type);
+        if (dt !== 'non-veg') return false;
+      }
+
+      // Availability filter
+      const isOut = dish.status === 'Out of Stock' || dish.status === 'OUT_OF_STOCK' || Number(dish.stock) <= 0 || dish.is_orderable === false || dish.isOrderable === false;
+      const isLow = !isOut && Number(dish.stock) > 0 && Number(dish.stock) <= 5;
+
+      if (availabilityFilter === 'IN_STOCK') {
+        if (isOut || isLow) return false;
+      } else if (availabilityFilter === 'LOW_STOCK') {
+        if (!isLow) return false;
+      } else if (availabilityFilter === 'OUT_OF_STOCK') {
+        if (!isOut) return false;
       }
 
       return true;
     });
-  }, [dishes, searchQuery, selectedCategories, foodTypeFilter]);
+  }, [dishes, searchQuery, selectedCategory, selectedCategories, selectedFoodType, foodTypeFilter, availabilityFilter]);
 
   // Cart Management
   const findCartIndex = (dishId, options = [], instructions = '') => {
@@ -1265,8 +1326,6 @@ export const Pos = () => {
 
       // Clear current cart & inputs
       userDismissedCouponRef.current = false;
-      try { sessionStorage.removeItem('foodie_pos_cart'); } catch (e) { }
-      setHasSavedCart(false);
       setCartItems([]);
       setAppliedCoupon(null);
       setCustomerPhone('');
@@ -1292,8 +1351,6 @@ export const Pos = () => {
     if (cartItems.length > 0 && !window.confirm('Are you sure you want to clear this order?')) {
       return;
     }
-    try { sessionStorage.removeItem('foodie_pos_cart'); } catch (e) { }
-    setHasSavedCart(false);
     setCartItems([]);
     setAppliedCoupon(null);
     setParentOrder(null);
@@ -1340,8 +1397,9 @@ export const Pos = () => {
 
   return (
     <AdminLayout fullHeight={true} contentClassName="p-0 d-flex flex-column flex-grow-1 overflow-hidden">
-      <div className="pos-container d-flex flex-column w-100 h-100 overflow-hidden" style={{ backgroundColor: '#f8f9fa' }}>
+      <div className="pos-main-container d-flex flex-column w-100 h-100 overflow-hidden" style={{ backgroundColor: '#F2F7FC' }}>
         
+<<<<<<< HEAD
         {/* Top POS Header Toolbar */}
         <header className="pos-topbar bg-white border-bottom px-4 py-3 d-flex align-items-center justify-content-between flex-wrap gap-3 flex-shrink-0">
           <div className="d-flex align-items-center gap-3">
@@ -1411,6 +1469,8 @@ export const Pos = () => {
           </div>
         </header>
 
+=======
+>>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
         {/* Mobile Tab Switcher (Visible on screens < 992px) */}
         <div className="d-flex d-lg-none bg-white border-bottom px-3 py-2 gap-2 flex-shrink-0">
           <button
@@ -1440,311 +1500,529 @@ export const Pos = () => {
           </button>
         </div>
 
-        {/* Main POS Content Area with Independent Scroll Columns */}
-        <div className="pos-layout-wrapper">
+        {/* Main Two-Column POS Workspace */}
+        <div className="pos-workspace-wrapper d-flex flex-grow-1 min-h-0 overflow-hidden p-3 p-xl-4 gap-3 gap-xl-4">
           
-          {/* CENTER: Menu & Catalog Grid (Independent Scroll Area) */}
-          <main className={`pos-menu-panel border-end ${mobilePosTab !== 'menu' ? 'd-none d-lg-flex' : ''}`}>
+          {/* LEFT COLUMN: Food Selection Workspace (~65%) */}
+          <div 
+            className={`pos-food-catalog-area flex-column min-h-0 overflow-y-auto ${mobilePosTab !== 'menu' ? 'd-none d-lg-flex' : 'd-flex'}`}
+            style={{ flex: '0 0 65%', maxWidth: '65%', paddingRight: '4px' }}
+          >
             
-            {/* Category Pills & Food-Type Filters Toolbar (Fixed top) */}
-            <div className="pos-menu-toolbar">
-              
-              {/* Category Bar */}
-              <div className="d-flex align-items-center gap-2 overflow-auto py-1 scrollbar-hidden">
-                {categories.map((cat, idx) => {
-                  const isAll = cat === 'ALL';
-                  const isCatSelected = isAll 
-                    ? selectedCategories.length === 0 
-                    : selectedCategories.includes(cat);
+            {/* 1. Header Row: Cart Icon, Heading, Subtitle & Search Bar */}
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+              <div className="d-flex align-items-center gap-3">
+                <div 
+                  className="d-flex align-items-center justify-content-center shadow-sm flex-shrink-0"
+                  style={{
+                    width: '44px',
+                    height: '44px',
+                    borderRadius: '50%',
+                    backgroundColor: '#F20D2D',
+                    color: '#FFFFFF'
+                  }}
+                >
+                  <FiShoppingCart size={22} />
+                </div>
+                <div>
+                  <h4 className="fw-bold text-dark mb-0" style={{ fontSize: '22px', letterSpacing: '-0.3px' }}>
+                    POS / Take Order
+                  </h4>
+                  <p className="text-secondary small mb-0 mt-0.5" style={{ fontSize: '13px', color: '#64748B' }}>
+                    Create a new order for dine-in or takeaway
+                  </p>
+                </div>
 
-                  const handleCategoryToggle = () => {
-                    if (isAll) {
-                      setSelectedCategories([]);
-                    } else {
-                      setSelectedCategories(prev => 
-                        prev.includes(cat) 
-                          ? prev.filter(c => c !== cat) 
-                          : [...prev, cat]
-                      );
-                    }
-                  };
-
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={handleCategoryToggle}
-                      className={`btn btn-sm rounded-pill text-nowrap px-3 py-1.5 fw-semibold transition-all d-flex align-items-center ${
-                        isCatSelected
-                          ? 'btn-danger text-white shadow-xs'
-                          : 'btn-outline-secondary border-light-subtle bg-white text-dark'
-                      }`}
-                      style={{ fontSize: '12.5px' }}
+                {/* Branch Selector (if multi-branch admin) */}
+                {branches.length > 1 && isAdmin && (
+                  <div className="d-none d-md-flex align-items-center gap-2 ps-3 border-start ms-2">
+                    <span className="small text-muted fw-semibold">Branch:</span>
+                    <select 
+                      className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs"
+                      style={{ width: 'auto', minWidth: '140px', paddingTop: '4px', paddingBottom: '4px', paddingLeft: '12px', fontSize: '12px' }}
+                      value={selectedBranchId || ''}
+                      onChange={(e) => setSelectedBranchId(Number(e.target.value))}
                     >
-                      <span>{isAll ? '🍽️ All Dishes' : cat}</span>
-                    </button>
-                  );
-                })}
+                      {branches.map(b => (
+                        <option key={b.id} value={b.id}>
+                          {b.name} {b.city ? `(${b.city})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
 
-              {/* Food Type Checkbox Filter Bar */}
-              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <div className="d-flex align-items-center gap-2">
-                  <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
-                    Food Type:
-                  </span>
-
-                  {/* All Food Types Button */}
+              {/* Search dishes input aligned to the right */}
+              <div className="position-relative" style={{ width: '300px', maxWidth: '100%' }}>
+                <FiSearch 
+                  className="position-absolute text-muted" 
+                  style={{ left: '14px', top: '13px', fontSize: '15px' }} 
+                />
+                <input
+                  type="text"
+                  className="form-control shadow-xs"
+                  style={{
+                    height: '40px',
+                    borderRadius: '12px',
+                    paddingLeft: '38px',
+                    paddingRight: searchQuery ? '36px' : '14px',
+                    fontSize: '13px',
+                    borderColor: '#E2E8F0',
+                    backgroundColor: '#FFFFFF'
+                  }}
+                  placeholder="Search dishes by name or category..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+                {searchQuery && (
                   <button
                     type="button"
-                    onClick={() => setFoodTypeFilter({ veg: false, 'non-veg': false, vegan: false })}
-                    className={`btn btn-sm rounded-pill px-2.5 py-1 fw-bold transition-all border ${
-                      !foodTypeFilter.veg && !foodTypeFilter['non-veg'] && !foodTypeFilter.vegan
-                        ? 'btn-danger text-white shadow-xs'
-                        : 'bg-white border-light-subtle text-secondary'
-                    }`}
-                    style={{ fontSize: '11.5px' }}
+                    className="btn btn-link position-absolute p-0 text-muted border-0"
+                    style={{ right: '12px', top: '11px' }}
+                    onClick={() => setSearchQuery('')}
                   >
-                    All
+                    <FiX size={16} />
                   </button>
-                  
-                  {/* Veg Checkbox */}
-                  {hasVeg && (
-                    <label 
-                      onClick={() => toggleFoodType('veg')}
-                      className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-2 cursor-pointer user-select-none border ${
-                        foodTypeFilter.veg 
-                          ? 'bg-success-subtle border-success text-success fw-bold' 
-                          : 'bg-white border-light-subtle text-secondary'
-                      }`}
-                      style={{ cursor: 'pointer', fontSize: '11.5px' }}
-                    >
-                      <span className="veg-badge" style={{ transform: 'scale(0.8)' }}></span>
-                      <span>Veg</span>
-                    </label>
-                  )}
-
-                  {/* Non-Veg Checkbox */}
-                  {hasNonVeg && (
-                    <label 
-                      onClick={() => toggleFoodType('non-veg')}
-                      className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-2 cursor-pointer user-select-none border ${
-                        foodTypeFilter['non-veg'] 
-                          ? 'bg-danger-subtle border-danger text-danger fw-bold' 
-                          : 'bg-white border-light-subtle text-secondary'
-                      }`}
-                      style={{ cursor: 'pointer', fontSize: '11.5px' }}
-                    >
-                      <span className="non-veg-badge" style={{ transform: 'scale(0.8)' }}></span>
-                      <span className="ms-0.5">Non-Veg</span>
-                    </label>
-                  )}
-
-                  {/* Vegan Checkbox */}
-                  {hasVegan && (
-                    <label 
-                      onClick={() => toggleFoodType('vegan')}
-                      className={`btn btn-sm rounded-pill px-2.5 py-1 d-flex align-items-center gap-1.5 cursor-pointer user-select-none border ${
-                        foodTypeFilter.vegan 
-                          ? 'bg-success-subtle border-success-emphasis text-success-emphasis fw-bold' 
-                          : 'bg-white border-light-subtle text-secondary'
-                      }`}
-                      style={{ cursor: 'pointer', fontSize: '11.5px' }}
-                    >
-                      <span className="vegan-badge" style={{ transform: 'scale(0.8)' }}></span>
-                      <span>Vegan</span>
-                    </label>
-                  )}
-                </div>
-
-                <div className="small text-muted">
-                  Showing <strong>{filteredDishes.length}</strong> items
-                </div>
+                )}
               </div>
             </div>
 
-            {/* Dish Cards Grid (Independently scrollable) */}
-            <div className="pos-menu-content">
+            {/* 2. Horizontal Category Navigation Pills */}
+            <div className="d-flex align-items-center gap-2 overflow-x-auto pb-2 scrollbar-hidden mb-3">
+              {categories.map((cat, idx) => {
+                const isAll = cat === 'ALL';
+                const count = categoryCounts[cat] || (isAll ? dishes.length : 0);
+                const isCatActive = isAll 
+                  ? (selectedCategory === 'ALL' && selectedCategories.length === 0)
+                  : (selectedCategory === cat || selectedCategories.includes(cat));
+
+                const handlePillClick = () => {
+                  if (isAll) {
+                    setSelectedCategory('ALL');
+                    setSelectedCategories([]);
+                  } else {
+                    setSelectedCategory(cat);
+                    setSelectedCategories([cat]);
+                  }
+                };
+
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={handlePillClick}
+                    className={`btn text-nowrap d-flex align-items-center gap-2 px-3 py-2 fw-semibold transition-all ${
+                      isCatActive
+                        ? 'text-white shadow-xs'
+                        : 'bg-white text-dark shadow-xs'
+                    }`}
+                    style={{
+                      borderRadius: '12px',
+                      fontSize: '13px',
+                      backgroundColor: isCatActive ? '#F20D2D' : '#FFFFFF',
+                      borderColor: isCatActive ? '#F20D2D' : '#E2E8F0',
+                      borderWidth: '1px',
+                      borderStyle: 'solid',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    <span className="d-flex align-items-center">
+                      {getCategoryIcon(cat)}
+                    </span>
+                    <span>
+                      {isAll ? 'All Dishes' : cat} ({count})
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* 3. Filter Toolbar Row: Food Type, Category, Availability & View Toggle */}
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                
+                {/* Food Type Dropdown */}
+                <select
+                  className="form-select form-select-sm shadow-xs fw-medium"
+                  style={{
+                    width: 'auto',
+                    minWidth: '130px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    borderColor: '#E2E8F0',
+                    fontSize: '13px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155'
+                  }}
+                  value={selectedFoodType}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setSelectedFoodType(val);
+                    if (val === 'ALL') {
+                      setFoodTypeFilter({ veg: false, 'non-veg': false, vegan: false });
+                    } else if (val === 'VEG') {
+                      setFoodTypeFilter({ veg: true, 'non-veg': false, vegan: false });
+                    } else if (val === 'NON_VEG') {
+                      setFoodTypeFilter({ veg: false, 'non-veg': true, vegan: false });
+                    }
+                  }}
+                >
+                  <option value="ALL">Food Type: All</option>
+                  <option value="VEG">Food Type: Veg</option>
+                  <option value="NON_VEG">Food Type: Non-Veg</option>
+                </select>
+
+                {/* Category Dropdown */}
+                <select
+                  className="form-select form-select-sm shadow-xs fw-medium"
+                  style={{
+                    width: 'auto',
+                    minWidth: '150px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    borderColor: '#E2E8F0',
+                    fontSize: '13px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155'
+                  }}
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    const catVal = e.target.value;
+                    setSelectedCategory(catVal);
+                    if (catVal === 'ALL') {
+                      setSelectedCategories([]);
+                    } else {
+                      setSelectedCategories([catVal]);
+                    }
+                  }}
+                >
+                  <option value="ALL">Category: All Categories</option>
+                  {categories.filter(c => c !== 'ALL').map((c, i) => (
+                    <option key={i} value={c}>{c} ({categoryCounts[c] || 0})</option>
+                  ))}
+                </select>
+
+                {/* Availability Dropdown */}
+                <select
+                  className="form-select form-select-sm shadow-xs fw-medium"
+                  style={{
+                    width: 'auto',
+                    minWidth: '150px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    borderColor: '#E2E8F0',
+                    fontSize: '13px',
+                    backgroundColor: '#FFFFFF',
+                    color: '#334155'
+                  }}
+                  value={availabilityFilter}
+                  onChange={(e) => setAvailabilityFilter(e.target.value)}
+                >
+                  <option value="ALL">Availability: All Status</option>
+                  <option value="IN_STOCK">In Stock</option>
+                  <option value="LOW_STOCK">Low Stock</option>
+                  <option value="OUT_OF_STOCK">Out of Stock</option>
+                </select>
+              </div>
+
+              {/* Grid / List View Toggle */}
+              <div className="d-flex align-items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setPosViewMode('grid')}
+                  className="btn btn-sm d-flex align-items-center justify-content-center p-0 shadow-xs transition-all"
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: posViewMode === 'grid' ? '#F20D2D' : '#FFFFFF',
+                    borderColor: posViewMode === 'grid' ? '#F20D2D' : '#E2E8F0',
+                    color: posViewMode === 'grid' ? '#FFFFFF' : '#64748B',
+                    borderWidth: '1px',
+                    borderStyle: 'solid'
+                  }}
+                  title="Grid View"
+                >
+                  <FiGrid size={17} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPosViewMode('list')}
+                  className="btn btn-sm d-flex align-items-center justify-content-center p-0 shadow-xs transition-all"
+                  style={{
+                    width: '38px',
+                    height: '38px',
+                    borderRadius: '10px',
+                    backgroundColor: posViewMode === 'list' ? '#F20D2D' : '#FFFFFF',
+                    borderColor: posViewMode === 'list' ? '#F20D2D' : '#E2E8F0',
+                    color: posViewMode === 'list' ? '#FFFFFF' : '#64748B',
+                    borderWidth: '1px',
+                    borderStyle: 'solid'
+                  }}
+                  title="List View"
+                >
+                  <FiList size={17} />
+                </button>
+              </div>
+            </div>
+
+            {/* 4. Food Cards Responsive 4-Column Grid */}
+            <div className="flex-grow-1 min-h-0">
               {loading ? (
                 <div className="min-vh-50 d-flex align-items-center justify-content-center py-5">
                   <Loader />
                 </div>
               ) : filteredDishes.length === 0 ? (
-                <EmptyState
-                  title="No Dishes Found"
-                  description="Try adjusting your category, food type, or search term."
-                  icon="bi-search"
-                />
+                <div className="p-5 text-center bg-white rounded-4 border border-light-subtle shadow-xs my-3">
+                  <div className="text-secondary opacity-50 mb-2">
+                    <FiSearch size={36} />
+                  </div>
+                  <h6 className="fw-bold text-dark mb-1">No Dishes Found</h6>
+                  <p className="text-muted small mb-3">Try adjusting your category, food type, or search term.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setSelectedCategory('ALL');
+                      setSelectedCategories([]);
+                      setSelectedFoodType('ALL');
+                      setFoodTypeFilter({ veg: false, 'non-veg': false, vegan: false });
+                      setAvailabilityFilter('ALL');
+                    }}
+                    className="btn btn-sm btn-outline-danger rounded-pill px-3"
+                  >
+                    Clear All Filters
+                  </button>
+                </div>
               ) : (
-                <div className="pos-dish-grid">
-                  {filteredDishes.map((dish) => {
+                <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xl-4 g-3 pb-4">
+                  {filteredDishes.map((dish, dIdx) => {
                     const isOutOfStock = 
                       dish.status === 'Out of Stock' || 
                       dish.status === 'OUT_OF_STOCK' || 
                       Number(dish.stock) <= 0 || 
                       dish.is_orderable === false || 
                       dish.isOrderable === false;
+                    const isLowStock = !isOutOfStock && Number(dish.stock) > 0 && Number(dish.stock) <= 5;
                     const ft = normalizeFoodType(dish.foodType || dish.type);
+                    const isVeg = ft === 'veg' || ft === 'vegan';
+
                     const matchingCartItems = cartItems.filter(i => String(i.dish.id) === String(dish.id));
                     const cartQty = matchingCartItems.reduce((sum, i) => sum + Number(i.quantity || 0), 0);
                     const hasToppings = Array.isArray(dish.customizations) && dish.customizations.length > 0;
 
+                    const isBestseller = dish.is_bestseller || dish.order_count > 40 || dIdx === 0;
+                    const isPopular = !isBestseller && (dish.discountPercent > 10 || dIdx === 6);
+
                     return (
-                      <div 
-                        key={dish.id} 
-                        className={`pos-dish-card ${isOutOfStock ? 'opacity-50' : ''}`}
-                      >
-                        {/* Dish Image */}
-                        <div className="position-relative" style={{ height: '140px', backgroundColor: '#f1f3f5' }}>
-                          {dish.image ? (
-                            <img
-                              src={dish.image}
-                              alt={dish.name}
-                              className="w-100 h-100 object-fit-cover"
-                              onError={(e) => { e.target.style.display = 'none'; }}
-                            />
-                          ) : (
-                            <div className="w-100 h-100 d-flex align-items-center justify-content-center text-secondary">
-                              <span className="fs-1">🍲</span>
-                            </div>
-                          )}
+                      <div key={dish.id} className="col">
+                        <div 
+                          className="card h-100 border-0 shadow-xs transition-all overflow-hidden"
+                          style={{
+                            borderRadius: '16px',
+                            backgroundColor: '#FFFFFF',
+                            border: '1px solid #E2E8F0',
+                            transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                          }}
+                        >
+                          {/* Image Box (140px) */}
+                          <div className="position-relative w-100" style={{ height: '140px', backgroundColor: '#F8FAFC' }}>
+                            {dish.image ? (
+                              <img
+                                src={dish.image}
+                                alt={dish.name}
+                                className="w-100 h-100 object-fit-cover"
+                                onError={(e) => { e.target.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="w-100 h-100 d-flex align-items-center justify-content-center text-secondary">
+                                <span className="fs-1">🍲</span>
+                              </div>
+                            )}
 
-                          {/* Food Type Icon Badge (Top-Right) */}
-                          <div className="position-absolute top-0 end-0 m-2 bg-white bg-opacity-90 rounded-circle p-1 shadow-xs d-flex align-items-center justify-content-center">
-                            <span 
-                              className={ft === 'veg' ? 'veg-badge' : ft === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}
-                              style={{ transform: 'scale(0.8)' }}
-                            ></span>
-                          </div>
-
-                          {/* Discount Badge (Top-Left) */}
-                          {dish.hasDiscount && dish.discountPercent > 0 && (
-                            <div className="position-absolute top-0 start-0 m-2">
-                              <span className="badge bg-danger rounded-pill px-2 py-1 shadow-xs fw-bold" style={{ fontSize: '10.5px' }}>
-                                {dish.discountPercent}% OFF
+                            {/* Top-Left Badge: Bestseller / Popular */}
+                            {isBestseller ? (
+                              <span 
+                                className="position-absolute shadow-xs"
+                                style={{
+                                  top: '10px',
+                                  left: '10px',
+                                  backgroundColor: '#F20D2D',
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  padding: '3px 9px',
+                                  borderRadius: '20px',
+                                  letterSpacing: '0.2px'
+                                }}
+                              >
+                                Bestseller
                               </span>
-                            </div>
-                          )}
-
-                          {/* Stock Badge (Bottom-Left) */}
-                          <div className="position-absolute bottom-0 start-0 m-2">
-                            {isOutOfStock ? (
-                              <span className="badge bg-dark text-white rounded-pill px-2 py-0.5" style={{ fontSize: '10px' }}>
-                                Out of Stock
-                              </span>
-                            ) : Number(dish.stock) <= 5 ? (
-                              <span className="badge bg-warning text-dark rounded-pill px-2 py-0.5 shadow-xs" style={{ fontSize: '10px' }}>
-                                Low: {dish.stock} left
+                            ) : isPopular ? (
+                              <span 
+                                className="position-absolute shadow-xs"
+                                style={{
+                                  top: '10px',
+                                  left: '10px',
+                                  backgroundColor: '#F20D2D',
+                                  color: '#FFFFFF',
+                                  fontSize: '11px',
+                                  fontWeight: '600',
+                                  padding: '3px 9px',
+                                  borderRadius: '20px',
+                                  letterSpacing: '0.2px'
+                                }}
+                              >
+                                Popular
                               </span>
                             ) : null}
-                          </div>
-                        </div>
 
-                        {/* Dish Card Body */}
-                        <div className="pos-dish-card-body">
-                          <h6 className="fw-bold text-dark mb-1 text-truncate" title={dish.name} style={{ fontSize: '14px' }}>
-                            {dish.name}
-                          </h6>
-                          <p className="text-muted small mb-2" style={{ fontSize: '11.5px', height: '32px', overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', lineHeight: '1.4' }}>
-                            {dish.description || 'Delicious culinary preparation freshly made to order.'}
-                          </p>
-
-                          {/* Toppings / Instructions Link (Consistent 28px slot across all cards) */}
-                          <div className="d-flex align-items-center" style={{ height: '28px', marginBottom: '8px' }}>
-                            {hasToppings && (
-                              <button
-                                type="button"
-                                onClick={() => handleOpenCustomize(dish)}
-                                className="btn btn-xs btn-outline-secondary rounded-pill px-2.5 py-1 d-inline-flex align-items-center justify-content-center gap-1 w-100"
-                                style={{ fontSize: '11px', height: '26px' }}
-                              >
-                                <span>Instructions</span>
-                              </button>
-                            )}
-                          </div>
-
-                          <div className="mt-auto pt-2 border-top border-light-subtle d-flex align-items-center justify-content-between">
-                            {/* Price */}
-                            <div>
-                              {dish.hasDiscount && dish.price > dish.sellingPrice && (
-                                <span className="text-muted text-decoration-line-through me-1 small" style={{ fontSize: '11.5px' }}>
-                                  {formatCurrency(dish.price)}
-                                </span>
+                            {/* Top-Right Badge: Veg / Non-Veg Indicator */}
+                            <div 
+                              className="position-absolute shadow-xs d-flex align-items-center justify-content-center"
+                              style={{
+                                top: '10px',
+                                right: '10px',
+                                width: '20px',
+                                height: '20px',
+                                backgroundColor: '#FFFFFF',
+                                border: isVeg ? '1.5px solid #22c55e' : '1.5px solid #ef4444',
+                                borderRadius: '4px'
+                              }}
+                              title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
+                            >
+                              {isVeg ? (
+                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                              ) : (
+                                <div style={{
+                                  width: 0,
+                                  height: 0,
+                                  borderLeft: '4px solid transparent',
+                                  borderRight: '4px solid transparent',
+                                  borderBottom: '7px solid #ef4444'
+                                }} />
                               )}
-                              <span className="fw-bold text-dark fs-6">
-                                {formatCurrency(dish.sellingPrice || dish.price)}
-                              </span>
+                            </div>
+                          </div>
+
+                          {/* Card Content */}
+                          <div className="card-body p-3 d-flex flex-column justify-content-between">
+                            <div>
+                              <h6 className="fw-bold text-dark mb-0 text-truncate" title={dish.name} style={{ fontSize: '15px' }}>
+                                {dish.name}
+                              </h6>
+                              <div className="text-secondary small mt-0.5 text-truncate" style={{ fontSize: '12px', color: '#64748B' }}>
+                                {dish.category || 'General'}
+                              </div>
+
+                              {/* Price & Stock Badge Row */}
+                              <div className="d-flex align-items-center justify-content-between mt-2 pt-1">
+                                <div className="d-flex align-items-baseline gap-1.5">
+                                  <span className="fw-bold" style={{ color: '#F20D2D', fontSize: '16px' }}>
+                                    {formatCurrency(dish.sellingPrice || dish.price)}
+                                  </span>
+                                  {dish.hasDiscount && dish.price > (dish.sellingPrice || dish.price) && (
+                                    <span className="text-muted text-decoration-line-through small" style={{ fontSize: '12px', color: '#94A3B8' }}>
+                                      {formatCurrency(dish.price)}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {isOutOfStock ? (
+                                  <span 
+                                    className="badge rounded-pill fw-semibold px-2 py-1"
+                                    style={{ backgroundColor: '#F1F5F9', color: '#64748B', fontSize: '11px' }}
+                                  >
+                                    Out of Stock
+                                  </span>
+                                ) : isLowStock ? (
+                                  <span 
+                                    className="badge rounded-pill fw-semibold px-2 py-1"
+                                    style={{ backgroundColor: '#FEF3C7', color: '#D97706', fontSize: '11px' }}
+                                  >
+                                    Low Stock
+                                  </span>
+                                ) : (
+                                  <span 
+                                    className="badge rounded-pill fw-semibold px-2 py-1"
+                                    style={{ backgroundColor: '#ECFDF5', color: '#10B981', fontSize: '11px' }}
+                                  >
+                                    In Stock
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
-                            {/* Action: Add or Stepper */}
-                            <div>
-                              {isOutOfStock ? (
-                                <div 
-                                  onClick={() => handleAddDish(dish)}
-                                  style={{ cursor: 'not-allowed', display: 'inline-block' }}
+                            {/* Stepper / Add Row */}
+                            <div className="d-flex align-items-center justify-content-between mt-3 pt-2 border-top border-light-subtle">
+                              {/* Quantity Stepper */}
+                              <div 
+                                className="d-flex align-items-center justify-content-between bg-white border px-2 shadow-xs"
+                                style={{
+                                  height: '32px',
+                                  borderRadius: '16px',
+                                  borderColor: '#E2E8F0',
+                                  minWidth: '86px'
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
+                                  style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '16px', lineHeight: 1 }}
+                                  onClick={() => handleDecrementDish(dish)}
+                                  disabled={cartQty === 0}
+                                  title="Decrease quantity"
                                 >
+                                  −
+                                </button>
+                                <span className="fw-bold small px-1.5" style={{ fontSize: '13px', color: '#0F172A' }}>
+                                  {cartQty > 0 ? cartQty : 1}
+                                </span>
+                                <button
+                                  type="button"
+                                  className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
+                                  style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '16px', lineHeight: 1 }}
+                                  onClick={() => handleIncrementDish(dish)}
+                                  title="Increase quantity"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              {/* Circular Red Add Button */}
+                              <div className="d-flex align-items-center gap-1.5">
+                                {hasToppings && (
                                   <button
                                     type="button"
-                                    disabled
-                                    className="btn btn-sm btn-secondary opacity-50 rounded-pill px-3 py-1 fw-bold shadow-xs d-flex align-items-center gap-1"
-                                    style={{ fontSize: '12px', height: '32px', cursor: 'not-allowed' }}
-                                    title="This item is currently out of stock."
+                                    onClick={() => handleOpenCustomize(dish)}
+                                    className="btn btn-sm btn-outline-secondary p-0 d-flex align-items-center justify-content-center"
+                                    style={{ width: '28px', height: '28px', borderRadius: '50%', fontSize: '11px' }}
+                                    title="Special instructions & customizations"
                                   >
-                                    <FiPlus size={14} />
-                                    <span>Add</span>
+                                    ⚙
                                   </button>
-                                </div>
-                              ) : cartQty > 0 ? (
-                                <div className="d-flex align-items-center gap-1 bg-light border rounded-pill px-2 shadow-xs" style={{ height: '32px' }}>
-                                  <button
-                                    type="button"
-                                    className="btn btn-xs btn-link text-danger p-0 border-0"
-                                    onClick={() => handleDecrementDish(dish)}
-                                    title="Decrease quantity"
-                                  >
-                                    <FiMinus size={13} />
-                                  </button>
-                                  <span className="px-2 fw-bold text-dark small" style={{ fontSize: '12px' }}>
-                                    {cartQty}
-                                  </span>
-                                  <button
-                                    type="button"
-                                    className={`btn btn-xs btn-link p-0 border-0 ${
-                                      dish.stock !== null && dish.stock !== undefined && cartQty >= Number(dish.stock)
-                                        ? 'text-secondary opacity-50'
-                                        : 'text-danger'
-                                    }`}
-                                    style={{
-                                      cursor: dish.stock !== null && dish.stock !== undefined && cartQty >= Number(dish.stock)
-                                        ? 'not-allowed'
-                                        : 'pointer'
-                                    }}
-                                    onClick={() => handleIncrementDish(dish)}
-                                    title={
-                                      dish.stock !== null && dish.stock !== undefined && cartQty >= Number(dish.stock)
-                                        ? (Number(dish.stock) === 1 ? "Only 1 item is available." : `Only ${dish.stock} of '${dish.name}' left.`)
-                                        : "Increase quantity"
-                                    }
-                                  >
-                                    <FiPlus size={13} />
-                                  </button>
-                                </div>
-                              ) : (
+                                )}
                                 <button
                                   type="button"
                                   onClick={() => handleAddDish(dish)}
-                                  className="btn btn-danger text-white rounded-circle p-0 d-flex align-items-center justify-content-center shadow-sm"
-                                  style={{ 
-                                    width: '32px', 
-                                    height: '32px', 
-                                    backgroundColor: 'var(--primary-color, #C8102E)', 
-                                    borderColor: 'var(--primary-color, #C8102E)' 
+                                  className="btn btn-sm p-0 d-flex align-items-center justify-content-center shadow-xs transition-all"
+                                  style={{
+                                    width: '32px',
+                                    height: '32px',
+                                    borderRadius: '50%',
+                                    backgroundColor: '#F20D2D',
+                                    borderColor: '#F20D2D',
+                                    color: '#FFFFFF',
+                                    cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                                    opacity: isOutOfStock ? 0.4 : 1
                                   }}
-                                  title={`Add ${dish.name}`}
+                                  disabled={isOutOfStock}
+                                  title={isOutOfStock ? "Out of Stock" : `Add ${dish.name} to order`}
                                 >
                                   <FiPlus size={16} />
                                 </button>
-                              )}
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1755,516 +2033,455 @@ export const Pos = () => {
               )}
             </div>
 
-            {/* Mobile Bottom Floating Checkout Bar (Visible on < 992px when viewing menu) */}
-            {mobilePosTab === 'menu' && cartItems.length > 0 && (
-              <div className="d-lg-none p-3 bg-white border-top shadow-lg position-sticky bottom-0 z-3">
-                <button
-                  type="button"
-                  onClick={() => setMobilePosTab('order')}
-                  className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold d-flex align-items-center justify-content-between px-4 shadow-sm"
-                  style={{ fontSize: '13px' }}
-                >
-                  <span>🛒 {cartItems.length} item{cartItems.length === 1 ? '' : 's'} in Ticket</span>
-                  <span>{formatCurrency(billSummary.grandTotal)} • View Ticket →</span>
-                </button>
-              </div>
-            )}
-          </main>
+          </div>
 
-          {/* RIGHT: Order Panel & Checkout Actions (Independent Scroll Area) */}
-          <aside className={`pos-order-panel ${mobilePosTab !== 'order' ? 'd-none d-lg-flex' : ''}`}>
-            
-            {/* Order Summary Header */}
-            <div className="d-flex align-items-center justify-content-between px-3 py-2 border-bottom bg-white" style={{ minHeight: '45px' }}>
-              <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
-                Order Summary
-              </span>
-            </div>
-
-            {/* 1. Dining Mode Toggle (Dine-In vs Takeaway) */}
-            <div className="pos-order-section p-2 bg-light">
-              <div className="d-flex align-items-center gap-1">
+          {/* RIGHT COLUMN: Order Panel (~35%) */}
+          <div 
+            className={`pos-order-panel-container flex-column min-h-0 ${mobilePosTab !== 'order' ? 'd-none d-lg-flex' : 'd-flex'}`}
+            style={{ flex: '0 0 35%', maxWidth: '35%' }}
+          >
+            <div 
+              className="card border-0 shadow-sm d-flex flex-column h-100 overflow-hidden"
+              style={{
+                borderRadius: '18px',
+                border: '1px solid #E2E8F0',
+                backgroundColor: '#FFFFFF',
+                padding: '20px',
+                gap: '16px'
+              }}
+            >
+              
+              {/* 1. Service Type Toggle: Dine-In vs Takeaway */}
+              <div className="d-flex align-items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('DINE_IN')}
-                  className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-2 transition-all ${
-                    orderType === 'DINE_IN'
-                      ? 'btn-danger text-white shadow-xs'
-                      : 'btn-white text-muted border-0 bg-white'
-                  }`}
-                  style={{ fontSize: '12px', height: '34px' }}
+                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all shadow-xs"
+                  style={{
+                    height: '42px',
+                    borderRadius: '12px',
+                    fontSize: '13.5px',
+                    backgroundColor: orderType === 'DINE_IN' ? '#F20D2D' : '#FFFFFF',
+                    color: orderType === 'DINE_IN' ? '#FFFFFF' : '#334155',
+                    borderColor: orderType === 'DINE_IN' ? '#F20D2D' : '#E2E8F0',
+                    borderWidth: '1px',
+                    borderStyle: 'solid'
+                  }}
                 >
-                  <FiLayers size={14} className="flex-shrink-0" />
-                  <span className="ms-0.5">Table Dine-In</span>
+                  <FiLayers size={16} />
+                  <span>Dine-in</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('TAKEAWAY')}
-                  className={`btn btn-sm flex-grow-1 rounded-pill fw-bold d-flex align-items-center justify-content-center gap-2 transition-all ${
-                    orderType === 'TAKEAWAY'
-                      ? 'btn-danger text-white shadow-xs'
-                      : 'btn-white text-muted border-0 bg-white'
-                  }`}
-                  style={{ fontSize: '12px', height: '34px' }}
+                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all shadow-xs"
+                  style={{
+                    height: '42px',
+                    borderRadius: '12px',
+                    fontSize: '13.5px',
+                    backgroundColor: orderType === 'TAKEAWAY' ? '#F20D2D' : '#FFFFFF',
+                    color: orderType === 'TAKEAWAY' ? '#FFFFFF' : '#334155',
+                    borderColor: orderType === 'TAKEAWAY' ? '#F20D2D' : '#E2E8F0',
+                    borderWidth: '1px',
+                    borderStyle: 'solid'
+                  }}
                 >
-                  <FiShoppingBag size={14} className="flex-shrink-0" />
-                  <span className="ms-0.5">Takeaway</span>
+                  <FiShoppingBag size={16} />
+                  <span>Takeaway</span>
                 </button>
               </div>
-            </div>
 
-            {/* 2. Table / Takeaway Identification Card */}
-            <div className="pos-order-section">
-              {orderType === 'DINE_IN' ? (
-                <div className="d-flex align-items-center justify-content-between">
-                  <div>
-                    <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>Dine-In Table</span>
-                    <div className="d-flex align-items-center gap-2 mt-0.5">
-                      {selectedTable ? (
-                        <span className="fw-bold text-dark fs-6">
-{getShortTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id)}
-                        </span>
-                      ) : (
-                        <span className="badge bg-danger-subtle text-danger fw-bold border border-danger-subtle px-2 py-1" style={{ fontSize: '11px' }}>
-                          Table Required
-                        </span>
-                      )}
-                      {selectedTable && (
-                        <span
-                          className="rounded-circle d-inline-block flex-shrink-0"
-                          style={{
-                            width: '8px',
-                            height: '8px',
-                            backgroundColor: selectedTable.status === 'Occupied' ? '#ef4444' : selectedTable.status === 'Reserved' ? '#f59e0b' : '#22c55e'
-                          }}
-                          title={selectedTable.status}
-                        />
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowTablePicker(true);
-                      reloadTables();
-                    }}
-                    className="btn btn-sm btn-outline-dark rounded-pill px-3 fw-bold"
-                    style={{ fontSize: '11.5px', height: '30px' }}
-                  >
-                    {selectedTable ? 'Change' : 'Choose Table'}
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>Service Mode</span>
-                  <div className="fw-bold text-dark fs-6 mt-0.5 d-flex align-items-center gap-1.5">
-                    <FiShoppingBag className="text-danger" />
-                    <span>Takeaway Counter</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 3. Customer Information */}
-            <div className="pos-order-section">
-              <div className="d-flex align-items-center justify-content-between mb-1">
-                <span className="small text-muted fw-bold text-uppercase" style={{ fontSize: '10.5px', letterSpacing: '0.5px' }}>
-                  Customer Info
-                </span>
-                {parentOrder && (
-                  <span className="badge bg-success-subtle text-success border border-success-subtle fw-semibold" style={{ fontSize: '10px' }}>
-                    Linked to Order #{parentOrder.display_order_number}
-                  </span>
-                )}
-              </div>
+              {/* 2. Dining / Customer Selectors Row */}
               <div className="row g-2">
-                <div className="col-7">
+                
+                {/* Select Table * (or Counter for Takeaway) */}
+                <div className="col-6">
+                  <label className="form-label mb-1 fw-bold text-dark" style={{ fontSize: '11.5px', color: '#1E293B' }}>
+                    {orderType === 'DINE_IN' ? 'Select Table *' : 'Service Counter'}
+                  </label>
+                  {orderType === 'DINE_IN' ? (
+                    <div className="position-relative">
+                      <FiLayers className="position-absolute text-muted" style={{ left: '11px', top: '12px', fontSize: '14px' }} />
+                      <select
+                        className="form-select form-select-sm shadow-xs fw-semibold"
+                        style={{
+                          height: '38px',
+                          borderRadius: '10px',
+                          paddingLeft: '32px',
+                          fontSize: '12.5px',
+                          borderColor: '#E2E8F0'
+                        }}
+                        value={selectedTable?.id || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const found = tables.find(t => String(t.id) === String(val));
+                          setSelectedTable(found || null);
+                          setOrderError('');
+                        }}
+                      >
+                        <option value="">Choose Table...</option>
+                        {tables.map(tbl => {
+                          const num = getShortTableNumber(tbl.number || tbl.table_number || tbl.id);
+                          return (
+                            <option key={tbl.id} value={tbl.id}>
+                              {num} ({tbl.capacity || 4} Seats) {tbl.status === 'Occupied' ? '• Occupied' : ''}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+                  ) : (
+                    <div 
+                      className="d-flex align-items-center gap-2 px-2.5 py-1.5 bg-light rounded-3 border border-light-subtle"
+                      style={{ height: '38px', fontSize: '12px', color: '#475569' }}
+                    >
+                      <FiShoppingBag className="text-danger flex-shrink-0" />
+                      <span className="fw-semibold text-truncate">Takeaway Counter</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Customer (Optional) */}
+                <div className="col-6">
+                  <label className="form-label mb-1 fw-bold text-dark" style={{ fontSize: '11.5px', color: '#1E293B' }}>
+                    Customer (Optional)
+                  </label>
+                  <div className="position-relative">
+                    <FiUser className="position-absolute text-muted" style={{ left: '11px', top: '12px', fontSize: '14px' }} />
+                    <input
+                      type="text"
+                      className="form-control form-control-sm shadow-xs"
+                      style={{
+                        height: '38px',
+                        borderRadius: '10px',
+                        paddingLeft: '32px',
+                        fontSize: '12.5px',
+                        borderColor: '#E2E8F0'
+                      }}
+                      placeholder="Ravi Kumar"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Customer Mobile (required for order record if new order) */}
+                <div className="col-12 mt-1">
                   <div className="input-group input-group-sm">
-                    <span className={`input-group-text border-light-subtle px-2 ${parentOrder ? 'bg-secondary-subtle text-success' : 'bg-light text-muted'}`} style={{ height: '32px' }}>
+                    <span className="input-group-text bg-light border-light-subtle text-muted px-2.5" style={{ height: '32px' }}>
                       <FiPhone size={12} />
                     </span>
                     <input
                       type="tel"
-                      className={`form-control border-light-subtle ${parentOrder ? 'bg-light text-dark fw-bold' : ''}`}
-                      placeholder={parentOrder ? (customerPhone || "Retained from Session") : "Mobile Number *"}
+                      className="form-control form-control-sm border-light-subtle shadow-xs"
+                      style={{ height: '32px', fontSize: '12px' }}
+                      placeholder="Customer Mobile (e.g. 9876543210)"
                       value={customerPhone}
                       onChange={(e) => {
                         setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
                         if (orderError && orderError.toLowerCase().includes('mobile')) setOrderError('');
                       }}
-                      style={{ fontSize: '12px', height: '32px' }}
-                      required={!parentOrder}
-                      title={parentOrder ? `Mobile number inherited from Order #${parentOrder.display_order_number}` : ''}
-                    />
-                  </div>
-                </div>
-                <div className="col-5">
-                  <div className="input-group input-group-sm">
-                    <span className="input-group-text bg-light text-muted border-light-subtle px-2" style={{ height: '32px' }}>
-                      <FiUser size={12} />
-                    </span>
-                    <input
-                      type="text"
-                      className={`form-control border-light-subtle ${parentOrder && customerName ? 'bg-light text-dark fw-bold' : ''}`}
-                      placeholder="Name (Optional)"
-                      value={customerName}
-                      onChange={(e) => setCustomerName(e.target.value)}
-                      style={{ fontSize: '12px', height: '32px' }}
                     />
                   </div>
                 </div>
               </div>
-              {parentOrder && (
-                <div className="text-success mt-1 fw-semibold d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
-                  <span>✓</span> Customer retained from Order #{parentOrder.display_order_number}: <strong>{customerPhone || parentOrder.customer_phone || 'Existing Diner'}</strong>
-                </div>
-              )}
-            </div>
 
-            {/* 4 & 5. Order Items */}
-            <div className="pos-order-section">
-              {parentOrder && (
-                <div className="alert alert-warning py-2 px-3 small rounded-3 mb-2.5 d-flex align-items-center justify-content-between">
-                  <div>
-                    <div className="fw-bold text-dark" style={{ fontSize: '12px' }}>
-                      Continuation for #{parentOrder.display_order_number}
-                    </div>
-                    <div className="text-secondary" style={{ fontSize: '11px' }}>
-                      Table {selectedTable ? (getSelectedTableLabel(selectedTable) || selectedTable.id) : ''} · Additional dishes will be grouped into this session.
-                    </div>
+              {/* 3. Apply Coupon Bar */}
+              <div 
+                className="d-flex align-items-center justify-content-between gap-2 p-2 shadow-xs"
+                style={{
+                  backgroundColor: '#FFF5F5',
+                  border: '1px dashed #FECDD3',
+                  borderRadius: '12px'
+                }}
+              >
+                <div className="d-flex align-items-center gap-2 ps-1">
+                  <FiTag style={{ color: '#F20D2D', fontSize: '16px' }} />
+                  <span className="fw-semibold text-dark" style={{ fontSize: '13px' }}>
+                    Apply Coupon
+                  </span>
+                </div>
+
+                {appliedCoupon ? (
+                  <div className="d-flex align-items-center gap-2">
+                    <span className="badge bg-danger text-white rounded-pill px-2.5 py-1" style={{ fontSize: '11px' }}>
+                      {appliedCoupon.code} (-{formatCurrency(billSummary.couponDiscount)})
+                    </span>
+                    <button 
+                      type="button" 
+                      onClick={handleRemoveCoupon} 
+                      className="btn btn-sm btn-link p-0 text-danger border-0"
+                      title="Remove coupon"
+                    >
+                      <FiX size={16} />
+                    </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setParentOrder(null);
-                      setSelectedTable(null);
-                      setCustomerPhone('');
-                      setCustomerName('');
-                    }}
-                    className="btn btn-xs btn-outline-secondary rounded-pill ms-2"
-                    style={{ fontSize: '10.5px' }}
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-
-              <div className="d-flex align-items-center justify-content-between mb-2">
-                <div className="d-flex align-items-center gap-2">
-                  <span className="fw-bold text-dark text-uppercase" style={{ fontSize: '12px', letterSpacing: '0.6px' }}>
-                    ORDER ITEMS
-                  </span>
-                  <span className="badge bg-secondary-subtle text-secondary-emphasis rounded-pill px-2 py-0.5 fw-bold" style={{ fontSize: '11px' }}>
-                    {cartItems.length}
-                  </span>
-                </div>
-                {cartItems.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleResetOrder}
-                    className="btn btn-link p-0 text-danger small text-decoration-none fw-semibold"
-                    style={{ fontSize: '11.5px' }}
-                  >
-                    Clear All
-                  </button>
+                ) : (
+                  <div className="d-flex align-items-center gap-1.5 flex-grow-1 justify-content-end" style={{ maxWidth: '240px' }}>
+                    <input
+                      type="text"
+                      className="form-control form-control-sm border-light-subtle shadow-xs"
+                      style={{ height: '34px', borderRadius: '8px', fontSize: '12px', paddingLeft: '8px' }}
+                      placeholder="Enter coupon code"
+                      value={couponCodeInput}
+                      onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleApplyCoupon(couponCodeInput)}
+                      className="btn btn-sm fw-semibold shadow-xs"
+                      style={{
+                        height: '34px',
+                        border: '1.5px solid #F20D2D',
+                        color: '#F20D2D',
+                        backgroundColor: '#FFFFFF',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        padding: '0 14px'
+                      }}
+                    >
+                      Apply
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {cartItems.length === 0 ? (
-                <div className="p-4 text-center rounded-3 bg-light text-muted border border-dashed my-1">
-                  <FiShoppingBag size={28} className="mb-2 text-secondary opacity-50" />
-                  <p className="small mb-0 fw-bold text-dark" style={{ fontSize: '12.5px' }}>No dishes in order ticket.</p>
-                  <p className="text-secondary small mb-0 mt-1" style={{ fontSize: '11px' }}>Click dishes from the menu to add items.</p>
-                  {hasSavedCart && (
-                    <div className="mt-3">
-                      <button
-                        type="button"
-                        onClick={handleContinueSavedCart}
-                        className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center gap-1.5 shadow-xs"
-                        style={{ fontSize: '12px' }}
-                      >
-                        <FiRefreshCw size={13} />
-                        <span>Continue Saved Order</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="d-flex flex-column gap-2">
-                  {cartItems.map((item, idx) => {
-                    const originalBase = Number(item.dish.price || 0);
-                    const effectiveBase = Number(item.dish.sellingPrice || item.dish.discountPrice || item.dish.price || 0);
-                    const hasDishDiscount = Boolean(item.dish.hasDiscount && item.dish.price > effectiveBase);
-                    const optionsTotal = (item.options || []).reduce((acc, opt) => acc + Number(opt.extra_price ?? opt.price ?? 0), 0);
-                    const itemUnitPrice = effectiveBase + optionsTotal;
-                    const originalUnitPrice = originalBase + optionsTotal;
-                    const lineTotal = itemUnitPrice * item.quantity;
-                    const ft = normalizeFoodType(item.dish.foodType || item.dish.type);
-
-                    return (
-                      <div key={`${item.dish.id}-${idx}-${(item.options || []).map(o => o.id || o).join('-')}`} className="p-2.5 rounded-3 border bg-light-subtle">
-                        <div className="d-flex align-items-start justify-content-between gap-2">
-                          <div className="flex-grow-1 text-truncate">
-                            <div className="d-flex align-items-center gap-1.5">
-                              <span 
-                                className={ft === 'veg' ? 'veg-badge' : ft === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}
-                                style={{ transform: 'scale(0.7)' }}
-                              ></span>
-                              <strong className="text-dark small text-truncate" style={{ fontSize: '13px' }}>{item.dish.name}</strong>
-                            </div>
-                            <div className="text-muted small mt-0.5 d-flex align-items-center gap-1.5 flex-wrap" style={{ fontSize: '11.5px' }}>
-                              {hasDishDiscount ? (
-                                <>
-                                  <span className="text-decoration-line-through text-muted small">{formatCurrency(originalUnitPrice)}</span>
-                                  <span className="fw-semibold text-danger">{formatCurrency(itemUnitPrice)}</span>
-                                </>
-                              ) : (
-                                <span>{formatCurrency(itemUnitPrice)}</span>
-                              )}
-                              <span>× {item.quantity}</span>
-                            </div>
-                          </div>
-
-                          <div className="d-flex align-items-center gap-2 flex-shrink-0">
-                            <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>
-                              {formatCurrency(lineTotal)}
-                            </span>
-                            
-                            {/* Stepper */}
-                            <div className="d-flex align-items-center gap-1 bg-white border rounded-pill px-2 py-0.5" style={{ height: '28px' }}>
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateQuantity(idx, -1)}
-                                className="btn btn-xs btn-link text-secondary p-0 border-0"
-                              >
-                                <FiMinus size={11} />
-                              </button>
-                              <span className="fw-bold px-1.5 small" style={{ fontSize: '11.5px' }}>{item.quantity}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleUpdateQuantity(idx, 1)}
-                                className="btn btn-xs btn-link text-secondary p-0 border-0"
-                              >
-                                <FiPlus size={11} />
-                              </button>
-                            </div>
-
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItem(idx)}
-                              className="btn btn-xs btn-link text-danger p-0 border-0 ms-1"
-                              title="Remove item"
-                            >
-                              <FiTrash2 size={14} />
-                            </button>
-                          </div>
-                        </div>
-
-                        {/* Extra Ingredients / Instructions Display */}
-                        {((item.options && item.options.length > 0) || item.specialInstructions) && (
-                          <div className="mt-2 pt-2 border-top border-light-subtle text-muted" style={{ fontSize: '11px' }}>
-                            {item.options && item.options.length > 0 && (
-                              <div className="mb-0.5">
-                                • Extra ingredients: {item.options.map(o => `${o.name} (+₹${Number(o.extra_price ?? o.price ?? 0)})`).join(', ')}
-                              </div>
-                            )}
-                            {item.specialInstructions && (
-                              <div className="fst-italic text-secondary">
-                                • Instructions: {item.specialInstructions}
-                              </div>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => handleOpenCustomize(item.dish, idx)}
-                              className="btn btn-link p-0 text-primary small text-decoration-none mt-1 fw-semibold"
-                              style={{ fontSize: '11px' }}
-                            >
-                              Instructions
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-
-            {/* 6. Coupons Section */}
-            <div className="pos-order-section">
-              <div className="d-flex align-items-center justify-content-between mb-2">
-                <span className="small text-muted fw-bold" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>COUPON / PROMO CODE</span>
-                <button
-                  type="button"
-                  onClick={() => setShowCouponModal(true)}
-                  className="btn btn-link p-0 text-danger small text-decoration-none fw-semibold"
-                  style={{ fontSize: '11.5px' }}
-                >
-                  View Offers
-                </button>
-              </div>
-
-              {appliedCoupon ? (
-                <div className="p-2.5 rounded-3 bg-success-subtle border border-success-subtle d-flex align-items-center justify-content-between">
-                  <div className="d-flex align-items-center gap-2">
-                    <FiTag size={14} className="text-success" />
-                    <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 fw-bold" style={{ fontSize: '10px' }}>
-                      Applied
-                    </span>
-                    <strong className="text-dark" style={{ fontSize: '12px' }}>{appliedCoupon.code}</strong>
-                    <span className="text-success small fw-semibold">(-{formatCurrency(billSummary.couponDiscount)})</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRemoveCoupon}
-                    className="btn btn-link p-0 text-danger border-0"
-                    title="Remove coupon"
-                  >
-                    <FiX size={15} />
-                  </button>
-                </div>
-              ) : (
-                <div className="input-group">
-                  <input
-                    type="text"
-                    className="form-control rounded-start-pill border-light-subtle ps-3"
-                    placeholder="Enter coupon code..."
-                    value={couponCodeInput}
-                    onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
-                    style={{ fontSize: '12px', height: '38px' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => handleApplyCoupon(couponCodeInput)}
-                    className="btn btn-outline-danger rounded-end-pill px-3.5 fw-bold"
-                    style={{ fontSize: '12px', height: '38px' }}
-                  >
-                    Apply
-                  </button>
-                </div>
-              )}
-
               {couponError && (
-                <div className="text-danger small mt-1.5" style={{ fontSize: '11px' }}>
+                <div className="text-danger small mt-n2" style={{ fontSize: '11px' }}>
                   {couponError}
                 </div>
               )}
-            </div>
 
-            {/* 7 & 8. Bill Summary & Checkout Actions */}
-            <div className="pos-order-section">
-              <h6 className="fw-bold text-dark mb-2.5" style={{ fontSize: '12.5px' }}>Order Bill Summary</h6>
-              
-              <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
-                <span>Items Subtotal</span>
-                <span className="fw-semibold text-dark">{formatCurrency(billSummary.itemsSubtotal)}</span>
+              {/* 4. Order Items Section */}
+              <div className="d-flex flex-column flex-grow-1 min-h-0">
+                <div className="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle">
+                  <span className="fw-bold text-dark" style={{ fontSize: '15px' }}>
+                    Order Items ({cartItems.length})
+                  </span>
+                  {cartItems.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleResetOrder}
+                      className="btn btn-link p-0 text-danger small text-decoration-none fw-semibold d-flex align-items-center gap-1"
+                      style={{ fontSize: '12.5px' }}
+                    >
+                      <FiTrash2 size={13} />
+                      <span>Clear All</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Items Scrollable List */}
+                <div className="flex-grow-1 min-h-0 overflow-y-auto pe-1 d-flex flex-column gap-2" style={{ maxHeight: '240px' }}>
+                  {cartItems.length === 0 ? (
+                    <div className="p-4 text-center rounded-3 bg-light text-muted border border-dashed my-auto">
+                      <FiShoppingBag size={28} className="mb-2 text-secondary opacity-50" />
+                      <p className="small mb-0 fw-bold text-dark" style={{ fontSize: '13px' }}>No dishes in order ticket.</p>
+                      <p className="text-secondary small mb-0 mt-0.5" style={{ fontSize: '11.5px' }}>Select dishes from the menu to start order.</p>
+                      {hasSavedCart && (
+                        <div className="mt-2.5">
+                          <button
+                            type="button"
+                            onClick={handleContinueSavedCart}
+                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center gap-1.5 shadow-xs"
+                            style={{ fontSize: '12px' }}
+                          >
+                            <FiRefreshCw size={13} />
+                            <span>Continue Saved Order</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    cartItems.map((item, idx) => {
+                      const basePrice = Number(item.dish.price || item.dish.sellingPrice || 0);
+                      const optionsTotal = (item.options || []).reduce((acc, opt) => acc + Number(opt.extra_price ?? opt.price ?? 0), 0);
+                      const itemUnitPrice = basePrice + optionsTotal;
+                      const lineTotal = itemUnitPrice * item.quantity;
+
+                      return (
+                        <div 
+                          key={`${item.dish.id}-${idx}`}
+                          className="d-flex align-items-center justify-content-between p-2 rounded-3 border border-light-subtle bg-white shadow-xs gap-2"
+                        >
+                          {/* Thumbnail */}
+                          <div 
+                            className="rounded-3 overflow-hidden flex-shrink-0 bg-light d-flex align-items-center justify-content-center"
+                            style={{ width: '44px', height: '44px' }}
+                          >
+                            {item.dish.image ? (
+                              <img src={item.dish.image} alt={item.dish.name} className="w-100 h-100 object-fit-cover" />
+                            ) : (
+                              <span>🍲</span>
+                            )}
+                          </div>
+
+                          {/* Info */}
+                          <div className="flex-grow-1 min-w-0">
+                            <div className="fw-bold text-dark text-truncate" style={{ fontSize: '13px' }}>
+                              {item.dish.name}
+                            </div>
+                            <div className="text-secondary small" style={{ fontSize: '11.5px', color: '#64748B' }}>
+                              {formatCurrency(itemUnitPrice)}
+                            </div>
+                          </div>
+
+                          {/* Stepper */}
+                          <div 
+                            className="d-flex align-items-center justify-content-between bg-white border px-1.5 shadow-xs flex-shrink-0"
+                            style={{ height: '28px', borderRadius: '14px', borderColor: '#E2E8F0', minWidth: '70px' }}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuantity(idx, -1)}
+                              className="btn btn-link p-0 text-danger border-0 fw-bold"
+                              style={{ textDecoration: 'none', fontSize: '14px' }}
+                            >
+                              −
+                            </button>
+                            <span className="fw-bold small px-1" style={{ fontSize: '12px' }}>
+                              {item.quantity}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateQuantity(idx, 1)}
+                              className="btn btn-link p-0 text-danger border-0 fw-bold"
+                              style={{ textDecoration: 'none', fontSize: '14px' }}
+                            >
+                              +
+                            </button>
+                          </div>
+
+                          {/* Line Total */}
+                          <span className="fw-bold text-dark text-nowrap flex-shrink-0" style={{ fontSize: '13.5px' }}>
+                            {formatCurrency(lineTotal)}
+                          </span>
+
+                          {/* Remove Trash Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(idx)}
+                            className="btn btn-link p-0 text-danger border-0 flex-shrink-0"
+                            title="Remove item"
+                          >
+                            <FiTrash2 size={15} style={{ color: '#EF4444' }} />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
 
-              {billSummary.addOnsTotal > 0 && (
-                <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
-                  <span>Add-ons / Toppings</span>
-                  <span className="fw-semibold text-dark">+{formatCurrency(billSummary.addOnsTotal)}</span>
+              {/* 5. Bill Summary & Grand Total */}
+              <div className="d-flex flex-column gap-1.5 pt-2 border-top border-light-subtle">
+                <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12.5px' }}>
+                  <span>Subtotal</span>
+                  <span className="fw-semibold text-dark">{formatCurrency(billSummary.itemsSubtotal + billSummary.addOnsTotal)}</span>
                 </div>
-              )}
 
-              {billSummary.dishDiscountsTotal > 0 && (
-                <div className="d-flex justify-content-between text-success mb-1.5 small" style={{ fontSize: '12px' }}>
-                  <span>Menu Discounts</span>
-                  <span className="fw-semibold">-{formatCurrency(billSummary.dishDiscountsTotal)}</span>
+                {(billSummary.dishDiscountsTotal > 0 || billSummary.couponDiscount > 0) && (
+                  <div className="d-flex align-items-center justify-content-between" style={{ fontSize: '12.5px', color: '#10B981' }}>
+                    <span>Discount</span>
+                    <span className="fw-semibold">-{formatCurrency(billSummary.dishDiscountsTotal + billSummary.couponDiscount)}</span>
+                  </div>
+                )}
+
+                {orderType === 'TAKEAWAY' && billSummary.packingCharge > 0 && (
+                  <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12.5px' }}>
+                    <span>Takeaway Packing Charge</span>
+                    <span className="fw-semibold text-dark">+{formatCurrency(billSummary.packingCharge)}</span>
+                  </div>
+                )}
+
+                <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12.5px' }}>
+                  <span>GST (5%)</span>
+                  <span className="fw-semibold text-dark">{formatCurrency(billSummary.gstAmount)}</span>
                 </div>
-              )}
 
-              {orderType === 'TAKEAWAY' && billSummary.packingCharge > 0 && (
-                <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
-                  <span>Takeaway Packing Charge ({billSummary.totalQuantity} items × ₹10)</span>
-                  <span className="fw-semibold text-dark">+{formatCurrency(billSummary.packingCharge)}</span>
+                {/* Grand Total Banner */}
+                <div 
+                  className="d-flex align-items-center justify-content-between px-3 py-2.5 mt-1 shadow-xs"
+                  style={{
+                    backgroundColor: '#FEECEE',
+                    borderRadius: '12px',
+                  }}
+                >
+                  <span className="fw-bold text-dark" style={{ fontSize: '15px' }}>
+                    Grand Total
+                  </span>
+                  <span className="fw-bold" style={{ fontSize: '22px', color: '#F20D2D', letterSpacing: '-0.3px' }}>
+                    {formatCurrency(billSummary.grandTotal)}
+                  </span>
                 </div>
-              )}
-
-              <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
-                <span>Taxable Amount</span>
-                <span className="fw-semibold text-dark">{formatCurrency(billSummary.taxableAmount)}</span>
               </div>
 
-              {billSummary.couponDiscount > 0 && (
-                <div className="d-flex justify-content-between text-success mb-1.5 small" style={{ fontSize: '12px' }}>
-                  <span>Coupon Discount</span>
-                  <span className="fw-semibold">-{formatCurrency(billSummary.couponDiscount)}</span>
-                </div>
-              )}
-
-              <div className="d-flex justify-content-between text-secondary mb-1.5 small" style={{ fontSize: '12px' }}>
-                <span>GST (5%)</span>
-                <span className="fw-semibold text-dark">{formatCurrency(billSummary.gstAmount)}</span>
-              </div>
-
-              {billSummary.roundOff !== 0 && (
-                <div className="d-flex justify-content-between text-secondary small" style={{ fontSize: '12px' }}>
-                  <span>Round Off</span>
-                  <span className="fw-semibold text-dark">{billSummary.roundOff > 0 ? `+${formatCurrency(billSummary.roundOff)}` : formatCurrency(billSummary.roundOff)}</span>
-                </div>
-              )}
-
-              {/* Grand Total - Non-sticky, normal document flow */}
-              <div className="d-flex justify-content-between align-items-center pt-2.5 mt-2.5 border-top border-2 border-secondary-subtle">
-                <span className="fw-bold text-dark fs-6">Grand Total</span>
-                <span className="fw-bold text-danger fs-4">
-                  {formatCurrency(billSummary.grandTotal)}
-                </span>
-              </div>
-
-              {/* Error Message */}
+              {/* Error Message if any */}
               {orderError && (
-                <div className="alert alert-danger p-2.5 rounded-3 small my-2 d-flex align-items-center gap-2" style={{ fontSize: '12px' }}>
+                <div className="alert alert-danger p-2 rounded-3 small mb-0 d-flex align-items-center gap-2" style={{ fontSize: '12px' }}>
                   <FiAlertCircle className="flex-shrink-0" />
                   <span>{orderError}</span>
                 </div>
               )}
 
-              {/* Order Action Buttons */}
-              <div className="d-flex flex-column gap-2 pt-2">
+              {/* 6. Action Buttons Row: Save Order & Proceed to Payment */}
+              <div className="d-flex align-items-center gap-2 pt-1">
                 <button
                   type="button"
-                  disabled={!canSubmitOrder}
+                  disabled={!canSubmitOrder || submittingOrder}
                   onClick={() => handleSubmitOrder(false)}
-                  className={`btn btn-foodie-primary text-white fw-bold rounded-pill py-2.5 shadow-sm d-flex align-items-center justify-content-center gap-2 ${
-                    !canSubmitOrder ? 'opacity-50' : ''
-                  }`}
-                  style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', fontSize: '13.5px', height: '44px' }}
+                  className="btn flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-xs transition-all"
+                  style={{
+                    height: '46px',
+                    borderRadius: '12px',
+                    fontSize: '13.5px',
+                    backgroundColor: '#FFFFFF',
+                    borderColor: '#F20D2D',
+                    borderWidth: '1.5px',
+                    borderStyle: 'solid',
+                    color: '#F20D2D',
+                    opacity: !canSubmitOrder ? 0.5 : 1
+                  }}
                   title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
                 >
                   {submittingOrder ? (
-                    <span>Placing Order...</span>
+                    <span>Placing...</span>
                   ) : (
                     <>
-                      <FiCheck size={18} />
-                      <span>Confirm Order</span>
+                      <FiSave size={16} />
+                      <span>Save Order</span>
                     </>
                   )}
                 </button>
 
                 <button
                   type="button"
-                  disabled={!canSubmitOrder}
+                  disabled={!canSubmitOrder || submittingOrder}
                   onClick={() => handleSubmitOrder(true)}
-                  className={`btn btn-foodie-outline fw-bold rounded-pill py-2 d-flex align-items-center justify-content-center gap-2 ${
-                    !canSubmitOrder ? 'opacity-50' : ''
-                  }`}
-                  style={{ 
-                    fontSize: '13px', 
-                    height: '42px',
-                    borderColor: 'var(--success-color, #198754)',
-                    color: 'var(--success-color, #198754)'
+                  className="btn flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
+                  style={{
+                    height: '46px',
+                    borderRadius: '12px',
+                    fontSize: '13.5px',
+                    backgroundColor: '#F20D2D',
+                    borderColor: '#F20D2D',
+                    borderWidth: '1.5px',
+                    borderStyle: 'solid',
+                    flex: '1.2',
+                    boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)',
+                    opacity: !canSubmitOrder ? 0.5 : 1
                   }}
                   title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
                 >
-                  <FiDollarSign size={17} />
+                  <FiCreditCard size={17} />
                   <span>Proceed to Payment</span>
                 </button>
               </div>
+
             </div>
-          </aside>
+          </div>
+
         </div>
 
         {/* Customization Modal */}
@@ -2586,6 +2803,19 @@ style={{ cursor: isOccupied ? 'not-allowed' : 'pointer', minHeight: '80px' }}
                                   <div className="small text-secondary text-start text-truncate" style={{ fontSize: '10px' }}>
                                     {table.location}
                                   </div>
+                                )}
+                                {isOccupied && activeOrderId && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleTrackExistingOrder(activeOrderId, table);
+                                    }}
+                                    className="btn btn-xs btn-outline-danger rounded-pill mt-2 w-100 fw-semibold"
+                                    style={{ fontSize: '10.5px', padding: '2px 6px' }}
+                                  >
+                                    Track Existing Order
+                                  </button>
                                 )}
                               </div>
                             </div>

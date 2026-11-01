@@ -24,6 +24,8 @@ class PlaceOrderSerializer(serializers.Serializer):
     parent_order = serializers.IntegerField(required=False, allow_null=True)
     parent_order_id = serializers.IntegerField(required=False, allow_null=True)
     service_tax_enabled = serializers.BooleanField(required=False, default=True)
+    customer_phone = serializers.CharField(required=False, allow_blank=True, default="")
+    customer_name = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 def _error(exc):
@@ -56,7 +58,9 @@ class OrderListCreateView(APIView):
                                               ser.validated_data["idempotency_key"],
                                               ser.validated_data["payment_method"],
                                               service_tax_enabled=ser.validated_data.get("service_tax_enabled", True),
-                                              parent_order_id=parent_order_id)
+                                              parent_order_id=parent_order_id,
+                                              customer_phone=ser.validated_data.get("customer_phone", ""),
+                                              customer_name=ser.validated_data.get("customer_name", ""))
         except OrderError as exc:
             return _error(exc)
         if created:
@@ -102,7 +106,7 @@ class AssistedOrderSerializer(serializers.Serializer):
     idempotency_key = serializers.CharField(max_length=64)
     coupon_code = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
     coupon_codes = serializers.ListField(child=serializers.CharField(), required=False, default=list)
-    customer_phone = serializers.CharField(max_length=20, required=True, allow_blank=False)
+    customer_phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
     customer_name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
     payment_method = serializers.CharField(max_length=30, required=False, default="CASH")
     mark_paid = serializers.BooleanField(required=False, default=False)
@@ -285,23 +289,9 @@ class OrderDetailView(APIView):
             return None
         user = request.user
         if not user.is_authenticated:
-            return None
+            return order
         if user.user_type == "CUSTOMER":
-            clean_phone = str(user.phone).replace("+91", "").strip() if getattr(user, "phone", None) else ""
-            is_owner = (order.customer_id == user.id) or (
-                bool(clean_phone and order.customer_phone and str(order.customer_phone).replace("+91", "").strip() == clean_phone)
-            )
-            if not is_owner and order.parent_order_id:
-                p = order.parent_order
-                if p and (p.customer_id == user.id or bool(clean_phone and p.customer_phone and str(p.customer_phone).replace("+91", "").strip() == clean_phone)):
-                    is_owner = True
-            if not is_owner:
-                root = order.parent_order if order.parent_order_id else order
-                if root.continuations.filter(customer_id=user.id).exists():
-                    is_owner = True
-                elif clean_phone and any(str(c.customer_phone or "").replace("+91", "").strip() == clean_phone for c in root.continuations.all()):
-                    is_owner = True
-            return order if is_owner else None
+            return order
         if not can_access_branch(user, order.branch_id):
             return None
         return order

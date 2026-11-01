@@ -41,7 +41,14 @@ def public_food(food, request, now=None):
 
 
 def _foods(branch):
-    return (Food.objects.filter(branch=branch, is_active=True, category__is_active=True)
+    if branch.is_primary:
+        return (Food.objects.filter(branch=branch, is_active=True, category__is_active=True)
+                .select_related("category", "inventory").prefetch_related("images", "customizations", "discounts"))
+    primary = Branch.objects.filter(is_primary=True, is_active=True).first()
+    branch_q = Q(branch=branch)
+    if primary:
+        branch_q |= Q(branch=primary)
+    return (Food.objects.filter(branch_q, is_active=True, category__is_active=True)
             .select_related("category", "inventory").prefetch_related("images", "customizations", "discounts"))
 
 
@@ -73,18 +80,38 @@ class PublicMenuView(PublicThrottled):
         if ordering and ordering not in MENU_SORTS:
             return Response({"ordering": [f"Must be one of {sorted(MENU_SORTS)}."]}, status=400)
 
-        foods = _foods(branch)
+        foods_qs = _foods(branch)
         if q.get("category"):
             if not q["category"].isdigit():
                 return Response({"category": ["Must be a category id."]}, status=400)
-            foods = foods.filter(category_id=int(q["category"]))
+            cat_id = int(q["category"])
+            target_cat = Category.objects.filter(pk=cat_id).first()
+            if target_cat:
+                foods_qs = foods_qs.filter(Q(category_id=cat_id) | Q(category__name__iexact=target_cat.name))
+            else:
+                foods_qs = foods_qs.filter(category_id=cat_id)
         if diets:
-            foods = foods.filter(diet_type__in=diets)
+            foods_qs = foods_qs.filter(diet_type__in=diets)
         if q.get("search", "").strip():
             term = q["search"].strip()
-            foods = foods.filter(Q(name__icontains=term) | Q(description__icontains=term))
-        foods = list(foods.order_by("category__display_order", "name"))
-        rows = [public_food(f, request, now) for f in foods]
+            foods_qs = foods_qs.filter(Q(name__icontains=term) | Q(description__icontains=term))
+
+        foods_list = list(foods_qs.order_by("category__display_order", "name"))
+        # Deduplicate by food name: if both sub-branch and main branch have the same dish name, keep sub-branch
+        seen_names = {}
+        deduped_foods = []
+        for f in foods_list:
+            lower_name = f.name.strip().lower()
+            if lower_name not in seen_names:
+                seen_names[lower_name] = f
+                deduped_foods.append(f)
+            elif f.branch_id == branch.id and seen_names[lower_name].branch_id != branch.id:
+                # Replace primary branch dish with sub-branch specific dish
+                idx = deduped_foods.index(seen_names[lower_name])
+                deduped_foods[idx] = f
+                seen_names[lower_name] = f
+
+        rows = [public_food(f, request, now) for f in deduped_foods]
         if ordering == "price":
             rows.sort(key=lambda r: Decimal(r["discounted_price"]))
         elif ordering == "-price":
@@ -94,15 +121,41 @@ class PublicMenuView(PublicThrottled):
         elif ordering == "name":
             rows.sort(key=lambda r: r["name"].lower())
 
-        categories = [{"id": c.id, "name": c.name, "description": c.description,
-                       "dish_count": Food.objects.filter(category=c, is_active=True).count()}
-                      for c in Category.objects.filter(branch=branch, is_active=True)]
-        offers = [{"code": c.code, "description": c.description, "discount_type": c.discount_type,
-                   "discount_value": str(c.discount_value), "min_order_value": str(c.min_order_value),
-                   "max_discount": None if c.max_discount is None else str(c.max_discount),
-                   "valid_from": c.valid_from, "valid_to": c.valid_to, "is_active": c.is_active,
-                   "is_first_time_offer": c.is_first_time_auto, "auto_apply": c.auto_apply}
-                  for c in Coupon.objects.filter(branch=branch, is_active=True, valid_from__lte=now, valid_to__gte=now).order_by("min_order_value", "code")]
+        primary = Branch.objects.filter(is_primary=True, is_active=True).first() if not branch.is_primary else None
+        cat_branch_q = Q(branch=branch, is_active=True)
+        if primary:
+            cat_branch_q |= Q(branch=primary, is_active=True)
+        raw_cats = list(Category.objects.filter(cat_branch_q).order_by("display_order", "id"))
+        seen_cat_names = set()
+        categories = []
+        for c in raw_cats:
+            c_name_lower = c.name.strip().lower()
+            if c_name_lower not in seen_cat_names:
+                seen_cat_names.add(c_name_lower)
+                count = sum(1 for f in deduped_foods if (f.category_id == c.id or f.category.name.strip().lower() == c_name_lower))
+                categories.append({
+                    "id": c.id, "name": c.name, "description": c.description,
+                    "dish_count": count
+                })
+
+        coupon_branch_q = Q(branch=branch, is_active=True, valid_from__lte=now, valid_to__gte=now)
+        if primary:
+            coupon_branch_q |= Q(branch=primary, is_active=True, valid_from__lte=now, valid_to__gte=now)
+        raw_coupons = list(Coupon.objects.filter(coupon_branch_q).order_by("min_order_value", "code"))
+        seen_coupon_codes = set()
+        offers = []
+        for c in raw_coupons:
+            code_upper = c.code.strip().upper()
+            if code_upper not in seen_coupon_codes:
+                seen_coupon_codes.add(code_upper)
+                offers.append({
+                    "code": c.code, "description": c.description, "discount_type": c.discount_type,
+                    "discount_value": str(c.discount_value), "min_order_value": str(c.min_order_value),
+                    "max_discount": None if c.max_discount is None else str(c.max_discount),
+                    "valid_from": c.valid_from, "valid_to": c.valid_to, "is_active": c.is_active,
+                    "is_first_time_offer": c.is_first_time_auto, "auto_apply": c.auto_apply
+                })
+
         return Response({"branch": {"id": branch.id, "name": branch.name}, "categories": categories,
                          "foods": rows, "offers": offers})
 

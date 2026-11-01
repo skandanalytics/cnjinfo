@@ -1,10 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
-import Button from '../../components/common/Button';
-import Input from '../../components/common/Input';
-import { FiCheckCircle } from 'react-icons/fi';
+import { FiPhone, FiCheckCircle, FiChevronDown, FiArrowLeft, FiShoppingBag } from 'react-icons/fi';
 import { COUNTRY_CODES, detectUserCountryCode, fetchGeolocationCountryCode } from '../../utils/countryCodes';
 import { cartService } from '../../services/cartService';
 import { applyOrderContext } from '../../services/customerCheckout';
@@ -14,21 +12,55 @@ export const CustomerLogin = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { sendOTP, verifyOTP } = useAuth();
-  const { cartItems, clearCart } = useCart();
+  const { cartItems } = useCart();
 
-  // Phone & OTP state
+  // Step 1: Login, Step 2: OTP, Step 3: Dining Option
   const [countryCode, setCountryCode] = useState('+91');
   const [phone, setPhone] = useState('');
-  const [otp, setOtp] = useState('');
+  const [otpArray, setOtpArray] = useState(['', '', '', '', '', '']);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
+  const [showDiningOption, setShowDiningOption] = useState(Boolean(location.state?.chooseDining));
+  const [selectedDining, setSelectedDining] = useState('DINE_IN');
+  const [openTables, setOpenTables] = useState([]);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [tablesLoading, setTablesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showDiningOption) return;
+    let mounted = true;
+    const loadTables = async () => {
+      setTablesLoading(true);
+      try {
+        const { resolvePublicBranchId, availableTables } = await import('../../services/customerCheckout');
+        const bId = await resolvePublicBranchId();
+        if (bId) {
+          const list = await availableTables(bId);
+          if (mounted) {
+            const avail = (list || []).filter(t => t.available === true || t.status === 'AVAILABLE' || t.status === 'Available');
+            setOpenTables(avail);
+            if (avail.length > 0) {
+              const savedTableId = sessionStorage.getItem('foodie_selected_table');
+              const found = avail.find(t => String(t.id) === String(savedTableId));
+              setSelectedTable(found || avail[0]);
+            }
+          }
+        }
+      } catch (e) { } finally {
+        if (mounted) setTablesLoading(false);
+      }
+    };
+    loadTables();
+    return () => { mounted = false; };
+  }, [showDiningOption]);
 
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
 
   const [cooldown, setCooldown] = useState(0);
-  const cooldownTimerRef = React.useRef(null);
-  const isSubmittingRef = React.useRef(false);
+  const cooldownTimerRef = useRef(null);
+  const isSubmittingRef = useRef(false);
+  const otpInputRefs = useRef([]);
 
   const startCooldown = (seconds) => {
     const sec = Math.max(1, Math.ceil(Number(seconds) || 0));
@@ -57,7 +89,6 @@ export const CustomerLogin = () => {
   const destination = typeof fromState === 'string'
     ? fromState
     : (fromState?.pathname ? `${fromState.pathname}${fromState.search || ''}${fromState.hash || ''}` : null);
-  const returningToCheckout = Boolean(destination && destination.includes('checkout'));
 
   const persistGuestCart = () => {
     try {
@@ -68,21 +99,16 @@ export const CustomerLogin = () => {
         sessionStorage.setItem('foodie_guest_cart_temp', payload);
         sessionStorage.setItem('foodie_guest_cart_unmerged', payload);
       }
-    } catch (e) { /* keep login usable even if storage is full */ }
+    } catch (e) { }
   };
 
   useEffect(() => {
     persistGuestCart();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Geolocation & Timezone Detection on component mount
   useEffect(() => {
-    // 1. Instant detection from browser timezone & locale
     const detected = detectUserCountryCode();
     setCountryCode(detected);
-
-    // 2. Fast non-blocking IP geolocation lookup
     fetchGeolocationCountryCode().then((code) => {
       if (code) setCountryCode(code);
     });
@@ -91,39 +117,37 @@ export const CustomerLogin = () => {
   const selectedCountryObj = COUNTRY_CODES.find((c) => c.code === countryCode) || COUNTRY_CODES[0];
 
   const handleSendOTP = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (otpLoading || cooldown > 0 || isSubmittingRef.current) return;
     setError('');
     setInfoMessage('');
 
     const reqLen = selectedCountryObj.phoneLen || 10;
     if (phone.length < reqLen) {
-      setError(`Please enter a valid ${reqLen}-digit mobile number.`);
-      return;
-    }
-
-    if (selectedCountryObj.pattern && !selectedCountryObj.pattern.test(phone)) {
-      setError(`Please enter a valid mobile number.`);
+      setError(`Please enter a valid ${reqLen}-digit mobile number`);
       return;
     }
 
     isSubmittingRef.current = true;
     setOtpLoading(true);
     try {
-      const sent = await sendOTP(phone);
+      const fullPhone = `${countryCode}${phone}`;
+      const sent = await sendOTP(fullPhone);
       setOtpSent(true);
+      setOtpArray(['', '', '', '', '', '']);
       if (sent?.dev_otp) {
-        setOtp(String(sent.dev_otp));
-        setInfoMessage(`OTP sent. Your code is ${sent.dev_otp}`);
+        const devDigits = String(sent.dev_otp).split('').slice(0, 6);
+        setOtpArray(devDigits);
+        setInfoMessage(`Code sent! Dev OTP: ${sent.dev_otp}`);
       } else {
-        setOtp('');
-        setInfoMessage('OTP sent to your mobile.');
+        setInfoMessage('Verification code sent to your mobile');
       }
+      startCooldown(30);
     } catch (err) {
       if (err.retryAfter > 0) {
         startCooldown(err.retryAfter);
       }
-      setError(err.message || 'Failed to send OTP. Please try again.');
+      setError(err.message || 'Failed to send OTP. Please check your mobile number and try again.');
     } finally {
       isSubmittingRef.current = false;
       setOtpLoading(false);
@@ -131,247 +155,483 @@ export const CustomerLogin = () => {
   };
 
   const handleResendOTP = async () => {
-    if (otpLoading || cooldown > 0 || isSubmittingRef.current) return;
+    if (otpLoading || cooldown > 0) return;
+    await handleSendOTP();
+  };
+
+  const handleOtpChange = (index, value) => {
+    const clean = value.replace(/\D/g, '').slice(-1);
+    const newArr = [...otpArray];
+    newArr[index] = clean;
+    setOtpArray(newArr);
     setError('');
-    setOtp('');
-    isSubmittingRef.current = true;
-    setOtpLoading(true);
-    try {
-      const sent = await sendOTP(phone);
-      if (sent?.dev_otp) {
-        setOtp(String(sent.dev_otp));
-        setInfoMessage(`OTP sent. Your code is ${sent.dev_otp}`);
-      } else {
-        setInfoMessage('A new OTP was sent to your mobile.');
-      }
-    } catch (err) {
-      if (err.retryAfter > 0) {
-        startCooldown(err.retryAfter);
-      }
-      setError(err.message || 'Failed to resend OTP. Please try again.');
-    } finally {
-      isSubmittingRef.current = false;
-      setOtpLoading(false);
+
+    if (clean && index < 5 && otpInputRefs.current[index + 1]) {
+      otpInputRefs.current[index + 1].focus();
+    }
+  };
+
+  const handleOtpKeyDown = (index, e) => {
+    if (e.key === 'Backspace' && !otpArray[index] && index > 0 && otpInputRefs.current[index - 1]) {
+      otpInputRefs.current[index - 1].focus();
     }
   };
 
   const handleVerifyOTP = async (e) => {
-    e.preventDefault();
-    if (otpLoading || isSubmittingRef.current) return;
+    if (e) e.preventDefault();
+    const fullOtp = otpArray.join('');
+    if (fullOtp.length !== 6 || isSubmittingRef.current) return;
     setError('');
-    setInfoMessage('');
-
-    const cleanOtp = otp.replace(/\D/g, '').trim();
-
-    if (!cleanOtp) {
-      setError('Please enter the 6-digit OTP code.');
-      return;
-    }
-
-    if (cleanOtp.length !== 6) {
-      setError('OTP must be exactly 6 digits. No less, no more.');
-      return;
-    }
-
     isSubmittingRef.current = true;
     setOtpLoading(true);
+
     try {
-      persistGuestCart();
-      const res = await verifyOTP(phone, cleanOtp);
-      const guestCartRaw = sessionStorage.getItem('foodie_guest_cart_unmerged') || sessionStorage.getItem('foodie_guest_cart_temp') || sessionStorage.getItem('foodie_guest_cart') || sessionStorage.getItem('foodie_cart') || localStorage.getItem('foodie_guest_cart_temp');
-      let guestItems = [];
-      try {
-        if (guestCartRaw) {
-          const parsed = JSON.parse(guestCartRaw);
-          if (Array.isArray(parsed) && parsed.length > 0) guestItems = parsed;
-        }
-      } catch (e) {}
-      if (guestItems.length === 0 && Array.isArray(cartItems) && cartItems.length > 0) {
-        guestItems = cartItems;
-      }
-      const hasGuestCartItems = guestItems.length > 0;
+      const fullPhone = `${countryCode}${phone}`;
+      const res = await verifyOTP(fullPhone, fullOtp);
+
+      const hasGuestCartItems = Array.isArray(cartItems) && cartItems.length > 0;
       if (hasGuestCartItems) {
-        await cartService.restoreGuestCartAfterLogin(guestItems);
-        const orderType = getOrderType();
-        if (orderType) {
-          try { await applyOrderContext(orderType); } catch (e) { /* checkout will re-apply */ }
-        }
+        try {
+          const authKey = res.user?.id ? `foodie_cart_${res.user.id}` : null;
+          if (authKey) {
+            sessionStorage.setItem(authKey, JSON.stringify(cartItems));
+            localStorage.setItem(authKey, JSON.stringify(cartItems));
+          }
+          await cartService.syncLocalCart(cartItems);
+        } catch (e) { }
       }
 
-      if (destination) {
-        navigate(destination, { replace: true });
-      } else if (hasGuestCartItems) {
-        navigate('/customer/checkout', { replace: true });
-      } else {
-        navigate('/customer/home', { replace: true });
-      }
+      setShowDiningOption(true);
     } catch (err) {
       if (err.retryAfter > 0) {
         startCooldown(err.retryAfter);
       }
-      setError(err.message || 'Invalid OTP. Please try again.');
+      setError(err.message || 'Invalid verification code. Please try again.');
     } finally {
       isSubmittingRef.current = false;
       setOtpLoading(false);
     }
   };
 
+  const handleConfirmDining = () => {
+    sessionStorage.setItem('foodie_order_type', selectedDining);
+    localStorage.setItem('foodie_order_type', selectedDining);
+    if (selectedDining === 'DINE_IN' && selectedTable) {
+      const tableNum = selectedTable.table_number || selectedTable.number || selectedTable.id;
+      const cleanTableNum = String(tableNum).startsWith('T') ? String(tableNum) : `T${tableNum}`;
+      sessionStorage.setItem('foodie_selected_table', String(selectedTable.id));
+      localStorage.setItem('foodie_selected_table', String(selectedTable.id));
+      sessionStorage.setItem('foodie_table_number', String(cleanTableNum));
+      localStorage.setItem('foodie_table_number', String(cleanTableNum));
+    }
+    const hasGuestCartItems = Array.isArray(cartItems) && cartItems.length > 0;
+    if (destination) {
+      navigate(destination, { replace: true });
+    } else if (hasGuestCartItems) {
+      navigate('/customer/checkout', { replace: true });
+    } else {
+      navigate('/customer/home', { replace: true });
+    }
+  };
+
+  const formatTimer = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
   return (
-    <div className="mobile-wrapper w-100 min-vh-100 bg-white px-4 py-5 d-flex flex-column justify-content-between mx-auto">
-      <div>
-        <div className="text-center mt-2 mb-4">
-          <h2 className="fw-bold text-danger mb-1">Foodie</h2>
-          <p className="text-muted small">
-            {location.state?.from?.includes('checkout') ? 'Sign in to confirm your order' : 'Customer Sign In'}
-          </p>
+    <div 
+      className="min-vh-100 d-flex flex-column align-items-center justify-content-center p-3"
+      style={{ 
+        backgroundColor: '#F8FAFC',
+        position: 'relative'
+      }}
+    >
+      {/* Centered White Card Container (Matches Reference 1, 2, 3) */}
+      <div 
+        className="card border-0 shadow-sm p-4 p-sm-5 text-center position-relative w-100"
+        style={{
+          maxWidth: '440px',
+          borderRadius: '24px',
+          backgroundColor: '#FFFFFF',
+          border: '1px solid #E2E8F0'
+        }}
+      >
+        {/* Circular Red Foodie Logo */}
+        <div className="d-flex align-items-center justify-content-center gap-2 mb-3">
+          <div 
+            className="text-white d-flex align-items-center justify-content-center fw-bold shadow-xs"
+            style={{ 
+              width: '42px', 
+              height: '42px', 
+              borderRadius: '50%', 
+              backgroundColor: '#F20D2D', 
+              fontSize: '22px' 
+            }}
+          >
+            F
+          </div>
+          <span className="fw-bold text-dark fs-4" style={{ letterSpacing: '-0.3px' }}>
+            Foodie
+          </span>
         </div>
 
-        <div className="card border-0 shadow-sm p-4 rounded-4 bg-light-subtle">
-          {!otpSent ? (
-            <form onSubmit={handleSendOTP}>
-              <div className="text-start mb-3">
-                <label className="form-label text-secondary small fw-semibold mb-1">Mobile Number</label>
-                <div className="input-group">
-                  <select 
-                    className="form-select border-light-subtle bg-white text-dark fw-bold text-center" 
-                    style={{ 
-                      flex: '0 0 54px',
-                      width: '54px', 
-                      maxWidth: '56px', 
-                      minWidth: '50px', 
-                      fontSize: '12px',
-                      padding: '0.65rem 0.8rem 0.65rem 0.35rem',
-                      borderRadius: '10px 0 0 10px',
-                      cursor: 'pointer',
-                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e")`,
-                      backgroundRepeat: 'no-repeat',
-                      backgroundPosition: 'right 0.2rem center',
-                      backgroundSize: '8px 6px'
-                    }}
-                    value={countryCode}
-                    onChange={(e) => {
-                      setCountryCode(e.target.value);
-                      setError('');
-                    }}
-                  >
-                    <option value="+91">+91</option>
-                    <option value="+1">+1</option>
-                    <option value="+44">+44</option>
-                    <option value="+971">+971</option>
-                    <option value="+61">+61</option>
-                    <option value="+65">+65</option>
-                  </select>
-                  <input
-                    type="tel"
-                    inputMode="numeric"
-                    maxLength={10}
-                    className="form-control border-light-subtle py-2.5 ps-3 pe-2 text-dark fw-semibold"
-                    style={{
-                      flex: '1 1 auto',
-                      fontSize: '13.5px',
-                      borderRadius: '0 10px 10px 0',
-                      borderLeft: '1px solid #dee2e6'
-                    }}
-                    placeholder="Enter 10-digit mobile number"
-                    value={phone}
-                    onKeyDown={(e) => {
-                      if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) || e.ctrlKey || e.metaKey) {
-                        return;
-                      }
-                      if (!/^[0-9]$/.test(e.key)) {
-                        e.preventDefault();
-                        return;
-                      }
-                      const start = e.target.selectionStart ?? 0;
-                      const end = e.target.selectionEnd ?? 0;
-                      if (start === end && String(phone || '').length >= 10) {
-                        e.preventDefault();
-                      }
-                    }}
-                    onChange={(e) => {
-                      setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
-                      setError('');
-                    }}
-                    required
-                  />
+        {showDiningOption ? (
+          /* SCREEN 3: Choose Dining Option */
+          <div>
+            <h4 className="fw-bold text-dark mb-1" style={{ fontSize: '22px' }}>
+              Choose Dining Option
+            </h4>
+            <p className="text-secondary small mb-4" style={{ fontSize: '13px', color: '#64748B' }}>
+              How would you like to enjoy your food today?
+            </p>
+
+            {/* Selectable Card 1: Table Dine-in */}
+            <div
+              onClick={() => setSelectedDining('DINE_IN')}
+              className="p-3 rounded-4 mb-3 d-flex align-items-center justify-content-between text-start cursor-pointer transition-all shadow-xs"
+              style={{
+                cursor: 'pointer',
+                border: `2px solid ${selectedDining === 'DINE_IN' ? '#F20D2D' : '#E2E8F0'}`,
+                backgroundColor: selectedDining === 'DINE_IN' ? '#FFF5F5' : '#FFFFFF'
+              }}
+            >
+              <div className="d-flex align-items-center gap-3">
+                <div 
+                  className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                  style={{
+                    width: '46px',
+                    height: '46px',
+                    backgroundColor: selectedDining === 'DINE_IN' ? '#FFE4E6' : '#F1F5F9',
+                    color: '#F20D2D'
+                  }}
+                >
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M4 18v3" /><path d="M20 18v3" /><path d="M2 14h20" /><path d="M4 14V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6" />
+                    <path d="M6 14v4" /><path d="M18 14v4" />
+                  </svg>
+                </div>
+                <div>
+                  <div className="fw-bold text-dark fs-6">Table Dine-in</div>
+                  <div className="text-secondary small mt-0.5" style={{ fontSize: '12px', color: '#64748B' }}>
+                    Dine at our restaurant and enjoy the experience
+                  </div>
                 </div>
               </div>
 
+              {selectedDining === 'DINE_IN' && (
+                <div className="text-danger ps-2">
+                  <FiCheckCircle size={22} style={{ fill: '#F20D2D', color: '#FFFFFF' }} />
+                </div>
+              )}
+            </div>
+
+            {selectedDining === 'DINE_IN' && (
+              <div className="text-start mb-3 p-3 rounded-4 bg-light border border-light-subtle shadow-2xs">
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>
+                    Select Your Dining Table
+                  </span>
+                  <span className="badge rounded-pill bg-success-subtle text-success fw-semibold" style={{ fontSize: '11px' }}>
+                    {tablesLoading ? 'Checking...' : `${openTables.length} Available`}
+                  </span>
+                </div>
+
+                {tablesLoading ? (
+                  <div className="py-2 text-center text-muted small">Loading available tables...</div>
+                ) : openTables.length === 0 ? (
+                  <div className="p-2 text-center text-danger small rounded bg-white border border-danger-subtle">
+                    No tables available. Please select Takeaway.
+                  </div>
+                ) : (
+                  <div>
+                    <select
+                      value={selectedTable?.id || ''}
+                      onChange={(e) => {
+                        const found = openTables.find(t => String(t.id) === String(e.target.value));
+                        setSelectedTable(found || null);
+                      }}
+                      className="form-select form-select-sm rounded-pill py-2 px-3 fw-semibold border shadow-xs text-dark"
+                      style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' }}
+                    >
+                      {openTables.map(t => {
+                        const num = t.table_number || t.number || `T${t.id}`;
+                        const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                        const loc = t.location || t.area || 'Indoor';
+                        const cap = t.capacity || 4;
+                        return (
+                          <option key={t.id} value={t.id}>
+                            {cleanNum} — {loc} ({cap} Seats)
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    <div className="d-flex align-items-center gap-1.5 flex-wrap mt-2.5">
+                      {openTables.slice(0, 8).map(t => {
+                        const num = t.table_number || t.number || `T${t.id}`;
+                        const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                        const isSelected = selectedTable && String(selectedTable.id) === String(t.id);
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setSelectedTable(t)}
+                            className={`btn btn-sm rounded-pill px-2.5 py-1 fw-bold transition-all ${
+                              isSelected
+                                ? 'btn-danger text-white shadow-xs'
+                                : 'btn-outline-secondary bg-white text-secondary'
+                            }`}
+                            style={{ fontSize: '11.5px', minWidth: '48px' }}
+                          >
+                            {cleanNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Selectable Card 2: Takeaway */}
+            <div
+              onClick={() => setSelectedDining('TAKEAWAY')}
+              className="p-3 rounded-4 mb-4 d-flex align-items-center justify-content-between text-start cursor-pointer transition-all shadow-xs"
+              style={{
+                cursor: 'pointer',
+                border: `2px solid ${selectedDining === 'TAKEAWAY' ? '#F20D2D' : '#E2E8F0'}`,
+                backgroundColor: selectedDining === 'TAKEAWAY' ? '#FFF5F5' : '#FFFFFF'
+              }}
+            >
+              <div className="d-flex align-items-center gap-3">
+                <div 
+                  className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                  style={{
+                    width: '46px',
+                    height: '46px',
+                    backgroundColor: selectedDining === 'TAKEAWAY' ? '#FFE4E6' : '#F1F5F9',
+                    color: '#F20D2D'
+                  }}
+                >
+                  <FiShoppingBag size={22} />
+                </div>
+                <div>
+                  <div className="fw-bold text-dark fs-6">Takeaway</div>
+                  <div className="text-secondary small mt-0.5" style={{ fontSize: '12px', color: '#64748B' }}>
+                    Pick up your order and enjoy it anywhere
+                  </div>
+                </div>
+              </div>
+
+              {selectedDining === 'TAKEAWAY' && (
+                <div className="text-danger ps-2">
+                  <FiCheckCircle size={22} style={{ fill: '#F20D2D', color: '#FFFFFF' }} />
+                </div>
+              )}
+            </div>
+
+            {/* Continue Button */}
+            <button
+              type="button"
+              onClick={handleConfirmDining}
+              className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm"
+              style={{
+                height: '46px',
+                backgroundColor: '#F20D2D',
+                borderColor: '#F20D2D',
+                fontSize: '14.5px',
+                boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)'
+              }}
+            >
+              Continue
+            </button>
+          </div>
+        ) : !otpSent ? (
+          /* SCREEN 1: Welcome to Foodie */
+          <div>
+            <h4 className="fw-bold text-dark mb-1" style={{ fontSize: '22px' }}>
+              Welcome to Foodie
+            </h4>
+            <p className="text-secondary small mb-4" style={{ fontSize: '13.5px', color: '#64748B' }}>
+              Order your favorite food
+            </p>
+
+            <form onSubmit={handleSendOTP}>
+              {/* Phone Input Box with Icon & Country Code */}
+              <div 
+                className="d-flex align-items-center bg-white border rounded-3 p-1.5 mb-3 shadow-xs"
+                style={{ borderColor: '#CBD5E1', height: '48px' }}
+              >
+                <div className="d-flex align-items-center gap-1 ps-2 text-muted pe-2 border-end">
+                  <FiPhone size={15} style={{ color: '#64748B' }} />
+                  <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>{countryCode}</span>
+                </div>
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  maxLength={10}
+                  className="form-control border-0 shadow-none ps-3 text-dark fw-semibold"
+                  style={{ fontSize: '14px', backgroundColor: 'transparent' }}
+                  placeholder="Mobile number"
+                  value={phone}
+                  onChange={(e) => {
+                    setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
+                    setError('');
+                  }}
+                  required
+                  autoFocus
+                />
+              </div>
+
               {error && <div className="text-danger small mb-3 fw-semibold text-start">{error}</div>}
 
-              <div className="d-grid gap-2 mt-4">
-                <Button
-                  type="submit"
-                  variant="primary"
-                  className="py-2.5 fw-bold"
-                  loading={otpLoading}
-                  disabled={otpLoading || cooldown > 0 || phone.length < (selectedCountryObj.phoneLen || 10)}
-                >
-                  {cooldown > 0 ? `Send OTP (${cooldown}s)` : 'Send OTP'}
-                </Button>
-              </div>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyOTP}>
-              <div className="alert alert-success bg-success-subtle text-success-emphasis border border-success-subtle rounded-3 text-center mb-3 py-2 small fw-semibold">
-                <FiCheckCircle className="me-1" /> OTP Sent to {countryCode} {phone}
-              </div>
-
-              <Input
-                label="Enter 6-Digit OTP"
-                type="text"
-                placeholder="Enter the 6-digit code"
-                value={otp}
-                onChange={(e) => {
-                  setOtp(e.target.value.replace(/\D/g, '').slice(0, 6));
-                  setError('');
+              {/* Red Continue Pill Button */}
+              <button
+                type="submit"
+                disabled={otpLoading || cooldown > 0 || phone.length < (selectedCountryObj.phoneLen || 10)}
+                className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm"
+                style={{
+                  height: '46px',
+                  backgroundColor: '#F20D2D',
+                  borderColor: '#F20D2D',
+                  fontSize: '14.5px',
+                  boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)'
                 }}
-                maxLength={6}
-                minLength={6}
-                pattern="[0-9]{6}"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                required
-              />
+              >
+                {otpLoading ? 'Sending...' : (cooldown > 0 ? `Wait (${cooldown}s)` : 'Continue')}
+              </button>
+            </form>
+
+            {/* Skip for Now Link */}
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setShowDiningOption(true)}
+                className="btn btn-link text-decoration-none fw-bold small p-0"
+                style={{ color: '#F20D2D', fontSize: '13.5px' }}
+              >
+                Skip for Now
+              </button>
+            </div>
+
+            {/* Employee / Admin Login Link at bottom */}
+            <div className="mt-5 pt-3 border-top border-light-subtle">
+              <Link
+                to="/login"
+                className="text-secondary small text-decoration-none fw-semibold"
+                style={{ fontSize: '13px' }}
+              >
+                Employee / Admin Login
+              </Link>
+            </div>
+          </div>
+        ) : (
+          /* SCREEN 2: Enter OTP */
+          <div>
+            <h4 className="fw-bold text-dark mb-1" style={{ fontSize: '22px' }}>
+              Enter OTP
+            </h4>
+            <p className="text-secondary small mb-4" style={{ fontSize: '13px', color: '#64748B' }}>
+              We've sent a 6-digit code to <strong className="text-dark">{countryCode} {phone}</strong>
+            </p>
+
+            {infoMessage && (
+              <div className="alert alert-info py-2 px-3 small rounded-3 mb-3 text-start" style={{ fontSize: '12px' }}>
+                {infoMessage}
+              </div>
+            )}
+
+            <form onSubmit={handleVerifyOTP}>
+              {/* 6 Individual Square OTP Inputs */}
+              <div className="d-flex align-items-center justify-content-between gap-2 mb-4">
+                {otpArray.map((digit, idx) => (
+                  <input
+                    key={idx}
+                    ref={el => otpInputRefs.current[idx] = el}
+                    type="text"
+                    inputMode="numeric"
+                    maxLength={1}
+                    className="form-control text-center p-0 fw-bold shadow-xs"
+                    style={{
+                      width: '46px',
+                      height: '52px',
+                      borderRadius: '12px',
+                      fontSize: '22px',
+                      borderColor: digit ? '#F20D2D' : '#CBD5E1',
+                      borderWidth: digit ? '2px' : '1.5px',
+                      backgroundColor: digit ? '#FFF5F5' : '#FFFFFF',
+                      color: '#0F172A'
+                    }}
+                    value={digit}
+                    onChange={(e) => handleOtpChange(idx, e.target.value)}
+                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                  />
+                ))}
+              </div>
 
               {error && <div className="text-danger small mb-3 fw-semibold text-start">{error}</div>}
-              {infoMessage && <div className="text-success small mb-3 fw-semibold text-start">{infoMessage}</div>}
 
-              <div className="d-grid gap-2 mt-4">
-                <Button 
-                  type="submit" 
-                  variant="primary" 
-                  className="py-2.5 fw-bold" 
-                  loading={otpLoading}
-                  disabled={cooldown > 0 || otp.replace(/\D/g, '').length !== 6 || otpLoading}
-                >
-                  Verify OTP & Proceed to Checkout
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="py-2.5 fw-bold"
-                  onClick={handleResendOTP}
-                  disabled={otpLoading || cooldown > 0}
-                >
-                  {cooldown > 0 ? `Resend OTP (${cooldown}s)` : 'Resend OTP'}
-                </Button>
-                <Button
-                  type="button"
-                  variant="light"
-                  className="py-2.5 fw-bold"
-                  onClick={() => { setOtpSent(false); setOtp(''); setError(''); }}
-                  disabled={otpLoading}
-                >
-                  Use a different number
-                </Button>
-              </div>
+              {/* Verify & Continue Red Pill Button */}
+              <button
+                type="submit"
+                disabled={otpLoading || otpArray.join('').length !== 6}
+                className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm"
+                style={{
+                  height: '46px',
+                  backgroundColor: '#F20D2D',
+                  borderColor: '#F20D2D',
+                  fontSize: '14.5px',
+                  boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)'
+                }}
+              >
+                {otpLoading ? 'Verifying...' : 'Verify & Continue'}
+              </button>
             </form>
-          )}
-        </div>
+
+            {/* Resend OTP Timer & Change Mobile Number */}
+            <div className="mt-4 d-flex flex-column gap-2">
+              <div className="text-secondary small" style={{ fontSize: '13px' }}>
+                {cooldown > 0 ? (
+                  <span>Resend OTP in <strong className="text-danger">{formatTimer(cooldown)}</strong></span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleResendOTP}
+                    className="btn btn-link text-decoration-none fw-bold p-0 text-danger"
+                    style={{ fontSize: '13px' }}
+                  >
+                    Resend OTP
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => { setOtpSent(false); setError(''); }}
+                className="btn btn-link text-decoration-none text-secondary small p-0 fw-semibold"
+                style={{ fontSize: '13px' }}
+              >
+                Change Mobile Number
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="py-3"></div>
+      {/* Subtle Food Illustration / Decoration at Bottom */}
+      <div 
+        className="position-fixed bottom-0 start-0 w-100 pointer-events-none d-none d-md-block"
+        style={{ height: '70px', opacity: 0.15, pointerEvents: 'none' }}
+      >
+        <div className="d-flex justify-content-between px-5">
+          <span style={{ fontSize: '36px' }}>🥗</span>
+          <span style={{ fontSize: '36px' }}>🍔</span>
+          <span style={{ fontSize: '36px' }}>🍕</span>
+          <span style={{ fontSize: '36px' }}>🍜</span>
+        </div>
+      </div>
     </div>
   );
 };

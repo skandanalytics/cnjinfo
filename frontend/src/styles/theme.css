@@ -1,53 +1,53 @@
 :root {
   /* Override Bootstrap 5 core variables with Foodie Design Tokens */
-  --bs-primary: #C8102E;
-  --bs-primary-rgb: 200, 16, 46;
-  --bs-danger: #C8102E;
-  --bs-danger-rgb: 200, 16, 46;
-  --bs-link-color: #C8102E;
-  --bs-link-hover-color: #A90E27;
+  --bs-primary: #F20D2D;
+  --bs-primary-rgb: 242, 13, 45;
+  --bs-danger: #F20D2D;
+  --bs-danger-rgb: 242, 13, 45;
+  --bs-link-color: #F20D2D;
+  --bs-link-hover-color: #D60925;
   --bs-border-radius: 12px;
   --bs-border-radius-sm: 8px;
   --bs-border-radius-lg: 16px;
   --bs-border-radius-xl: 20px;
   --bs-border-radius-xxl: 24px;
   --bs-border-radius-pill: 9999px;
-  --bs-body-bg: #F5F7FA;
-  --bs-body-color: #20242B;
+  --bs-body-bg: #F2F7FC;
+  --bs-body-color: #101828;
 
   /* Brand Palette - Foodie Master Design System */
-  --primary-color: #C8102E;
-  --primary-hover: #A90E27;
-  --primary-dark: #850B20;
-  --primary-light: #FCE8ED;
-  --primary-subtle: rgba(200, 16, 46, 0.08);
+  --primary-color: #F20D2D;
+  --primary-hover: #D60925;
+  --primary-dark: #B9061F;
+  --primary-light: #FEECEE;
+  --primary-subtle: rgba(242, 13, 45, 0.08);
 
   --secondary-color: #ffffff;
 
   /* Surfaces & Backgrounds */
-  --background-color: #F5F7FA;
+  --background-color: #F2F7FC;
   --surface-color: #FFFFFF;
   --surface-muted: #F8FAFC;
-  --sidebar-bg: #111827;
-  --sidebar-border: #1F2937;
+  --sidebar-bg: #101B29;
+  --sidebar-border: #182638;
   --sidebar-text: #94A3B8;
   --sidebar-text-active: #FFFFFF;
 
   /* Typography */
-  --text-primary: #20242B;
-  --text-secondary: #667085;
+  --text-primary: #101828;
+  --text-secondary: #64748B;
   --text-muted: #94A3B8;
 
   /* Borders & Dividers */
-  --border-color: #E3E7ED;
+  --border-color: #DCE6F2;
   --border-subtle: #EDF2F7;
 
   /* Semantic Feedback */
-  --success-color: #198754;
-  --success-light: #E8F5E9;
-  --warning-color: #D99718;
+  --success-color: #16A34A;
+  --success-light: #DCFCE7;
+  --warning-color: #F59E0B;
   --warning-light: #FEF3C7;
-  --danger-color: #C62828;
+  --danger-color: #EF4444;
   --danger-light: #FEE2E2;
   --info-color: #2563EB;
   --info-light: #EFF6FF;
@@ -60,13 +60,13 @@
   --border-radius-xl: 20px;
   --border-radius-pill: 9999px;
 
-  /* Shadows */
-  --shadow-xs: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06), 0 1px 2px rgba(15, 23, 42, 0.04);
-  --shadow-md: 0 4px 6px -1px rgba(15, 23, 42, 0.07), 0 2px 4px -1px rgba(15, 23, 42, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(15, 23, 42, 0.08), 0 4px 6px -2px rgba(15, 23, 42, 0.04);
-  --shadow-xl: 0 20px 25px -5px rgba(15, 23, 42, 0.1), 0 10px 10px -5px rgba(15, 23, 42, 0.04);
-  --shadow-brand: 0 4px 14px rgba(200, 16, 46, 0.25);
+  /* Shadows - Soft blue-gray shadows */
+  --shadow-xs: 0 1px 2px rgba(16, 27, 41, 0.04);
+  --shadow-sm: 0 1px 3px rgba(16, 27, 41, 0.06), 0 1px 2px rgba(16, 27, 41, 0.04);
+  --shadow-md: 0 4px 6px -1px rgba(16, 27, 41, 0.06), 0 2px 4px -1px rgba(16, 27, 41, 0.03);
+  --shadow-lg: 0 10px 15px -3px rgba(16, 27, 41, 0.08), 0 4px 6px -2px rgba(16, 27, 41, 0.04);
+  --shadow-xl: 0 20px 25px -5px rgba(16, 27, 41, 0.09), 0 10px 10px -5px rgba(16, 27, 41, 0.04);
+  --shadow-brand: 0 4px 14px rgba(242, 13, 45, 0.25);
 
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
@@ -78,26 +78,26 @@
 [data-theme="dark"],
 [data-bs-theme="dark"],
 .dark-mode {
-  --bs-primary: #E61E40;
-  --bs-primary-rgb: 230, 30, 64;
-  --bs-danger: #E61E40;
-  --bs-danger-rgb: 230, 30, 64;
-  --bs-body-bg: #0F172A;
+  --bs-primary: #F20D2D;
+  --bs-primary-rgb: 242, 13, 45;
+  --bs-danger: #F20D2D;
+  --bs-danger-rgb: 242, 13, 45;
+  --bs-body-bg: #101B29;
   --bs-body-color: #F8FAFC;
-  --bs-border-color: #334155;
-  --bs-card-bg: #1E293B;
+  --bs-border-color: #24354A;
+  --bs-card-bg: #182638;
 
-  --primary-color: #E61E40;
-  --primary-hover: #C8102E;
-  --primary-dark: #A90E27;
-  --primary-light: rgba(200, 16, 46, 0.2);
-  --primary-subtle: rgba(230, 30, 64, 0.15);
+  --primary-color: #F20D2D;
+  --primary-hover: #D60925;
+  --primary-dark: #B9061F;
+  --primary-light: rgba(242, 13, 45, 0.2);
+  --primary-subtle: rgba(242, 13, 45, 0.15);
 
-  --background-color: #0F172A;
-  --surface-color: #1E293B;
-  --surface-muted: #182234;
-  --sidebar-bg: #0B1120;
-  --sidebar-border: #1E293B;
+  --background-color: #101B29;
+  --surface-color: #182638;
+  --surface-muted: #1E2D42;
+  --sidebar-bg: #0D1622;
+  --sidebar-border: #1A273A;
   --sidebar-text: #94A3B8;
   --sidebar-text-active: #FFFFFF;
 
@@ -105,20 +105,20 @@
   --text-secondary: #94A3B8;
   --text-muted: #64748B;
 
-  --border-color: #334155;
-  --border-subtle: #1E293B;
+  --border-color: #24354A;
+  --border-subtle: #1A273A;
 
   --success-color: #22C55E;
-  --success-light: rgba(34, 197, 94, 0.15);
+  --success-light: rgba(34, 197, 94, 0.18);
   --warning-color: #F59E0B;
-  --warning-light: rgba(245, 158, 11, 0.15);
+  --warning-light: rgba(245, 158, 11, 0.18);
   --danger-color: #EF4444;
-  --danger-light: rgba(239, 68, 68, 0.15);
+  --danger-light: rgba(239, 68, 68, 0.18);
   --info-color: #3B82F6;
-  --info-light: rgba(59, 130, 246, 0.15);
+  --info-light: rgba(59, 130, 246, 0.18);
 
-  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-  --shadow-brand: 0 4px 14px rgba(230, 30, 64, 0.35);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.55);
+  --shadow-brand: 0 4px 14px rgba(242, 13, 45, 0.35);
 }

@@ -21,8 +21,10 @@ These formulas follow the legacy frontend's `pricing.js` and are UNCONFIRMED aga
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 
+from django.db.models import Q
 from django.utils import timezone
 
+from apps.branches.models import Branch
 from apps.coupons.services import apply_coupons, offer_progress
 from apps.menu.models import CustomizationOption, Food
 from apps.menu.pricing_helpers import current_discount, inventory_of, is_orderable, money, unit_discount
@@ -66,8 +68,15 @@ class Line:
 def _load_lines(branch, lines):
     errors, resolved = [], []
     food_ids = {l.food_id for l in lines}
-    foods = {f.pk: f for f in Food.objects.filter(pk__in=food_ids, branch=branch)
-             .select_related("inventory").prefetch_related("discounts")}
+    if branch.is_primary:
+        foods_qs = Food.objects.filter(pk__in=food_ids, branch=branch)
+    else:
+        primary = Branch.objects.filter(is_primary=True, is_active=True).first()
+        branch_q = Q(branch=branch)
+        if primary:
+            branch_q |= Q(branch=primary)
+        foods_qs = Food.objects.filter(pk__in=food_ids).filter(branch_q)
+    foods = {f.pk: f for f in foods_qs.select_related("inventory").prefetch_related("discounts")}
     option_ids = {o for l in lines for o in l.option_ids}
     options = {o.pk: o for o in CustomizationOption.objects.filter(pk__in=option_ids)}
     wanted_per_food = {}
@@ -138,7 +147,7 @@ def price_order(branch, lines, order_type, customer=None, coupon_codes=None, now
     takeaway = money(Decimal(total_item_quantity) * Decimal("10.00")) if order_type == "TAKEAWAY" else ZERO
     taxable = food_after_coupon + takeaway
     gst = money(taxable * branch.gst_rate / 100)
-    if service_tax_enabled:
+    if service_tax_enabled and order_type != "TAKEAWAY":
         service_rate, service = service_charge_for(food_after_coupon, branch.service_charge_rate)
     else:
         service_rate, service = Decimal("0.00"), Decimal("0.00")

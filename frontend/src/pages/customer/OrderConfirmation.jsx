@@ -57,6 +57,22 @@ export const OrderConfirmation = () => {
     }
   }, [orderId]);
 
+  // Clean up parent order id when settled or cancelled to prevent hanging on reorders (B30-09)
+  useEffect(() => {
+    if (raw) {
+      const isSettled = (String(raw.status || '').toUpperCase() === 'COMPLETED' && String(raw.payment_status || '').toUpperCase() === 'PAID') ||
+                        String(raw.payment_status || '').toUpperCase() === 'PAID';
+      const isCancelled = String(raw.status || '').toUpperCase() === 'CANCELLED';
+      if (isSettled || isCancelled) {
+        const parentId = sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id');
+        if (parentId && (String(parentId) === String(raw.id) || String(parentId) === String(raw.parent_order_id))) {
+          sessionStorage.removeItem('foodie_parent_order_id');
+          localStorage.removeItem('foodie_parent_order_id');
+        }
+      }
+    }
+  }, [raw?.status, raw?.payment_status, raw?.id, raw?.parent_order_id]);
+
   // Live polling & real-time updates to keep the tracker active
   useEffect(() => {
     load();
@@ -172,21 +188,65 @@ export const OrderConfirmation = () => {
     return page === 'tables' ? `${base}/tables` : `${base}/kitchen`;
   };
 
-  const orderAgain = () => {
-    if (raw && (raw.order_type === 'DINE_IN' || raw.orderType === 'Dine-In') && String(raw.status || '').toUpperCase() !== 'CANCELLED' && String(raw.status || '').toUpperCase() !== 'COMPLETED' && !isBillConfirmed && String(raw.payment_status || '').toUpperCase() !== 'PAID') {
-      const rootId = raw.parent_order_id || raw.id;
+  const handleContinueOrder = async () => {
+    if (!raw) return;
+    const isTakeaway = raw.order_type === 'TAKEAWAY' || raw.orderType === 'Takeaway' || String(raw.table).toLowerCase() === 'takeaway';
+    if (!isTakeaway) {
+      const rootId = raw.parent_order_id || raw.parent_order || raw.id;
       sessionStorage.setItem('foodie_parent_order_id', String(rootId));
       localStorage.setItem('foodie_parent_order_id', String(rootId));
-      const tid = raw.table_id || raw.table?.id;
+
+      let tid = raw.table_id || (typeof raw.table === 'object' ? raw.table?.id : (Number(raw.table) || null)) || raw.tableId;
+      const tNum = raw.table_number || raw.tableNumber || (typeof raw.table === 'object' ? raw.table?.table_number || raw.table?.label : raw.table);
+
+      if (!tid && tNum) {
+        try {
+          const { resolvePublicBranchId, availableTables } = await import('../../services/customerCheckout');
+          const branchId = raw.branch || raw.branch_id || await resolvePublicBranchId();
+          if (branchId) {
+            const tables = await availableTables(branchId);
+            const cleanTarget = String(tNum).toUpperCase().trim();
+            const matched = tables.find(t =>
+              String(t.table_number).toUpperCase().trim() === cleanTarget ||
+              String(t.table_number).toUpperCase().trim() === cleanTarget.replace(/^TABLE\s*/i, '') ||
+              `T${String(t.table_number).replace(/\D/g, '').padStart(2, '0')}` === cleanTarget
+            );
+            if (matched) tid = matched.id;
+          }
+        } catch (e) {
+          console.warn('Could not resolve table id by number:', e);
+        }
+      }
+
       if (tid) {
         sessionStorage.setItem('foodie_selected_table', String(tid));
         localStorage.setItem('foodie_selected_table', String(tid));
-        sessionStorage.setItem('foodie_order_type', 'DINE_IN');
-        localStorage.setItem('foodie_order_type', 'DINE_IN');
+      }
+      sessionStorage.setItem('foodie_order_type', 'DINE_IN');
+      localStorage.setItem('foodie_order_type', 'DINE_IN');
+
+      const phone = raw.customer_phone || raw.customerPhone || raw.phone;
+      if (phone) {
+        sessionStorage.setItem('customer_mobile', String(phone));
+        localStorage.setItem('customer_mobile', String(phone));
+      }
+      const name = raw.customer_name || raw.customerName;
+      if (name && typeof name === 'string') {
+        sessionStorage.setItem('customer_name', String(name));
+        localStorage.setItem('customer_name', String(name));
+      }
+
+      try {
+        const { applyOrderContext } = await import('../../services/customerCheckout');
+        await applyOrderContext('DINE_IN', tid);
+      } catch (e) {
+        console.warn('Could not apply context on continue order:', e);
       }
     }
     navigate('/customer/home');
   };
+
+  const orderAgain = handleContinueOrder;
 
   const payAgain = async (method) => {
     if (!raw || paying) return;
@@ -265,166 +325,116 @@ export const OrderConfirmation = () => {
 
   return (
     <CustomerLayout>
-      <main className="pt-2 text-center mx-auto" style={{ maxWidth: '640px' }}>
+      <main className="pt-2 text-center mx-auto" style={{ maxWidth: '640px', paddingBottom: '60px' }}>
         <CheckoutStepper currentStep={4} />
 
-        <div className="text-start mb-3">
-          <BackButton to="/customer/home" />
-        </div>
-        <div
-          className="d-flex align-items-center justify-content-center mb-4 rounded-circle mx-auto"
-          style={{ 
-            width: '84px', 
-            height: '84px', 
-            backgroundColor: cancelled ? '#FEE2E2' : '#DCFCE7', 
-            border: cancelled ? '2px solid #EF4444' : '2px solid #16A34A',
-            boxShadow: cancelled ? '0 0 0 6px rgba(239, 68, 68, 0.12)' : '0 0 0 6px rgba(34, 197, 94, 0.15)'
-          }}
-        >
-          {cancelled ? <FiXCircle size={44} className="text-danger" /> : <FiCheck size={44} className="text-success" strokeWidth={3} />}
-        </div>
-
-        <h3 className="fw-bold text-dark mb-1" data-testid="confirmation-title">
-          {cancelled ? 'Order Cancelled' : 'Order Placed!'}
-        </h3>
-        <p className="text-muted small mb-4">
-          Order number <span className="font-monospace fw-bold" data-testid="order-number">{displayNo}</span>
-        </p>
-
-        {paymentNote && paymentNote.status !== 'PAID' && (
-          <div className="alert alert-warning text-start small" role="alert">{paymentNote.message}</div>
-        )}
-        {isPaid ? (
-          <div className="alert alert-success text-start small d-flex align-items-center gap-2 mb-3" role="alert">
-            <FiCheckCircle size={16} className="text-success flex-shrink-0" />
-            <div>
-              <strong>Payment Received!</strong> Your bill has been settled successfully.
-            </div>
+        <div className="card rounded-4 border border-light-subtle shadow-sm p-4 p-md-5 bg-white text-center mt-3 mb-4">
+          <div
+            className="d-flex align-items-center justify-content-center mb-3 rounded-circle mx-auto"
+            style={{ 
+              width: '76px', 
+              height: '76px', 
+              backgroundColor: cancelled ? '#FEE2E2' : '#DCFCE7', 
+              border: cancelled ? '2px solid #EF4444' : '2px solid #16A34A',
+              boxShadow: cancelled ? '0 0 0 6px rgba(239, 68, 68, 0.12)' : '0 0 0 6px rgba(34, 197, 94, 0.15)'
+            }}
+          >
+            {cancelled ? (
+              <FiXCircle size={40} className="text-danger" />
+            ) : (
+              <FiCheck size={40} className="text-success" strokeWidth={3} />
+            )}
           </div>
-        ) : !cancelled ? (
-          <div className="alert alert-warning text-start small d-flex align-items-center justify-content-between mb-3" role="alert">
-            <div>
-              <strong>Payment Pending:</strong> Please settle your bill online or at the counter.
-            </div>
-            <span className="badge bg-warning text-dark fw-bold">UNPAID</span>
-          </div>
-        ) : null}
 
-        {isBillConfirmed && (
-          <div className="alert alert-info py-2.5 px-3 rounded-3 small mb-3 text-start d-flex align-items-center justify-content-between">
-            <div>
-              <strong>Proceed to Bill Confirmed.</strong> Your bill is ready for settlement.
-            </div>
-            <button
-              type="button"
-              onClick={handleOpenBill}
-              className="btn btn-xs btn-outline-primary rounded-pill fw-semibold"
-            >
-              View Bill
-            </button>
-          </div>
-        )}
+          <h3 className="fw-bold text-dark mb-1" data-testid="confirmation-title">
+            {cancelled ? 'Order Cancelled' : 'Order Placed Successfully!'}
+          </h3>
+          <p className="text-muted small mb-4">
+            Order Number: <span className="font-monospace fw-bold text-dark" data-testid="order-number">#{displayNo}</span>
+          </p>
 
-        {/* Live Order Tracker Pipeline (remains active and visible) */}
-        {!cancelled && (
-          <div className="card rounded-3 border-0 shadow-sm p-4 bg-white text-start mb-4">
-            <div className="d-flex align-items-center justify-content-between mb-3">
-              <h5 className="fw-bold text-dark mb-0">Live Order Tracker</h5>
-              <span className={`badge rounded-pill px-2.5 py-1 fw-bold ${
+          {paymentNote && paymentNote.status !== 'PAID' && (
+            <div className="alert alert-warning text-start small mb-3" role="alert">{paymentNote.message}</div>
+          )}
+
+          {/* Key Value Details matching Screenshot 8 & 9 */}
+          <div className="w-100 text-start border-top border-bottom py-3 my-2">
+            <div className="d-flex align-items-center justify-content-between mb-2.5">
+              <span className="text-secondary small fw-medium">Status</span>
+              <span className={`badge rounded-pill px-3 py-1 fw-bold ${
+                cancelled ? 'bg-danger text-white' :
                 currentStatus === 'Completed' ? 'bg-success text-white' :
-                currentStatus === 'Preparing' ? 'bg-warning text-dark' :
-                currentStatus === 'Ready' ? 'bg-info text-dark' :
-                currentStatus === 'Serving' ? 'bg-primary text-white' : 'bg-secondary text-white'
-              }`}>
-                {currentStatus}
+                currentStatus === 'Preparing' ? 'bg-warning text-dark' : 'bg-success-subtle text-success'
+              }`} data-testid="order-status">
+                {cancelled ? 'Cancelled' : currentStatus === 'Completed' ? 'Completed' : 'Preparing'}
               </span>
             </div>
 
-            <div className="d-flex flex-column gap-3.5 border-start ps-4 position-relative ms-2 my-2">
-              {stages.map((stage, idx) => {
-                const isPast = currentIndex > idx;
-                const isCurrent = currentIndex === idx;
-                const isFinished = currentStatus === 'Completed' || (isTakeawayOrder && (raw.status === 'SERVED' || raw.status === 'Served'));
-                const isDone = isPast || (isCurrent && isFinished);
-                const isColoured = isPast || isCurrent || isFinished;
+            <div className="d-flex align-items-center justify-content-between mb-2.5">
+              <span className="text-secondary small fw-medium">Order Type</span>
+              <span className="fw-bold text-dark">{isTakeawayOrder ? 'Takeaway' : 'Dine-in'}</span>
+            </div>
 
-                return (
-                  <div key={stage.key} className={`position-relative ${isDone ? 'text-dark' : isCurrent ? 'text-danger fw-bold' : 'text-muted'}`}>
-                    <span
-                      className="position-absolute rounded-circle d-flex align-items-center justify-content-center"
-                      style={{
-                        width: '18px',
-                        height: '18px',
-                        left: '-33px',
-                        top: '3px',
-                        backgroundColor: isColoured ? 'var(--primary-color, #dc3545)' : '#e2e8f0',
-                        color: '#ffffff',
-                        fontSize: '10px'
-                      }}
-                    >
-                      {isDone ? <FiCheck size={10} /> : isCurrent ? <span className="bg-white rounded-circle" style={{ width: '6px', height: '6px' }}></span> : null}
-                    </span>
-                    <div className="small">
-                      <span className="d-block text-dark fw-bold fs-6">
-                        {stage.label}
-                      </span>
-                      <span className="text-secondary small d-block mt-0.5">{stage.sub}</span>
-                    </div>
-                  </div>
-                );
-              })}
+            {!isTakeawayOrder && (raw.table || raw.table_number) && (
+              <div className="d-flex align-items-center justify-content-between mb-2.5">
+                <span className="text-secondary small fw-medium">Dining Table</span>
+                <span className="fw-bold text-dark">
+                  {typeof raw.table === 'object' ? raw.table?.label || raw.table?.table_number : raw.table || raw.table_number}
+                </span>
+              </div>
+            )}
+
+            <div className="d-flex align-items-center justify-content-between mb-2.5">
+              <span className="text-secondary small fw-medium">Payment</span>
+              <span className="fw-bold text-dark" data-testid="payment-status">
+                {isPaid ? 'Paid (UPI)' : (PAYMENT_LABEL[raw.payment_status] || 'Pay at the counter')}
+              </span>
+            </div>
+
+            <div className="d-flex align-items-center justify-content-between mb-2.5">
+              <span className="text-secondary small fw-medium">Items</span>
+              <span className="fw-bold text-dark">
+                {(raw.items || []).length} items
+              </span>
+            </div>
+
+            <div className="d-flex align-items-center justify-content-between pt-2 border-top border-light">
+              <span className="text-secondary small fw-bold">Total</span>
+              <span className="fw-bold fs-5" style={{ color: '#F20D2D' }} data-testid="order-total">
+                {formatCurrency(Number(raw.total_amount || raw.total || 0))}
+              </span>
             </div>
           </div>
-        )}
 
-        {/* Order Details Summary Card */}
-        <div className="card rounded-3 border-0 shadow-sm p-3 bg-white text-start mb-4">
-          <Row label="Order Number" testId="order-id">#{displayNo}</Row>
-          <Row label="Status" testId="order-status">{order.status}</Row>
-          <Row label="Order Type">{raw.order_type === 'TAKEAWAY' ? 'Takeaway' : 'Dine-In'}</Row>
-          {raw.table && <Row label="Dining Table">{raw.table.label}</Row>}
-          <Row label="Payment" testId="payment-status">{PAYMENT_LABEL[raw.payment_status] || raw.payment_status}</Row>
-          {(raw.items || []).map((item) => (
-            <Row key={item.id} label={`${item.name} × ${item.quantity}`}>
-              {formatCurrency(Number(item.line_total))}
-            </Row>
-          ))}
-          <div className="d-flex align-items-center justify-content-between pb-3">
-            <span className="text-secondary small">Total</span>
-            <span className="fw-bold text-danger" data-testid="order-total">{formatCurrency(Number(raw.total_amount))}</span>
-          </div>
-
-          {/* Primary Action Buttons from Screenshot 15 & 16 */}
-          <div className="d-flex flex-column flex-sm-row align-items-center justify-content-center gap-2.5 pt-3 border-top mt-3">
+          {/* Action Pill Buttons (3 horizontal on desktop, stacked on mobile) */}
+          <div className="d-flex flex-column flex-md-row align-items-stretch justify-content-center gap-2.5 pt-3">
             <button
               type="button"
               onClick={handleOpenBill}
-              className="btn btn-outline-danger rounded-pill px-4 py-2.5 fw-bold w-100 w-sm-auto d-flex align-items-center justify-content-center gap-1.5 shadow-xs"
-              style={{ fontSize: '13px', borderColor: 'var(--primary-color, #C8102E)', color: 'var(--primary-color, #C8102E)' }}
+              className="btn btn-outline-danger rounded-pill px-3 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
+              style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
             >
-              <FiFileText size={15} />
+              <FiFileText size={16} />
               <span>View E-Bill / Receipt</span>
             </button>
 
             <button
               type="button"
               onClick={() => navigate(`/customer/order-tracking/${raw.id}`)}
-              className="btn btn-outline-danger rounded-pill px-4 py-2.5 fw-bold w-100 w-sm-auto d-flex align-items-center justify-content-center gap-1.5 shadow-xs"
-              style={{ fontSize: '13px', borderColor: 'var(--primary-color, #C8102E)', color: 'var(--primary-color, #C8102E)' }}
+              className="btn btn-outline-danger rounded-pill px-3 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
+              style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
             >
               <span>Track Order</span>
             </button>
 
-            {(!isBillConfirmed && String(raw.status || '').toUpperCase() !== 'COMPLETED' && String(raw.payment_status || '').toUpperCase() !== 'PAID') && (
-              <button
-                type="button"
-                onClick={orderAgain}
-                className="btn btn-outline-danger rounded-pill px-4 py-2.5 fw-bold w-100 w-sm-auto d-flex align-items-center justify-content-center gap-1.5 shadow-xs"
-                style={{ fontSize: '13px', borderColor: 'var(--primary-color, #C8102E)', color: 'var(--primary-color, #C8102E)' }}
-              >
-                <span>Order Again</span>
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={orderAgain}
+              className="btn btn-outline-danger rounded-pill px-3 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
+              style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
+            >
+              <span>Order Again</span>
+            </button>
           </div>
         </div>
 
@@ -443,7 +453,6 @@ export const OrderConfirmation = () => {
             </div>
           </div>
         )}
-        <div style={{ height: '40px' }} className="d-md-none w-100"></div>
       </main>
 
       <EBillModal

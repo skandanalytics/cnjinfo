@@ -47,12 +47,15 @@ export const Settings = () => {
     <AdminLayout>
       <PageHeader title="Store Settings" showBackButton />
 
-      <div className="card border-0 shadow-sm rounded-3 p-4 bg-white" style={{ maxWidth: '500px' }}>
-        <h5 className="fw-bold text-dark mb-4 border-bottom pb-2">Configuration Panel</h5>
+      <div 
+        className="card border shadow-sm rounded-4 p-4" 
+        style={{ maxWidth: '540px', backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)' }}
+      >
+        <h5 className="fw-bold mb-4 border-bottom pb-2" style={{ color: 'var(--text-primary)', borderColor: 'var(--border-subtle)' }}>Configuration Panel</h5>
         <p className="small text-muted">GST is 5% on each branch and is stored with every order. Notification switches stay in this browser.</p>
 
         <div className="mb-4">
-          <h6 className="fw-bold text-dark mb-3">Notification Options</h6>
+          <h6 className="fw-bold mb-3" style={{ color: 'var(--text-primary)' }}>Notification Options</h6>
           <Toggle
             label="Enable Desktop Notifications"
             checked={allowNotifications}

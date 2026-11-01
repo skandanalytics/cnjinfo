@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CustomerLayout from '../../components/layout/CustomerLayout';
 import { useCart } from '../../hooks/useCart';
@@ -53,14 +53,29 @@ export const Cart = () => {
   const [showAllCoupons, setShowAllCoupons] = useState(false);
   const [availableCoupons, setAvailableCoupons] = useState([]);
   const [isFirstTime, setIsFirstTime] = useState(true);
+  const hasEverHadItemsRef = useRef(false);
 
   const { products } = useProducts();
+
+  useEffect(() => {
+    if (cartItems.length > 0) {
+      hasEverHadItemsRef.current = true;
+    } else if (hasEverHadItemsRef.current) {
+      // Deleting last item automatically redirects to customer home
+      navigate('/customer/home', { replace: true });
+    }
+  }, [cartItems.length, navigate]);
 
   useEffect(() => {
     let isMounted = true;
     const fetchCouponsAndEligibility = async () => {
       const data = await couponService.getCoupons().catch(() => []);
-      const activeOnly = (Array.isArray(data) ? data : []).filter(c => c.is_active !== false && c.status !== 'Inactive');
+      const now = new Date();
+      const activeOnly = (Array.isArray(data) ? data : []).filter(c => {
+        if (c.is_active === false || c.status === 'Inactive' || c.isActive === false) return false;
+        if (c.valid_until && new Date(c.valid_until) < now) return false;
+        return true;
+      });
       if (isMounted) setAvailableCoupons(activeOnly);
       const firstTimeStatus = await isFirstTimeCustomer(user);
       if (isMounted) {
@@ -235,6 +250,33 @@ export const Cart = () => {
     <CustomerLayout>
       <main className="pt-2">
         <CheckoutStepper currentStep={1} />
+
+        {/* Continuing Order Notice */}
+        {Boolean(sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')) && (
+          <div className="alert alert-info py-2.5 px-3.5 mb-4 d-flex align-items-center justify-content-between gap-2 small rounded-3 border-0 shadow-xs" style={{ fontSize: '13px' }}>
+            <div className="d-flex align-items-center gap-2">
+              <i className="bi bi-info-circle-fill text-primary flex-shrink-0 fs-6" />
+              <div>
+                <strong>Continuing Order #{sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')}</strong>
+                <span className="text-secondary d-block mt-0.5" style={{ fontSize: '12px' }}>
+                  These dishes will be appended to your active dining table order ticket.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="btn btn-xs btn-outline-secondary rounded-pill px-2.5 py-1"
+              style={{ fontSize: '11px' }}
+              onClick={() => {
+                sessionStorage.removeItem('foodie_parent_order_id');
+                localStorage.removeItem('foodie_parent_order_id');
+                window.location.reload();
+              }}
+            >
+              Cancel Continuation
+            </button>
+          </div>
+        )}
 
         <div className="d-flex align-items-center gap-3 mb-4">
           <BackButton />
@@ -411,7 +453,7 @@ export const Cart = () => {
                     <button 
                       type="submit" 
                       className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm flex-shrink-0"
-                      style={{ height: '40px', backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)' }}
+                      style={{ height: '40px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)' }}
                     >
                       Apply
                     </button>
@@ -590,7 +632,7 @@ export const Cart = () => {
                     type="button"
                     onClick={handleCheckout} 
                     className="btn btn-danger w-100 rounded-pill py-3 fw-bold shadow-sm"
-                    style={{ height: '48px', backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', fontSize: '15px' }}
+                    style={{ height: '48px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)', fontSize: '15px' }}
                   >
                     Proceed to Checkout
                   </button>
@@ -598,7 +640,7 @@ export const Cart = () => {
                     type="button"
                     onClick={() => navigate('/customer/home')}
                     className="btn btn-outline-danger w-100 rounded-pill py-2.5 fw-bold bg-white"
-                    style={{ fontSize: '13px', borderColor: 'var(--primary-color, #C8102E)', color: 'var(--primary-color, #C8102E)' }}
+                    style={{ fontSize: '13px', borderColor: 'var(--primary-color, #F20D2D)', color: 'var(--primary-color, #F20D2D)' }}
                   >
                     Save and Continue (Add More Items)
                   </button>

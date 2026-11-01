@@ -176,25 +176,10 @@ export const OrderTracking = () => {
   if (loading && !order) {
     return (
       <CustomerLayout>
-        <div className="min-vh-100 d-flex align-items-center justify-content-center">
+        <div className="min-vh-50 d-flex flex-column align-items-center justify-content-center py-5">
           <Loader />
+          <p className="text-secondary small mt-3">Loading order tracking details...</p>
         </div>
-      </CustomerLayout>
-    );
-  }
-
-  if (error && !order) {
-    return (
-      <CustomerLayout>
-        <main className="pt-4 text-center mx-auto" style={{ maxWidth: '600px' }}>
-          <div className="text-start mb-3">
-            <BackButton to="/customer/home" />
-          </div>
-          <div className="alert alert-danger p-4 rounded-3 text-center shadow-sm">
-            <h5 className="fw-bold mb-2">Error Loading Tracking</h5>
-            <p className="small mb-0">{error}</p>
-          </div>
-        </main>
       </CustomerLayout>
     );
   }
@@ -202,28 +187,32 @@ export const OrderTracking = () => {
   if (!order) {
     return (
       <CustomerLayout>
-        <main className="pt-4 text-center mx-auto" style={{ maxWidth: '600px' }}>
-          <div className="text-start mb-3">
-            <BackButton to="/customer/home" />
+        <div className="text-center py-5 mx-auto" style={{ maxWidth: '480px' }}>
+          <div 
+            className="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
+            style={{ width: '64px', height: '64px', backgroundColor: '#FEE2E2', color: '#EF4444' }}
+          >
+            <FiXCircle size={32} />
           </div>
-          <div className="alert alert-warning p-4 rounded-3 text-center shadow-sm">
-            <h5 className="fw-bold mb-2">Order Not Found</h5>
-            <p className="small mb-0">Order not found.</p>
-          </div>
-        </main>
+          <h4 className="fw-bold text-dark mb-2">Order Not Found</h4>
+          <p className="text-secondary small mb-4">
+            {error || `We couldn't find order #${orderId}. Please check the order number or return to the menu.`}
+          </p>
+          <BackButton to="/customer/home" />
+        </div>
       </CustomerLayout>
     );
   }
 
-  const isTakeawayOrder = order?.orderType === 'Takeaway' ||
-    order?.order_type === 'TAKEAWAY' ||
-    order?.table === 'Takeaway' ||
-    String(order?.table || '').toLowerCase() === 'takeaway';
+  const isTakeawayOrder = order.orderType === 'Takeaway' ||
+    order.order_type === 'TAKEAWAY' ||
+    order.table === 'Takeaway' ||
+    String(order.table || '').toLowerCase() === 'takeaway';
 
   const isPaid = Boolean(
-    order?.is_paid ||
-    order?.isPaid ||
-    String(order?.payment_status || order?.paymentStatus || '').toUpperCase() === 'PAID'
+    order.is_paid ||
+    order.isPaid ||
+    String(order.payment_status || order.paymentStatus || '').toUpperCase() === 'PAID'
   );
 
   // Pipeline order stages mapping (Takeaway orders omit the Dine-in only Serving stage)
@@ -241,7 +230,7 @@ export const OrderTracking = () => {
   ];
 
   const resolveCurrentStatus = () => {
-    return normalizeStatus(order?.status, isTakeawayOrder);
+    return normalizeStatus(order.status, isTakeawayOrder);
   };
 
   const currentStatus = resolveCurrentStatus();
@@ -259,206 +248,105 @@ export const OrderTracking = () => {
 
   return (
     <CustomerLayout>
-      <main className="pt-2 text-start mx-auto animate-fade-in" style={{ maxWidth: '600px' }}>
+      <main className="pt-3 pb-5 mx-auto" style={{ maxWidth: '960px' }}>
         <div className="d-flex align-items-center justify-content-between mb-4">
-          <div className="d-flex align-items-center gap-3">
-            <BackButton to="/customer/home" />
-            <h4 className="fw-bold text-dark mb-0">Track Order</h4>
+          <div>
+            <h3 className="fw-bold text-dark mb-1">Track Order</h3>
+            <p className="text-secondary small mb-0">
+              Order <span className="font-monospace fw-bold text-dark">#{formatOrderDisplayNumber(order, orderId)}</span>
+              {(order.time || order.created_at) && ` · Placed on ${order.time || order.created_at}`}
+            </p>
           </div>
+          <BackButton to="/customer/home" />
         </div>
 
-        {/* Info Header Card for Tracked Order */}
-        <div className="card rounded-4 border-0 shadow-sm p-4 bg-white mb-4">
-          <div className="d-flex justify-content-between align-items-start mb-3">
-            <div>
-              <span className="small text-secondary fw-semibold">ORDER ID</span>
-              <h4 className="fw-extrabold text-dark mb-0 font-monospace">
-                #{formatOrderDisplayNumber(order, orderId)}
-              </h4>
-            </div>
-            <div className="text-end">
-              <span className="small text-secondary fw-semibold">TOTAL AMOUNT</span>
-              <h4 className="fw-bold text-danger mb-0">{formatCurrency(getOrderTotal(order))}</h4>
-            </div>
-          </div>
+        {/* Horizontal Status Timeline Card (Screenshot 10) */}
+        <div className="card rounded-4 border border-light-subtle shadow-sm p-4 bg-white mb-4">
+          <div className="position-relative py-3">
+            {/* Background connecting line */}
+            <div 
+              className="position-absolute" 
+              style={{ 
+                top: '32px', 
+                left: '10%', 
+                right: '10%', 
+                height: '3px', 
+                backgroundColor: '#E2E8F0',
+                zIndex: 0
+              }} 
+            />
+            {/* Active connecting line */}
+            <div 
+              className="position-absolute" 
+              style={{ 
+                top: '32px', 
+                left: '10%', 
+                width: currentIndex === 0 ? '0%' : currentIndex === 1 ? '27%' : currentIndex === 2 ? '54%' : '80%', 
+                height: '3px', 
+                backgroundColor: '#F20D2D',
+                transition: 'width 0.4s ease',
+                zIndex: 0
+              }} 
+            />
 
-          <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 pt-3 border-top border-light-subtle small text-secondary">
-            <div className="d-flex align-items-center gap-1.5">
-              <FiClock className="text-muted" />
-              <span>Placed at: <strong>{order.time}</strong></span>
-            </div>
-            {(order.voucher || order.voucherCode || order.coupon) && (
-              <div className="d-flex align-items-center gap-1.5 text-success">
-                <span>Voucher Applied: <strong className="font-monospace">{order.voucher || order.voucherCode || order.coupon}</strong></span>
-              </div>
-            )}
-            <div>
-              <span>Table Context: <strong>{order.table || 'Takeaway'}</strong></span>
-            </div>
-            <div>
-              <span>Payment: <strong className={isPaid ? 'text-success' : 'text-warning-emphasis'}>{isPaid ? 'PAID' : 'UNPAID'}</strong></span>
-            </div>
-          </div>
+            <div className="d-flex justify-content-between position-relative" style={{ zIndex: 1 }}>
+              {[
+                { key: 'Pending', label: 'Order Placed', time: order.time || '11:42 AM' },
+                { key: 'Preparing', label: 'Cooking in Kitchen', time: 'In Kitchen' },
+                { key: 'Ready', label: 'Ready for Serving', time: 'Prepared' },
+                { key: 'Completed', label: 'Completed', time: 'Completed' },
+              ].map((stage, idx) => {
+                const isFinished = currentStatus === 'Completed' || (isTakeawayOrder && (order?.status === 'SERVED' || order?.status === 'Served'));
+                const isDone = currentIndex > idx || (idx === currentIndex && isFinished);
+                const isCurrent = currentIndex === idx && !isFinished;
 
-          <div className="pt-3 mt-3 border-top border-light d-flex flex-column gap-2">
-            <div className="d-flex gap-2">
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const { fetchCustomerBillPreview } = await import('../../services/customerCheckout');
-                    const preview = await fetchCustomerBillPreview(order.id || orderId);
-                    setOrder(prev => ({
-                      ...prev,
-                      ...preview,
-                      items: preview.items || prev.items,
-                      combined_items: preview.items,
-                      total: preview.total_amount || prev.total,
-                      total_amount: preview.total_amount || prev.total_amount,
-                    }));
-                  } catch (e) {
-                    console.warn('Could not fetch bill preview', e);
-                  }
-                  setShowReceiptModal(true);
-                }}
-                className="btn btn-outline-danger w-50 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-xs"
-              >
-                <i className="bi bi-receipt"></i>
-                <span>View Bill</span>
-              </button>
+                let circleBg = '#E2E8F0';
+                let circleColor = '#94A3B8';
+                let circleBorder = '3px solid #FFFFFF';
 
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    const { proceedOrderToBill } = await import('../../services/customerCheckout');
-                    const targetId = order?.id || orderId;
-                    const data = await proceedOrderToBill(targetId);
-                    const updatedOrder = data.order || data;
-                    const preview = data.bill || {};
-                    statusRef.current = 'Completed';
-                    setOrder(prev => ({
-                      ...prev,
-                      ...updatedOrder,
-                      ...preview,
-                      status: 'Completed',
-                      backendStatus: 'COMPLETED',
-                      items: preview.items || prev.items,
-                      combined_items: preview.items,
-                      total: preview.total_amount || prev.total,
-                      total_amount: preview.total_amount || prev.total_amount,
-                    }));
-                  } catch (e) {
-                    console.warn('Could not proceed to bill directly:', e);
-                  }
-                  setShowReceiptModal(true);
-                }}
-                className="btn btn-danger w-50 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-xs"
-                style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)' }}
-              >
-                <i className="bi bi-arrow-right-circle"></i>
-                <span>{currentStatus === 'Completed' ? 'Show E-Bill' : 'Proceed to Bill'}</span>
-              </button>
-            </div>
+                if (isDone) {
+                  circleBg = '#16A34A';
+                  circleColor = '#FFFFFF';
+                } else if (isCurrent) {
+                  circleBg = '#F20D2D';
+                  circleColor = '#FFFFFF';
+                  circleBorder = '4px solid #FEE2E2';
+                }
 
-            {order.orderType !== 'Takeaway' && String(order.table).toLowerCase() !== 'takeaway' && String(order.status || '').toUpperCase() !== 'CANCELLED' && String(order.status || '').toUpperCase() !== 'COMPLETED' && currentStatus !== 'Completed' && String(order.payment_status || order.paymentStatus || '').toUpperCase() !== 'PAID' && (
-              <button
-                type="button"
-                onClick={() => {
-                  const rootId = order.parent_order_id || order.id || orderId;
-                  sessionStorage.setItem('foodie_parent_order_id', String(rootId));
-                  localStorage.setItem('foodie_parent_order_id', String(rootId));
-                  const tid = order.table_id || order.tableId;
-                  if (tid) {
-                    sessionStorage.setItem('foodie_selected_table', String(tid));
-                    localStorage.setItem('foodie_selected_table', String(tid));
-                    sessionStorage.setItem('foodie_order_type', 'DINE_IN');
-                    localStorage.setItem('foodie_order_type', 'DINE_IN');
-                  }
-                  navigate('/customer/home');
-                }}
-                className="btn btn-outline-danger w-100 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 rounded-pill shadow-xs mt-2"
-              >
-                <i className="bi bi-plus-circle"></i>
-                <span>Order More Dishes (Continue Order)</span>
-              </button>
-            )}
-          </div>
-        </div>
-
-        {isPaid && (
-          <div className="alert alert-success rounded-4 p-3 small text-start mb-4 shadow-sm d-flex align-items-center gap-2">
-            <FiCheck size={18} className="text-success flex-shrink-0" />
-            <div>
-              <strong>Payment Received!</strong> Your bill has been settled successfully.
-            </div>
-          </div>
-        )}
-
-        {!isPaid && currentStatus === 'Completed' && (
-          <div className="alert alert-warning rounded-4 p-3 small text-start mb-4 shadow-sm d-flex align-items-center justify-content-between">
-            <div className="d-flex align-items-center gap-2">
-              <FiClock size={18} className="text-warning-emphasis flex-shrink-0" />
-              <div>
-                <strong>Order Completed · Payment Pending.</strong> Please settle your bill below or at the counter.
-              </div>
-            </div>
-            <span className="badge bg-warning text-dark fw-bold">UNPAID</span>
-          </div>
-        )}
-
-        {/* Tracking Stages Flow */}
-        <div className="card rounded-4 border-0 shadow-sm p-4 bg-white mb-4">
-          <h5 className="fw-bold text-dark mb-4">Order Status Pipeline</h5>
-          
-          <div className="d-flex flex-column gap-4 border-start ps-4 position-relative ms-2">
-            {stages.map((stage, idx) => {
-              const isPast = currentIndex > idx;
-              const isCurrent = currentIndex === idx;
-              const isOrderFinished = currentStatus === 'Completed' || (isTakeawayOrder && (order?.status === 'SERVED' || order?.status === 'Served'));
-              const isDone = isPast || (isCurrent && isOrderFinished);
-
-              let textClass = 'text-muted';
-              let icon = null;
-              
-              if (isDone) {
-                textClass = 'text-dark';
-                icon = <FiCheck size={10} />;
-              } else if (isCurrent) {
-                textClass = 'text-danger fw-bold';
-                icon = <span className="bg-white rounded-circle" style={{ width: '6px', height: '6px' }}></span>;
-              }
-
-              const isColoured = isPast || isCurrent || isOrderFinished;
-
-              return (
-                <div key={stage.key} className={`position-relative ${textClass}`}>
-                  {/* Left Circle Indicator */}
-                  <span 
-                    className="position-absolute rounded-circle d-flex align-items-center justify-content-center" 
-                    style={{ 
-                      width: '18px', 
-                      height: '18px', 
-                      left: '-33px', 
-                      top: '3px',
-                      backgroundColor: isColoured ? 'var(--primary-color)' : '#e2e8f0',
-                      color: '#ffffff',
-                      fontSize: '10px'
-                    }}
-                  >
-                    {icon}
-                  </span>
-                  
-                  {/* Label & Details */}
-                  <div className="small">
-                    <span className="d-block text-dark fw-bold fs-6">
-                      {stage.key === 'Pending' ? 'Order Confirmed' : stage.label}
-                    </span>
-                    <span className="text-secondary small d-block mt-0.5">{stage.sub}</span>
+                return (
+                  <div key={stage.key} className="text-center" style={{ width: '130px' }}>
+                    <div 
+                      className="rounded-circle mx-auto d-flex align-items-center justify-content-center shadow-xs"
+                      style={{ 
+                        width: '36px', 
+                        height: '36px', 
+                        backgroundColor: circleBg, 
+                        color: circleColor,
+                        border: circleBorder,
+                        fontSize: '13px',
+                        transition: 'all 0.3s'
+                      }}
+                    >
+                      {isDone ? (
+                        <FiCheck size={16} strokeWidth={3} />
+                      ) : isCurrent ? (
+                        <span className="spinner-grow spinner-grow-sm" role="status" style={{ width: '10px', height: '10px' }}></span>
+                      ) : (
+                        <span>{idx + 1}</span>
+                      )}
+                    </div>
+                    <div className="mt-2.5">
+                      <span className={`d-block small ${isCurrent ? 'fw-bold text-danger' : isDone ? 'fw-bold text-dark' : 'text-muted'}`} style={{ fontSize: '13px' }}>
+                        {stage.label}
+                      </span>
+                      {stage.key === 'Pending' && order.time && (
+                        <span className="text-secondary" style={{ fontSize: '11px' }}>{order.time}</span>
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
 
@@ -468,36 +356,176 @@ export const OrderTracking = () => {
           </div>
         )}
 
-        {/* Items Summary Card for Current Order */}
-        <div className="card rounded-4 border-0 shadow-sm p-4 bg-white mb-4">
-          <h5 className="fw-bold text-dark mb-3">Items in Order #{formatOrderDisplayNumber(order, order.id)}</h5>
-          <div className="d-flex flex-column gap-2">
-            {Array.isArray(order.items) && order.items.length > 0 ? (
-              order.items.map((i, idx) => (
-                <div key={idx} className="d-flex align-items-center justify-content-between py-2 border-bottom border-light last-border-none">
-                  <div className="d-flex align-items-start gap-2">
-                    <span className={`mt-1 ${normalizeFoodType(i.foodType || i.type || (i.is_veg === false || i.is_veg === 'false' ? 'non-veg' : 'veg')) === 'veg' ? 'veg-badge' : normalizeFoodType(i.foodType || i.type || (i.is_veg === false || i.is_veg === 'false' ? 'non-veg' : 'veg')) === 'vegan' ? 'vegan-badge' : 'non-veg-badge'}`}></span>
-                    <div>
-                      <span className="fw-bold text-dark">{i.name || 'Dish Item'}</span>
-                      <span className="text-secondary small ms-2">x{i.quantity || 1}</span>
-                      {Array.isArray(i.extraIngredients || i.customizations) && (i.extraIngredients || i.customizations).length > 0 && (
-                        <div className="text-muted small mt-0.5">
-                          <strong className="text-secondary">Extra ingredients:</strong> {(i.extraIngredients || i.customizations).map(ex => typeof ex === 'string' ? ex : (ex?.name || '')).filter(Boolean).join(', ')}
+        {/* Two-Column Workspace: Order Items (Left) + Order Summary (Right) */}
+        <div className="row g-4">
+          {/* Left Column: Order Items */}
+          <div className="col-12 col-lg-7">
+            <div className="card rounded-4 border border-light-subtle shadow-sm p-4 bg-white h-100">
+              <h5 className="fw-bold text-dark mb-3">Order Items</h5>
+              <div className="d-flex flex-column gap-3">
+                {Array.isArray(order.items) && order.items.length > 0 ? (
+                  order.items.map((i, idx) => (
+                    <div key={idx} className="d-flex align-items-center justify-content-between py-2 border-bottom border-light last-border-none">
+                      <div className="d-flex align-items-center gap-3">
+                        <div 
+                          className="rounded-3 d-flex align-items-center justify-content-center bg-light flex-shrink-0"
+                          style={{ width: '48px', height: '48px', overflow: 'hidden' }}
+                        >
+                          {i.image ? (
+                            <img src={i.image} alt={i.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          ) : (
+                            <span className={`${normalizeFoodType(i.foodType || i.type || (i.is_veg === false || i.is_veg === 'false' ? 'non-veg' : 'veg')) === 'veg' ? 'veg-badge' : 'non-veg-badge'}`}></span>
+                          )}
                         </div>
-                      )}
-                      {(i.instructions || i.special_instructions) && (
-                        <div className="text-muted fst-italic small mt-0.5">
-                          <strong className="text-secondary fst-normal">Instructions:</strong> {i.instructions || i.special_instructions}
+                        <div>
+                          <div className="d-flex align-items-center gap-1.5">
+                            <span className="fw-bold text-dark">{i.name || 'Dish Item'}</span>
+                            <span className="text-secondary small fw-medium">× {i.quantity || 1}</span>
+                          </div>
+                          {(i.instructions || i.special_instructions) && (
+                            <div className="text-muted small fst-italic">
+                              Note: {i.instructions || i.special_instructions}
+                            </div>
+                          )}
                         </div>
-                      )}
+                      </div>
+                      <span className="fw-bold text-dark">{formatCurrency((i.price || 0) * (i.quantity || 1))}</span>
                     </div>
-                  </div>
-                  <span className="fw-semibold text-dark">{formatCurrency((i.price || 0) * (i.quantity || 1))}</span>
+                  ))
+                ) : (
+                  <p className="text-muted small mb-0">Order received and confirmed.</p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Order Summary */}
+          <div className="col-12 col-lg-5">
+            <div className="card rounded-4 border border-light-subtle shadow-sm p-4 bg-white">
+              <h5 className="fw-bold text-dark mb-3">Order Summary</h5>
+              
+              <div className="d-flex flex-column gap-2 mb-3">
+                <div className="d-flex justify-content-between text-secondary small">
+                  <span>Items Total</span>
+                  <span className="fw-semibold text-dark">
+                    {formatCurrency(Number(order.items_total || order.subtotal || getOrderTotal(order)))}
+                  </span>
                 </div>
-              ))
-            ) : (
-              <p className="text-muted small mb-0">Order received and confirmed.</p>
-            )}
+
+                {Number(order.discount || order.menu_discount || 0) > 0 && (
+                  <div className="d-flex justify-content-between small text-success">
+                    <span>Menu Discount</span>
+                    <span className="fw-semibold">-{formatCurrency(Number(order.discount || order.menu_discount))}</span>
+                  </div>
+                )}
+
+                {Number(order.coupon_discount || order.voucher_discount || 0) > 0 && (
+                  <div className="d-flex justify-content-between small text-success">
+                    <span>Coupon Discount</span>
+                    <span className="fw-semibold">-{formatCurrency(Number(order.coupon_discount || order.voucher_discount))}</span>
+                  </div>
+                )}
+
+                {Number(order.tax || 0) > 0 && (
+                  <div className="d-flex justify-content-between text-secondary small">
+                    <span>GST (5%)</span>
+                    <span className="fw-semibold text-dark">{formatCurrency(Number(order.tax))}</span>
+                  </div>
+                )}
+
+                <div className="d-flex justify-content-between align-items-center pt-3 border-top border-light mt-1">
+                  <span className="fw-bold text-dark">Grand Total</span>
+                  <span className="fw-bold fs-5" style={{ color: '#F20D2D' }}>
+                    {formatCurrency(getOrderTotal(order))}
+                  </span>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="d-flex flex-column gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      const { fetchCustomerBillPreview } = await import('../../services/customerCheckout');
+                      const preview = await fetchCustomerBillPreview(order.id || orderId);
+                      setOrder(prev => ({
+                        ...prev,
+                        ...preview,
+                        items: preview.items || prev.items,
+                        combined_items: preview.items,
+                        total: preview.total_amount || prev.total,
+                        total_amount: preview.total_amount || prev.total_amount,
+                      }));
+                    } catch (e) {
+                      console.warn('Could not fetch bill preview', e);
+                    }
+                    setShowReceiptModal(true);
+                  }}
+                  className="btn btn-outline-danger w-100 py-2.5 fw-bold rounded-pill"
+                  style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                >
+                  <FiFileText size={16} className="me-1.5" />
+                  <span>View E-Bill</span>
+                </button>
+
+                {order.orderType !== 'Takeaway' && String(order.table).toLowerCase() !== 'takeaway' && String(order.status || '').toUpperCase() !== 'CANCELLED' && String(order.status || '').toUpperCase() !== 'COMPLETED' && currentStatus !== 'Completed' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const rootId = order.parent_order_id || order.parent_order || order.id || orderId;
+                      sessionStorage.setItem('foodie_parent_order_id', String(rootId));
+                      localStorage.setItem('foodie_parent_order_id', String(rootId));
+                      let tid = order.table_id || (typeof order.table === 'object' ? order.table?.id : (Number(order.table) || null)) || order.tableId;
+                      const tNum = order.table_number || order.tableNumber || (typeof order.table === 'object' ? order.table?.table_number || order.table?.label : order.table);
+
+                      if (!tid && tNum) {
+                        try {
+                          const { resolvePublicBranchId, availableTables } = await import('../../services/customerCheckout');
+                          const branchId = order.branch || order.branch_id || await resolvePublicBranchId();
+                          if (branchId) {
+                            const tables = await availableTables(branchId);
+                            const cleanTarget = String(tNum).toUpperCase().trim();
+                            const matched = tables.find(t =>
+                              String(t.table_number).toUpperCase().trim() === cleanTarget ||
+                              String(t.table_number).toUpperCase().trim() === cleanTarget.replace(/^TABLE\s*/i, '') ||
+                              `T${String(t.table_number).replace(/\D/g, '').padStart(2, '0')}` === cleanTarget
+                            );
+                            if (matched) tid = matched.id;
+                          }
+                        } catch (e) {
+                          console.warn('Could not resolve table id by number:', e);
+                        }
+                      }
+
+                      if (tid) {
+                        sessionStorage.setItem('foodie_selected_table', String(tid));
+                        localStorage.setItem('foodie_selected_table', String(tid));
+                      }
+                      sessionStorage.setItem('foodie_order_type', 'DINE_IN');
+                      localStorage.setItem('foodie_order_type', 'DINE_IN');
+
+                      const phone = order.customer_phone || order.customerPhone || order.phone;
+                      if (phone) {
+                        sessionStorage.setItem('customer_mobile', String(phone));
+                        localStorage.setItem('customer_mobile', String(phone));
+                      }
+                      const name = order.customer_name || order.customerName;
+                      if (name && typeof name === 'string') {
+                        sessionStorage.setItem('customer_name', String(name));
+                        localStorage.setItem('customer_name', String(name));
+                      }
+
+                      navigate('/customer/home');
+                    }}
+                    className="btn btn-outline-danger w-100 py-2.5 fw-bold rounded-pill"
+                    style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                  >
+                    <span>Order Again / Add Dishes</span>
+                  </button>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       </main>

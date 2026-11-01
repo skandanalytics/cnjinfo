@@ -11,7 +11,7 @@
   min-width: 250px;
   max-width: 250px;
   flex: 0 0 250px;
-  background-color: var(--sidebar-bg, #111827);
+  background-color: var(--sidebar-bg, #101B29);
   color: var(--sidebar-text, #94A3B8);
   height: 100vh;
   position: fixed;
@@ -24,7 +24,7 @@
   overflow-y: auto;
   overflow-x: hidden;
   box-sizing: border-box;
-  border-right: 1px solid var(--sidebar-border, #1F2937);
+  border-right: 1px solid var(--sidebar-border, #182638);
 }
 
 .sidebar-container.collapsed {
@@ -36,7 +36,7 @@
 
 .sidebar-header {
   padding: 20px;
-  border-bottom: 1px solid var(--sidebar-border, #1F2937);
+  border-bottom: 1px solid var(--sidebar-border, #182638);
 }
 
 .sidebar-menu {
@@ -75,9 +75,9 @@
 }
 .sidebar-link.active {
   color: #fff !important;
-  background-color: var(--primary-color, #C8102E) !important;
+  background-color: var(--primary-color, #F20D2D) !important;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(200, 16, 46, 0.35);
+  box-shadow: 0 2px 8px rgba(242, 13, 45, 0.35);
 }
 
 .sidebar-container.collapsed .sidebar-link {
@@ -90,7 +90,7 @@
 .stat-card {
   padding: 20px;
   border-radius: var(--border-radius-md);
-  border: 1.5px solid var(--border-color, #e2e8f0) !important;
+  border: 1.5px solid var(--border-color, #DCE6F2) !important;
   background-color: var(--surface-color, #ffffff);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05) !important;
   display: flex;

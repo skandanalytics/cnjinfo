@@ -185,6 +185,8 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('foodie_token_admin', token || '');
       localStorage.setItem('foodie_auth_admin', payload);
     } else {
+      sessionStorage.setItem(`foodie_token_${roleKey}`, token || '');
+      sessionStorage.setItem(`foodie_auth_${roleKey}`, payload);
       localStorage.setItem(`foodie_token_${roleKey}`, token || '');
       localStorage.setItem(`foodie_auth_${roleKey}`, payload);
       if (refresh) {

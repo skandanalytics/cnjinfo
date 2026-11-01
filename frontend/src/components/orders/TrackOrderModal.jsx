@@ -81,8 +81,8 @@ export const TrackOrderModal = ({
               height: '42px', 
               fontSize: '13px', 
               backgroundColor: '#FFFFFF', 
-              color: 'var(--primary-color, #C8102E)', 
-              border: '1.5px solid var(--primary-color, #C8102E)' 
+              color: 'var(--primary-color, #F20D2D)', 
+              border: '1.5px solid var(--primary-color, #F20D2D)' 
             }}
           >
             Continue Order
@@ -96,8 +96,8 @@ export const TrackOrderModal = ({
           style={{ 
             height: '42px', 
             fontSize: '13px', 
-            backgroundColor: 'var(--primary-color, #C8102E)', 
-            borderColor: 'var(--primary-color, #C8102E)' 
+            backgroundColor: 'var(--primary-color, #F20D2D)', 
+            borderColor: 'var(--primary-color, #F20D2D)' 
           }}
         >
           {rawStatus === 'COMPLETED' ? 'View E-Bill' : 'Proceed to Bill'}
@@ -145,7 +145,7 @@ export const TrackOrderModal = ({
       <div className="rounded-3 overflow-hidden border mb-3">
         <div 
           className="d-flex align-items-center justify-content-between px-3 py-2 text-white fw-bold small" 
-          style={{ backgroundColor: 'var(--primary-color, #C8102E)', fontSize: '13px' }}
+          style={{ backgroundColor: 'var(--primary-color, #F20D2D)', fontSize: '13px' }}
         >
           <span style={{ flex: 2 }}>Item</span>
           <span className="text-center" style={{ flex: 1 }}>Qty</span>
@@ -194,7 +194,7 @@ export const TrackOrderModal = ({
           <span>GST (5%)</span>
           <span>{formatCurrency(tax)}</span>
         </div>
-        <div className="d-flex justify-content-between fw-bold fs-5 pt-2 border-top mt-1" style={{ color: 'var(--primary-color, #C8102E)' }}>
+        <div className="d-flex justify-content-between fw-bold fs-5 pt-2 border-top mt-1" style={{ color: 'var(--primary-color, #F20D2D)' }}>
           <span>Grand Total</span>
           <span>{formatCurrency(grandTotal)}</span>
         </div>

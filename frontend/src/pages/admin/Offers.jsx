@@ -401,14 +401,14 @@ export const Offers = () => {
       />
 
       {/* Tabs Switcher */}
-      <div className="d-flex gap-2 mb-4 border-bottom pb-3">
+      <div className="d-flex gap-2 mb-4 border-bottom pb-3" style={{ borderColor: 'var(--border-subtle)' }}>
         <button
           onClick={() => setActiveTab('dishes')}
-          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-flex align-items-center gap-2 transition-all ${activeTab === 'dishes'
-              ? 'bg-danger text-white border-danger shadow-sm'
-              : 'bg-white text-secondary border'
+          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-flex align-items-center gap-2 transition-all border-0 ${activeTab === 'dishes'
+              ? 'text-white shadow-sm'
+              : 'text-secondary border'
             }`}
-          style={{ fontSize: '13px' }}
+          style={{ fontSize: '13px', backgroundColor: activeTab === 'dishes' ? 'var(--primary-color, #F20D2D)' : 'var(--surface-color)' }}
         >
           <FiTag size={15} />
           <span>Dish Discounts & Special Offers ({filteredDishes.length})</span>
@@ -416,11 +416,11 @@ export const Offers = () => {
 
         <button
           onClick={() => setActiveTab('coupons')}
-          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-flex align-items-center gap-2 transition-all ${activeTab === 'coupons'
-              ? 'bg-danger text-white border-danger shadow-sm'
-              : 'bg-white text-secondary border'
+          className={`btn btn-sm rounded-pill px-3.5 py-2 fw-bold d-flex align-items-center gap-2 transition-all border-0 ${activeTab === 'coupons'
+              ? 'text-white shadow-sm'
+              : 'text-secondary border'
             }`}
-          style={{ fontSize: '13px' }}
+          style={{ fontSize: '13px', backgroundColor: activeTab === 'coupons' ? 'var(--primary-color, #F20D2D)' : 'var(--surface-color)' }}
         >
           <FiGift size={15} />
           <span>Promo Vouchers & Coupons ({filteredCoupons.length})</span>
@@ -433,10 +433,13 @@ export const Offers = () => {
           <p className="text-muted small mt-2">Loading offers...</p>
         </div>
       ) : activeTab === 'dishes' ? (
-        <div className="card border-0 shadow-sm rounded-3 p-4 bg-white">
+        <div 
+          className="card border shadow-sm rounded-4 p-4"
+          style={{ backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)' }}
+        >
           <div className="d-flex align-items-center justify-content-between mb-3 flex-wrap gap-2">
             <div>
-              <h5 className="fw-bold text-dark mb-0">Active Dish Discounts & Offers</h5>
+              <h5 className="fw-bold mb-0" style={{ color: 'var(--text-primary)' }}>Active Dish Discounts & Offers</h5>
               <p className="text-muted small mb-0">Special discount prices configured on menu items visible to both admin and customers.</p>
             </div>
             <span className="badge bg-danger-subtle text-danger fw-bold rounded-pill px-3 py-1.5" style={{ fontSize: '12px' }}>

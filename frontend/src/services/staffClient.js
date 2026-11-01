@@ -53,7 +53,10 @@ export async function refreshStaffSession() {
 
 function goToLogin() {
   clearStaffSession();
-  if (window.location.pathname.startsWith('/db') || window.location.pathname === '/login') return;
+  if (typeof window === 'undefined') return;
+  const path = window.location.pathname;
+  if (!path.startsWith('/admin') && !path.startsWith('/employee')) return;
+  if (path.startsWith('/db') || path === '/login') return;
   const currentPath = window.location.pathname + window.location.search;
   try {
     sessionStorage.setItem('foodie_auth_redirect', currentPath);

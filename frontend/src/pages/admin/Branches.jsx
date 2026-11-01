@@ -281,8 +281,8 @@ export const Branches = () => {
         style={{ 
           height: '44px', 
           backgroundColor: '#FFFFFF', 
-          color: 'var(--primary-color, #C8102E)', 
-          border: '1.5px solid var(--primary-color, #C8102E)',
+          color: 'var(--primary-color, #F20D2D)', 
+          border: '1.5px solid var(--primary-color, #F20D2D)',
           fontSize: '14px'
         }}
       >
@@ -292,11 +292,10 @@ export const Branches = () => {
         type="button"
         onClick={handleSubmit}
         disabled={saveLoading}
-        className="btn btn-danger rounded-pill fw-bold flex-grow-1 shadow-sm"
+        className="btn btn-danger rounded-pill fw-bold flex-grow-1 shadow-sm border-0"
         style={{ 
           height: '44px', 
-          backgroundColor: 'var(--primary-color, #C8102E)', 
-          borderColor: 'var(--primary-color, #C8102E)',
+          backgroundColor: 'var(--primary-color, #F20D2D)', 
           fontSize: '14px'
         }}
       >

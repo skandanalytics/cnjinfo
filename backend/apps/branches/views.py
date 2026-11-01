@@ -147,8 +147,9 @@ class TableViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, views
                 return Response(self.get_serializer(table).data)
             if new not in allowed[cur]:
                 return Response({"detail": f"Cannot change a table from {cur} to {new}."}, status=409)
-            # A table still used by an unfinished order must not be released (also by another order's completion).
-            if new == S.AVAILABLE and self._active_orders(table):
+            force = bool(request.data.get("force"))
+            # A table still used by an unfinished order must not be released unless forced
+            if new == S.AVAILABLE and self._active_orders(table) and not force:
                 return Response({
                     "detail": "Table has unfinished orders and cannot be vacated yet.",
                     "code": "unfinished_orders",
@@ -158,6 +159,20 @@ class TableViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, views
             table.status = new
             table.save(update_fields=["status", "updated_at"])
         self.audit("set_status", table, {"from": cur, "to": new})
+        from apps.realtime.publish import publish_catalog_event
+        publish_catalog_event(table.branch_id, "table", "updated")
+        return Response(self.get_serializer(table).data)
+
+    @action(detail=True, methods=["post"], url_path="clean", permission_classes=[IsStaffMember])
+    def clean(self, request, pk=None):
+        """Mark table as cleaned / cleared, resetting status to AVAILABLE immediately."""
+        table = self.get_object()
+        with transaction.atomic():
+            table = DiningTable.objects.select_for_update().get(pk=table.pk)
+            cur = table.status
+            table.status = DiningTable.Status.AVAILABLE
+            table.save(update_fields=["status", "updated_at"])
+        self.audit("clean_table", table, {"from": cur, "to": "AVAILABLE"})
         from apps.realtime.publish import publish_catalog_event
         publish_catalog_event(table.branch_id, "table", "updated")
         return Response(self.get_serializer(table).data)

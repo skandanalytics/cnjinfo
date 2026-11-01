@@ -292,6 +292,14 @@ export async function updateTableStatus(id, status) {
   return mapTable(data);
 }
 
+export async function cleanTable(id) {
+  const data = await staffJson(`/tables/${id}/clean/`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+  return mapTable(data);
+}
+
 export async function deleteTable(id) {
   await staffJson(`/tables/${id}/`, { method: 'DELETE' });
   return true;

@@ -347,8 +347,8 @@ export const AddDishModal = ({
         style={{
           height: '42px',
           backgroundColor: '#FFFFFF',
-          color: 'var(--primary-color, #C8102E)',
-          border: '1.5px solid var(--primary-color, #C8102E)',
+          color: 'var(--primary-color, #F20D2D)',
+          border: '1.5px solid var(--primary-color, #F20D2D)',
           fontSize: '13px'
         }}
       >
@@ -358,11 +358,10 @@ export const AddDishModal = ({
         type="button"
         onClick={handleSubmit}
         disabled={loading}
-        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm"
+        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm border-0"
         style={{
           height: '42px',
-          backgroundColor: 'var(--primary-color, #C8102E)',
-          borderColor: 'var(--primary-color, #C8102E)',
+          backgroundColor: 'var(--primary-color, #F20D2D)',
           fontSize: '13px'
         }}
       >
@@ -372,233 +371,254 @@ export const AddDishModal = ({
   );
 
   return (
-    <Modal isOpen={isOpen} title="Add New Menu Item" onClose={onClose} footerActions={footerActions}>
+    <Modal isOpen={isOpen} title="Add New Menu Item" onClose={onClose} footerActions={footerActions} size="lg">
       <form onSubmit={handleSubmit}>
         {errorMsg && (
           <div className="alert alert-danger py-2 small fw-semibold mb-3">{errorMsg}</div>
         )}
 
-        <Input 
-          label="Dish Name *" 
-          placeholder="e.g. Garlic Bread sticks" 
-          value={name} 
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v.length === 1) setName(v.toUpperCase());
-            else if (v.length > 1 && name.length === 0) setName(v.charAt(0).toUpperCase() + v.slice(1));
-            else setName(v);
-          }} 
-          required 
-        />
-        
-        <div className="row">
-          <div className="col-4">
-            <Input 
-              label="Original Price (₹)" 
-              type="number"
-              placeholder="e.g. 199" 
-              value={price} 
-              onKeyDown={(e) => {
-                if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
-              }}
-              onChange={(e) => handlePriceChange(e.target.value)} 
-              required 
-            />
-          </div>
-          <div className="col-4">
-            <Input 
-              label="Discount (%)" 
-              type="number"
-              min="0"
-              max="100"
-              placeholder="e.g. 25" 
-              value={discountPercent} 
-              onChange={(e) => handleDiscountPercentChange(e.target.value)} 
-            />
-          </div>
-          <div className="col-4">
-            <Input 
-              label="Discount Price (₹)" 
-              type="number"
-              placeholder="e.g. 149" 
-              value={discountPrice} 
-              onChange={(e) => handleDiscountPriceChange(e.target.value)} 
-            />
-          </div>
-        </div>
+        <div className="row g-4">
+          {/* Left Column: Image Upload / Preview */}
+          <div className="col-12 col-md-4">
+            <label className="form-label text-secondary small fw-semibold mb-1">
+              Food Image <span className="text-danger">*</span>
+            </label>
 
-        <Input 
-          label="Stock Quantity (Optional)" 
-          type="number"
-          min="0"
-          placeholder="e.g. 50" 
-          value={stock} 
-          onKeyDown={(e) => {
-            if (['-', '+', 'e', 'E'].includes(e.key)) {
-              e.preventDefault();
-            }
-          }}
-          onChange={(e) => {
-            const val = e.target.value;
-            if (val === '' || Number(val) >= 0) {
-              setStock(val);
-            }
-          }} 
-        />
-
-        <Select 
-          label="Category"
-          options={categories}
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          required
-        />
-
-        <Select 
-          label="Food Type (Veg / Non-Veg / Vegan)"
-          options={foodTypes}
-          value={foodType}
-          onChange={(e) => setFoodType(e.target.value)}
-          required
-        />
-
-        <div className="mb-3 text-start">
-          <label className="form-label text-secondary small fw-semibold mb-1">
-            Food Image <span className="text-danger">*</span>
-          </label>
-          <div className="d-flex p-1 bg-light rounded-3 border mb-2" role="group">
-            <button
-              type="button"
-              className={`btn btn-sm flex-fill rounded-2 fw-semibold transition-all ${imageMode === 'file' ? 'bg-danger text-white shadow-xs' : 'text-secondary border-0 bg-transparent'}`}
-              style={{ fontSize: '12px' }}
-              onClick={() => handleImageModeSwitch('file')}
-            >
-              📁 Choose File
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm flex-fill rounded-2 fw-semibold transition-all ${imageMode === 'url' ? 'bg-danger text-white shadow-xs' : 'text-secondary border-0 bg-transparent'}`}
-              style={{ fontSize: '12px' }}
-              onClick={() => handleImageModeSwitch('url')}
-            >
-              🔗 Image URL
-            </button>
-          </div>
-
-          {imageMode === 'file' ? (
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="form-control form-control-sm border-light-subtle"
-              onChange={handleImageFileChange}
-            />
-          ) : (
-            <input
-              type="text"
-              className="form-control form-control-sm border-light-subtle"
-              placeholder="Paste image URL (e.g. https://...)"
-              value={image}
-              onChange={(e) => {
-                setImage(e.target.value);
-                setImageFile(null);
-              }}
-            />
-          )}
-
-          {image && (
-            <div className="d-flex align-items-center gap-2 mt-2 p-2 bg-light rounded-3 border">
-              <img 
-                src={image} 
-                alt="Preview" 
-                className="rounded-2 border bg-white" 
-                style={{ width: '48px', height: '48px', objectFit: 'cover' }}
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-              <div className="flex-grow-1 overflow-hidden">
-                <div className="small fw-semibold text-truncate text-dark" style={{ fontSize: '12px' }}>
-                  {imageMode === 'file' ? 'Uploaded Image Selected' : image}
-                </div>
-                <button
-                  type="button"
-                  onClick={handleRemoveImage}
-                  className="btn btn-sm btn-link text-danger p-0 text-decoration-none small fw-semibold"
-                  style={{ fontSize: '11px' }}
-                >
-                  Remove Image
-                </button>
-              </div>
+            <div className="d-flex p-1 bg-light rounded-3 border mb-2" role="group">
+              <button
+                type="button"
+                className={`btn btn-sm flex-fill rounded-2 fw-semibold transition-all ${imageMode === 'file' ? 'text-white shadow-xs' : 'text-secondary border-0 bg-transparent'}`}
+                style={{ fontSize: '11.5px', backgroundColor: imageMode === 'file' ? 'var(--primary-color, #F20D2D)' : 'transparent' }}
+                onClick={() => handleImageModeSwitch('file')}
+              >
+                📁 File
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm flex-fill rounded-2 fw-semibold transition-all ${imageMode === 'url' ? 'text-white shadow-xs' : 'text-secondary border-0 bg-transparent'}`}
+                style={{ fontSize: '11.5px', backgroundColor: imageMode === 'url' ? 'var(--primary-color, #F20D2D)' : 'transparent' }}
+                onClick={() => handleImageModeSwitch('url')}
+              >
+                🔗 URL
+              </button>
             </div>
-          )}
-        </div>
 
-        <Input 
-          label="Description" 
-          placeholder="Detail recipe ingredients" 
-          value={description} 
-          onChange={(e) => {
-            const v = e.target.value;
-            if (v.length === 1) setDescription(v.toUpperCase());
-            else if (v.length > 1 && description.length === 0) setDescription(v.charAt(0).toUpperCase() + v.slice(1));
-            else setDescription(v);
-          }} 
-        />
-
-        {/* Toppings / Customizations Add-on Section */}
-        <div className="mb-3 text-start">
-          <label className="form-label text-secondary small fw-semibold mb-1">
-            Toppings / Add-ons (Optional)
-          </label>
-          <div className="d-flex gap-2 mb-2">
-            <input
-              type="text"
-              placeholder="e.g. Extra Cheese"
-              value={toppingName}
-              onChange={(e) => setToppingName(e.target.value)}
-              className="form-control form-control-sm"
-              style={{ flex: 2 }}
-            />
-            <input
-              type="number"
-              placeholder="Price (₹)"
-              value={toppingPrice}
-              onChange={(e) => setToppingPrice(e.target.value)}
-              className="form-control form-control-sm"
-              style={{ flex: 1 }}
-              min="0"
-            />
-            <button
-              type="button"
-              onClick={handleAddTopping}
-              disabled={!isToppingValid}
-              className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 rounded-pill px-3 fw-bold"
+            {/* Image Preview / Drop Zone */}
+            <div 
+              className="border rounded-3 p-2 text-center d-flex flex-column align-items-center justify-content-center position-relative mb-2"
+              style={{ minHeight: '180px', backgroundColor: 'var(--background-color)', borderColor: 'var(--border-subtle)', borderStyle: 'dashed' }}
             >
-              <FiPlus size={14} /> Add
-            </button>
-          </div>
-          {toppings.length > 0 && (
-            <div className="d-flex flex-wrap gap-2 pt-1">
-              {toppings.map((t, idx) => (
-                <span
-                  key={idx}
-                  className="badge bg-light text-dark border d-inline-flex align-items-center gap-1.5 px-2.5 py-1.5 rounded-pill shadow-xs"
-                  style={{ fontSize: '12px' }}
-                >
-                  <span className="fw-semibold">{t.name}</span>
-                  <span className="text-secondary small">(+₹{t.extra_price})</span>
+              {image ? (
+                <div className="position-relative w-100">
+                  <img 
+                    src={image} 
+                    alt="Preview" 
+                    className="w-100 rounded-3 shadow-xs" 
+                    style={{ height: '160px', objectFit: 'cover' }}
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
                   <button
                     type="button"
-                    onClick={() => handleRemoveTopping(idx)}
-                    className="btn btn-link text-danger p-0 ms-1 d-inline-flex align-items-center"
-                    style={{ lineHeight: 1 }}
-                    title="Remove topping"
+                    onClick={handleRemoveImage}
+                    className="btn btn-sm btn-danger position-absolute top-0 end-0 m-1 rounded-circle p-1 shadow-sm"
+                    style={{ width: '26px', height: '26px', lineHeight: 1 }}
+                    title="Remove Image"
                   >
-                    <FiTrash2 size={12} />
+                    ×
                   </button>
-                </span>
-              ))}
+                </div>
+              ) : (
+                <div className="py-4 text-secondary">
+                  <span className="fs-1 d-block mb-1">📸</span>
+                  <span className="small d-block fw-semibold">Upload Dish Photo</span>
+                  <span className="text-muted" style={{ fontSize: '10.5px' }}>PNG, JPG or WebP</span>
+                </div>
+              )}
             </div>
-          )}
+
+            {imageMode === 'file' ? (
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="form-control form-control-sm"
+                onChange={handleImageFileChange}
+              />
+            ) : (
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                placeholder="Paste image URL (https://...)"
+                value={image}
+                onChange={(e) => {
+                  setImage(e.target.value);
+                  setImageFile(null);
+                }}
+              />
+            )}
+          </div>
+
+          {/* Right Column: Dish Information Fields */}
+          <div className="col-12 col-md-8">
+            <Input 
+              label="Dish Name *" 
+              placeholder="e.g. Garlic Bread sticks" 
+              value={name} 
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v.length === 1) setName(v.toUpperCase());
+                else if (v.length > 1 && name.length === 0) setName(v.charAt(0).toUpperCase() + v.slice(1));
+                else setName(v);
+              }} 
+              required 
+            />
+
+            <div className="row g-2">
+              <div className="col-6">
+                <Select 
+                  label="Category"
+                  options={categories}
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="col-6">
+                <Select 
+                  label="Food Type"
+                  options={foodTypes}
+                  value={foodType}
+                  onChange={(e) => setFoodType(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="row g-2">
+              <div className="col-4">
+                <Input 
+                  label="Price (₹) *" 
+                  type="number"
+                  placeholder="e.g. 199" 
+                  value={price} 
+                  onKeyDown={(e) => {
+                    if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
+                  }}
+                  onChange={(e) => handlePriceChange(e.target.value)} 
+                  required 
+                />
+              </div>
+              <div className="col-4">
+                <Input 
+                  label="Discount (%)" 
+                  type="number"
+                  min="0"
+                  max="100"
+                  placeholder="e.g. 25" 
+                  value={discountPercent} 
+                  onChange={(e) => handleDiscountPercentChange(e.target.value)} 
+                />
+              </div>
+              <div className="col-4">
+                <Input 
+                  label="Discount Price (₹)" 
+                  type="number"
+                  placeholder="e.g. 149" 
+                  value={discountPrice} 
+                  onChange={(e) => handleDiscountPriceChange(e.target.value)} 
+                />
+              </div>
+            </div>
+
+            <div className="row g-2">
+              <div className="col-6">
+                <Input 
+                  label="Stock Quantity" 
+                  type="number"
+                  min="0"
+                  placeholder="e.g. 50" 
+                  value={stock} 
+                  onKeyDown={(e) => {
+                    if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
+                  }}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val === '' || Number(val) >= 0) setStock(val);
+                  }} 
+                />
+              </div>
+              <div className="col-6">
+                <Input 
+                  label="Description" 
+                  placeholder="Detail recipe ingredients" 
+                  value={description} 
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (v.length === 1) setDescription(v.toUpperCase());
+                    else if (v.length > 1 && description.length === 0) setDescription(v.charAt(0).toUpperCase() + v.slice(1));
+                    else setDescription(v);
+                  }} 
+                />
+              </div>
+            </div>
+
+            {/* Toppings / Customizations Add-on Section */}
+            <div className="mt-3 text-start border-top pt-2">
+              <label className="form-label text-secondary small fw-semibold mb-1">
+                Toppings / Add-ons (Optional)
+              </label>
+              <div className="d-flex gap-2 mb-2">
+                <input
+                  type="text"
+                  placeholder="e.g. Extra Cheese"
+                  value={toppingName}
+                  onChange={(e) => setToppingName(e.target.value)}
+                  className="form-control form-control-sm"
+                  style={{ flex: 2 }}
+                />
+                <input
+                  type="number"
+                  placeholder="Price (₹)"
+                  value={toppingPrice}
+                  onChange={(e) => setToppingPrice(e.target.value)}
+                  className="form-control form-control-sm"
+                  style={{ flex: 1 }}
+                  min="0"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddTopping}
+                  disabled={!isToppingValid}
+                  className="btn btn-sm btn-outline-danger d-flex align-items-center gap-1 rounded-pill px-3 fw-bold"
+                >
+                  <FiPlus size={14} /> Add
+                </button>
+              </div>
+              {toppings.length > 0 && (
+                <div className="d-flex flex-wrap gap-2 pt-1">
+                  {toppings.map((t, idx) => (
+                    <span
+                      key={idx}
+                      className="badge bg-light text-dark border d-inline-flex align-items-center gap-1.5 px-2.5 py-1.5 rounded-pill shadow-xs"
+                      style={{ fontSize: '12px' }}
+                    >
+                      <span className="fw-semibold">{t.name}</span>
+                      <span className="text-secondary small">(+₹{t.extra_price})</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTopping(idx)}
+                        className="btn btn-link text-danger p-0 ms-1 d-inline-flex align-items-center"
+                        style={{ lineHeight: 1 }}
+                        title="Remove topping"
+                      >
+                        <FiTrash2 size={12} />
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </form>
     </Modal>

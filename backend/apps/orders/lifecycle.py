@@ -51,15 +51,17 @@ def _occupy(table):
         publish_catalog_event(table.branch_id, "table", "updated")
 
 
-def _release_if_idle(table):
+def _release_if_idle(table, force=False):
     if table is None:
         return
     table = DiningTable.objects.select_for_update().get(pk=table.pk)
-    # An unpaid order must not release a table until paid or cancelled
-    still = Order.objects.filter(
-        models.Q(table=table) | models.Q(parent_order__table=table),
-        models.Q(status__in=Order.ACTIVE_STATUSES) | ~models.Q(payment_status=Order.PaymentStatus.PAID),
-    ).exclude(status=Order.Status.CANCELLED).exists()
+    if force:
+        still = False
+    else:
+        still = Order.objects.filter(
+            models.Q(table=table) | models.Q(parent_order__table=table),
+            status__in=Order.ACTIVE_STATUSES,
+        ).exclude(status__in=[Order.Status.CANCELLED, Order.Status.COMPLETED]).exists()
     if not still and table.status == DiningTable.Status.OCCUPIED:
         table.status = DiningTable.Status.AVAILABLE
         table.save(update_fields=["status", "updated_at"])
@@ -202,7 +204,7 @@ def _owns_order(order, user):
 
 
 @transaction.atomic
-def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True, parent_order_id=None):
+def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True, parent_order_id=None, customer_phone="", customer_name=""):
     from apps.accounts.permissions import get_active_employee
     from apps.accounts.scoping import can_access_branch
 
@@ -293,7 +295,14 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
 
     order_customer = (user if not assisted and getattr(user, 'is_authenticated', False) and getattr(user, 'user_type', None) == User.UserType.CUSTOMER else None) or (parent_order.customer if parent_order else None)
-    order_customer_phone = (getattr(user, 'phone', '') if not assisted and getattr(user, 'user_type', None) == User.UserType.CUSTOMER else '') or (parent_order.customer_phone if parent_order else '')
+    if not order_customer and customer_phone:
+        order_customer = User.objects.filter(phone=customer_phone, user_type=User.UserType.CUSTOMER).first()
+
+    order_customer_phone = (
+        customer_phone or
+        (getattr(user, 'phone', '') if not assisted and getattr(user, 'user_type', None) == User.UserType.CUSTOMER else '') or
+        (parent_order.customer_phone if parent_order else '')
+    )
 
     order = Order(
         order_number=f"TMP{uuid4().hex[:12]}",

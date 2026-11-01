@@ -7,13 +7,19 @@ export const RecentActivity = ({ activities = [] }) => {
   const navigate = useNavigate();
 
   return (
-    <div className="card rounded-3 border-0 shadow-sm p-4 bg-white h-100">
+    <div 
+      className="card border rounded-4 shadow-sm p-4 h-100"
+      style={{ 
+        backgroundColor: 'var(--surface-color)', 
+        borderColor: 'var(--border-color)' 
+      }}
+    >
       <div className="d-flex align-items-center justify-content-between mb-4">
-        <h5 className="fw-bold text-dark mb-0">Recent Activities</h5>
+        <h5 className="fw-bold mb-0" style={{ color: 'var(--text-primary)' }}>Recent Activities</h5>
         <button
           onClick={() => navigate('/admin/orders')}
-          className="btn btn-sm btn-link text-danger text-decoration-none fw-semibold p-0"
-          style={{ fontSize: '12px' }}
+          className="btn btn-sm btn-link text-decoration-none fw-semibold p-0"
+          style={{ fontSize: '12px', color: 'var(--primary-color)' }}
         >
           View All
         </button>
@@ -36,16 +42,16 @@ export const RecentActivity = ({ activities = [] }) => {
               <div 
                 key={act.id} 
                 onClick={() => navigate('/admin/orders')}
-                className="d-flex align-items-start justify-content-between pb-3 border-bottom last-border-0 cursor-pointer"
-                style={{ cursor: 'pointer' }}
+                className="d-flex align-items-start justify-content-between pb-3 border-bottom cursor-pointer"
+                style={{ cursor: 'pointer', borderColor: 'var(--border-subtle)' }}
               >
                 <div>
-                  <div className="small fw-bold text-dark mb-1">{displayTitle}</div>
-                  <span className="text-muted small" style={{ fontSize: '11px' }}>{act.time}</span>
+                  <div className="small fw-bold mb-1" style={{ color: 'var(--text-primary)' }}>{displayTitle}</div>
+                  <span className="small" style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>{act.time}</span>
                 </div>
                 
                 {act.amount !== undefined && act.amount !== null && (
-                  <span className="fw-bold text-danger small">{formatCurrency(act.amount)}</span>
+                  <span className="fw-bold small" style={{ color: 'var(--primary-color)' }}>{formatCurrency(act.amount)}</span>
                 )}
               </div>
             );

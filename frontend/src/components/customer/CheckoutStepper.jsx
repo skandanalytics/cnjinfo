@@ -1,7 +1,8 @@
 import React from 'react';
 import { FiCheck } from 'react-icons/fi';
 
-export const CheckoutStepper = ({ currentStep = 1 }) => {
+export const CheckoutStepper = ({ currentStep, activeStep = 1 }) => {
+  const effectiveStep = currentStep || activeStep || 1;
   const steps = [
     { number: 1, title: 'Cart' },
     { number: 2, title: 'Customer Details' },
@@ -29,10 +30,10 @@ export const CheckoutStepper = ({ currentStep = 1 }) => {
           className="position-absolute" 
           style={{ 
             height: '2px', 
-            backgroundColor: 'var(--primary-color, #C8102E)', 
+            backgroundColor: 'var(--primary-color, #F20D2D)', 
             top: '18px', 
             left: 0, 
-            width: `${((Math.min(currentStep, steps.length) - 1) / (steps.length - 1)) * 100}%`,
+            width: `${((Math.min(effectiveStep, steps.length) - 1) / (steps.length - 1)) * 100}%`,
             transition: 'width 0.4s ease',
             zIndex: 1 
           }} 
@@ -40,8 +41,8 @@ export const CheckoutStepper = ({ currentStep = 1 }) => {
 
         {/* Step Nodes */}
         {steps.map((s) => {
-          const isDone = s.number < currentStep;
-          const isCurrent = s.number === currentStep;
+          const isDone = s.number < effectiveStep;
+          const isCurrent = s.number === effectiveStep;
 
           return (
             <div 
@@ -57,9 +58,9 @@ export const CheckoutStepper = ({ currentStep = 1 }) => {
                   width: '36px',
                   height: '36px',
                   fontSize: '13px',
-                  backgroundColor: isDone || isCurrent ? 'var(--primary-color, #C8102E)' : '#FFFFFF',
-                  border: isDone || isCurrent ? '2px solid var(--primary-color, #C8102E)' : '2px solid var(--border-color, #CBD5E1)',
-                  boxShadow: isCurrent ? '0 0 0 4px rgba(200, 16, 46, 0.15)' : 'none'
+                  backgroundColor: isDone || isCurrent ? 'var(--primary-color, #F20D2D)' : '#FFFFFF',
+                  border: isDone || isCurrent ? '2px solid var(--primary-color, #F20D2D)' : '2px solid var(--border-color, #CBD5E1)',
+                  boxShadow: isCurrent ? '0 0 0 4px rgba(242, 13, 45, 0.15)' : 'none'
                 }}
               >
                 {isDone ? <FiCheck size={16} strokeWidth={3} /> : s.number}
