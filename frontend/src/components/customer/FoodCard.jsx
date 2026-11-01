@@ -178,7 +178,7 @@ export const FoodCard = ({ dish }) => {
           className="d-flex align-items-center justify-content-between pt-2 border-top border-light mt-auto"
         >
           <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
-            <span className="fw-bold fs-6" style={{ color: 'var(--primary-color, #C8102E)' }}>
+            <span className="fw-bold fs-6" style={{ color: 'var(--primary-color, #F20D2D)' }}>
               {formatCurrency(hasDiscount ? finalPrice : dish.price)}
             </span>
             {hasDiscount && (
@@ -215,12 +215,11 @@ export const FoodCard = ({ dish }) => {
             <button
               type="button"
               onClick={handleQuickAdd}
-              className="btn btn-danger rounded-circle p-0 d-flex align-items-center justify-content-center shadow-sm flex-shrink-0"
+              className="btn btn-danger rounded-circle p-0 d-flex align-items-center justify-content-center shadow-sm flex-shrink-0 border-0"
               style={{ 
                 width: '36px', 
                 height: '36px', 
-                backgroundColor: 'var(--primary-color, #C8102E)', 
-                borderColor: 'var(--primary-color, #C8102E)' 
+                backgroundColor: 'var(--primary-color, #F20D2D)'
               }}
               title={`Add ${dish.name}`}
             >

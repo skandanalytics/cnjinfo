@@ -25,7 +25,9 @@ def breakdown(order):
     all_orders = [root] + list(root.continuations.exclude(status=Order.Status.CANCELLED).order_by("continuation_index", "id"))
 
     branch = root.branch
-    placed = root.created_at.strftime("%d %b %Y, %H:%M") if root.created_at else ""
+    from django.utils import timezone
+    local_created = timezone.localtime(root.created_at) if root.created_at else None
+    placed = local_created.strftime("%d %b %Y, %I:%M %p") if local_created else ""
     contact = _invoice_contact(root)
 
     items = []

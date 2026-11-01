@@ -185,7 +185,7 @@ export const FoodDetails = () => {
     <CustomerLayout>
       {/* Back Button on the Page */}
       <div className="d-flex align-items-center gap-2 mb-3">
-        <BackButton />
+        <BackButton to="/customer/home" />
         <span className="text-secondary small fw-semibold">Back to Menu</span>
       </div>
 
@@ -236,8 +236,8 @@ export const FoodDetails = () => {
           <div className="col-12 col-md-6 p-4 p-md-5 d-flex flex-column justify-content-between">
             <div>
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <div className="d-flex align-items-center gap-2 flex-wrap">
-                  <span className="badge bg-primary-subtle text-primary fw-semibold px-3 py-1.5 rounded-pill">
+                <div className="d-flex align-items-center gap-2.5 flex-wrap">
+                  <span className="badge bg-primary-subtle text-primary fw-semibold px-3 py-1.5 rounded-pill me-2">
                     {dish.category}
                   </span>
                   

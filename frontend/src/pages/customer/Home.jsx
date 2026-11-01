@@ -9,9 +9,10 @@ import Pagination from '../../components/common/Pagination';
 import { useAuth } from '../../hooks/useAuth';
 import EmptyState from '../../components/common/EmptyState';
 import {
-  FiGrid, FiPieChart, FiHeart, FiLayers, FiZap, FiActivity, FiCoffee, FiDisc, FiStar, FiPercent,
+  FiGrid, FiHeart, FiLayers, FiZap, FiActivity, FiCoffee, FiStar, FiPercent,
   FiChevronLeft, FiChevronRight
 } from 'react-icons/fi';
+import { FaBurger, FaPizzaSlice, FaBowlRice, FaUtensils, FaMugHot, FaIceCream } from 'react-icons/fa6';
 import { filterAndSortProducts, normalizeFoodType } from '../../utils/filters';
 import { isDishInCategory, normalizeCategoryName } from '../../utils/categoryUtils';
 import { orderService, isOrderOwnedByCustomer, getCustomerPhone } from '../../services/orderService';
@@ -54,13 +55,6 @@ export const Home = () => {
   const { tableContext, setTable, abandonStaffTableOrder } = useCart();
   const [leavingTableOrder, setLeavingTableOrder] = useState(false);
 
-  useEffect(() => {
-    const hasActiveSession = isAuthenticated || sessionStorage.getItem('foodie_staff_ordering') === '1' || sessionStorage.getItem('foodie_order_type') || sessionStorage.getItem('foodie_table') || tableParam || qrParam;
-    if (!hasActiveSession) {
-      const searchStr = window.location.search || '';
-      navigate(`/customer/welcome${searchStr}`, { replace: true });
-    }
-  }, [isAuthenticated, navigate, tableParam, qrParam]);
 
   useEffect(() => {
     if (tableParam) {
@@ -128,22 +122,11 @@ export const Home = () => {
 
   const handleToggleCategory = (cat) => {
     setCurrentPage(1);
-
-    if (cat === 'All') {
+    if (cat === 'All' || (selectedCategories.length === 1 && selectedCategories[0] === cat)) {
       setSelectedCategories(['All']);
-      return;
+    } else {
+      setSelectedCategories([cat]);
     }
-
-    setSelectedCategories(prev => {
-      const isSelected = prev.includes(cat);
-      if (isSelected) {
-        const next = prev.filter(c => c !== cat);
-        return next.length === 0 ? ['All'] : next;
-      } else {
-        const next = prev.filter(c => c !== 'All').concat(cat);
-        return next;
-      }
-    });
   };
 
   const primarySelectedCategory = selectedCategories.length === 1 ? selectedCategories[0] : (isAllSelected ? 'All' : null);
@@ -416,6 +399,26 @@ export const Home = () => {
           return isOrderLive(ord) && isOrderOwnedByCustomer(ord, currentCustomer);
         });
 
+        const savedOrderId = sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id') ||
+          (() => {
+            try {
+              const lp = JSON.parse(sessionStorage.getItem('foodie_last_placed_order') || localStorage.getItem('foodie_last_placed_order') || 'null');
+              return lp?.id || lp?.order_id || null;
+            } catch { return null; }
+          })();
+
+        if (savedOrderId && !activeList.some(o => String(o.id) === String(savedOrderId) || String(o.order_id) === String(savedOrderId))) {
+          try {
+            const { fetchCustomerOrder } = await import('../../services/customerCheckout');
+            const fetched = await fetchCustomerOrder(savedOrderId);
+            if (fetched && isOrderLive(fetched)) {
+              activeList.unshift(mapOrder(fetched));
+            }
+          } catch (e) {
+            // ignore if not found
+          }
+        }
+
         const consolidated = consolidateActiveOrders(activeList);
         if (isMounted) {
           setActiveOrders(consolidated);
@@ -439,10 +442,12 @@ export const Home = () => {
   }, [user, isEmployee]);
 
   const handleFoodTypeToggle = (type) => {
-    setSelectedFoodTypes((prev) =>
-      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
-    );
     setCurrentPage(1);
+    if (type === 'all' || (selectedFoodTypes.length === 1 && selectedFoodTypes[0] === type)) {
+      setSelectedFoodTypes([]);
+    } else {
+      setSelectedFoodTypes([type]);
+    }
   };
 
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
@@ -544,6 +549,17 @@ export const Home = () => {
     sessionStorage.setItem('foodie_order_type', 'DINE_IN');
     localStorage.setItem('foodie_order_type', 'DINE_IN');
 
+    const phone = ord.customer_phone || ord.customerPhone || ord.phone;
+    if (phone) {
+      sessionStorage.setItem('customer_mobile', String(phone));
+      localStorage.setItem('customer_mobile', String(phone));
+    }
+    const name = ord.customer_name || ord.customerName;
+    if (name && typeof name === 'string') {
+      sessionStorage.setItem('customer_name', String(name));
+      localStorage.setItem('customer_name', String(name));
+    }
+
     try {
       const { applyOrderContext } = await import('../../services/customerCheckout');
       await applyOrderContext('DINE_IN', tableId);
@@ -556,19 +572,19 @@ export const Home = () => {
 
   const getCategoryIcon = (category) => {
     const norm = (category || '').toLowerCase();
-    if (norm === 'all') return <FiGrid size={14} />;
-    if (norm === 'popular') return <FiStar size={14} />;
-    if (norm.includes('discount') || norm.includes('offer')) return <FiPercent size={14} />;
-    if (norm.includes('burger')) return <FiDisc size={14} />;
-    if (norm.includes('pizza')) return <FiPieChart size={14} />;
-    if (norm.includes('biryani') || norm.includes('rice')) return <FiHeart size={14} />;
-    if (norm.includes('indian') || norm.includes('meal') || norm.includes('thali') || norm.includes('combo')) return <FiLayers size={14} />;
-    if (norm.includes('starter') || norm.includes('snack') || norm.includes('appetizer') || norm.includes('fry') || norm.includes('fries') || norm.includes('roll')) return <FiZap size={14} />;
-    if (norm.includes('dessert') || norm.includes('sweet') || norm.includes('cake') || norm.includes('ice cream') || norm.includes('pastry')) return <FiActivity size={14} />;
-    if (norm.includes('beverage') || norm.includes('drink') || norm.includes('coffee') || norm.includes('tea') || norm.includes('juice') || norm.includes('shake') || norm.includes('soda') || norm.includes('mocktail')) return <FiCoffee size={14} />;
-    if (norm.includes('pasta') || norm.includes('noodle') || norm.includes('chinese') || norm.includes('asian') || norm.includes('momo')) return <FiDisc size={14} />;
-    if (norm.includes('soup') || norm.includes('salad')) return <FiHeart size={14} />;
-    return <FiGrid size={14} />;
+    if (norm === 'all') return <FiGrid size={13} />;
+    if (norm === 'popular') return <FiStar size={13} />;
+    if (norm.includes('discount') || norm.includes('offer')) return <FiPercent size={13} />;
+    if (norm.includes('burger')) return <FaBurger size={13} />;
+    if (norm.includes('pizza')) return <FaPizzaSlice size={13} />;
+    if (norm.includes('biryani') || norm.includes('rice')) return <FaBowlRice size={13} />;
+    if (norm.includes('indian') || norm.includes('meal') || norm.includes('thali') || norm.includes('combo') || norm.includes('breakfast')) return <FaUtensils size={13} />;
+    if (norm.includes('starter') || norm.includes('snack') || norm.includes('appetizer') || norm.includes('fry') || norm.includes('fries') || norm.includes('roll')) return <FaUtensils size={13} />;
+    if (norm.includes('dessert') || norm.includes('sweet') || norm.includes('cake') || norm.includes('ice cream') || norm.includes('pastry')) return <FaIceCream size={13} />;
+    if (norm.includes('beverage') || norm.includes('drink') || norm.includes('coffee') || norm.includes('tea') || norm.includes('juice') || norm.includes('shake') || norm.includes('soda') || norm.includes('mocktail')) return <FaMugHot size={13} />;
+    if (norm.includes('pasta') || norm.includes('noodle') || norm.includes('chinese') || norm.includes('asian') || norm.includes('momo')) return <FaBowlRice size={13} />;
+    if (norm.includes('soup') || norm.includes('salad')) return <FiHeart size={13} />;
+    return <FiGrid size={13} />;
   };
 
   // First filter by category and search (without foodType filter)
@@ -689,47 +705,44 @@ export const Home = () => {
 
         {/* Hero Banner: Delicious Food For Every Mood (Matches Reference 13) */}
         <div
-          className="rounded-4 p-4 p-md-5 mb-4 text-start position-relative overflow-hidden shadow-sm d-flex flex-column flex-md-row align-items-md-center justify-content-between"
+          className="rounded-4 p-3 p-md-4 mb-3 text-start position-relative overflow-hidden shadow-sm d-flex flex-column flex-md-row align-items-md-center justify-content-between"
           style={{
             background: 'linear-gradient(135deg, #FFF9F5 0%, #FFF3EC 50%, #FFEBE0 100%)',
             border: '1px solid #FFE4D6'
           }}
         >
-          <div style={{ maxWidth: '480px', zIndex: 2 }}>
-            <h1 className="fw-bold mb-1" style={{ color: '#C8102E', fontSize: 'clamp(28px, 4vw, 38px)', letterSpacing: '-0.8px', lineHeight: 1.15 }}>
-              Delicious Food
-            </h1>
-            <h1 className="fw-bold mb-2" style={{ color: '#C8102E', fontSize: 'clamp(28px, 4vw, 38px)', letterSpacing: '-0.8px', lineHeight: 1.15 }}>
-              For Every Mood
-            </h1>
-            <p className="text-secondary small mb-3" style={{ fontSize: '13px' }}>
+          <div style={{ maxWidth: '440px', zIndex: 2 }}>
+            <h2 className="fw-bold mb-0.5" style={{ color: 'var(--primary-color, #F20D2D)', fontSize: 'clamp(22px, 3vw, 28px)', letterSpacing: '-0.5px', lineHeight: 1.15 }}>
+              Delicious Food For Every Mood
+            </h2>
+            <p className="text-secondary small mb-2.5" style={{ fontSize: '12px' }}>
               Fresh ingredients, tasty dishes, great moments.
             </p>
             {/* Search for dishes pill inside hero */}
-            <div className="position-relative" style={{ maxWidth: '380px' }}>
+            <div className="position-relative" style={{ maxWidth: '340px' }}>
               <input 
                 type="text"
                 placeholder="Search for dishes..."
                 value={search}
                 onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                className="form-control rounded-pill ps-4 py-2 border shadow-xs"
-                style={{ fontSize: '13px', backgroundColor: '#FFFFFF', borderColor: '#CBD5E1' }}
+                className="form-control rounded-pill ps-3.5 py-1.5 border shadow-xs"
+                style={{ fontSize: '12.5px', backgroundColor: '#FFFFFF', borderColor: '#CBD5E1' }}
               />
             </div>
           </div>
 
-          <div className="d-none d-md-flex align-items-center gap-3 mt-3 mt-md-0 position-relative" style={{ zIndex: 1 }}>
+          <div className="d-none d-md-flex align-items-center gap-2.5 mt-2 mt-md-0 position-relative" style={{ zIndex: 1 }}>
             <img 
-              src="https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=320&auto=format&fit=crop&q=80" 
+              src="https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=240&auto=format&fit=crop&q=80" 
               alt="Delicious Biryani"
               className="rounded-circle shadow-md"
-              style={{ width: '130px', height: '130px', objectFit: 'cover', border: '4px solid #fff' }}
+              style={{ width: '95px', height: '95px', objectFit: 'cover', border: '3px solid #fff' }}
             />
             <img 
-              src="https://images.unsplash.com/photo-1601050690597-df0568f70950?w=320&auto=format&fit=crop&q=80" 
+              src="https://images.unsplash.com/photo-1601050690597-df0568f70950?w=240&auto=format&fit=crop&q=80" 
               alt="Crispy Pani Puri"
               className="rounded-circle shadow-md"
-              style={{ width: '150px', height: '150px', objectFit: 'cover', border: '4px solid #fff' }}
+              style={{ width: '110px', height: '110px', objectFit: 'cover', border: '3px solid #fff' }}
             />
           </div>
         </div>
@@ -818,7 +831,7 @@ export const Home = () => {
                           className="btn btn-sm btn-danger rounded-pill px-3.5 py-1.5 fw-bold shadow-sm d-flex align-items-center gap-1.5"
                           style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '12px' }}
                         >
-                          <i className="bi bi-receipt"></i>
+                          <i className="bi bi-receipt me-1"></i>
                           <span>View Bill</span>
                         </button>
                       ) : (
@@ -835,19 +848,20 @@ export const Home = () => {
                           <button
                             type="button"
                             onClick={() => handleViewBill(ord)}
-                            className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold"
+                            className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
                             style={{ fontSize: '12px' }}
                           >
-                            View Bill
+                            <i className="bi bi-receipt me-1"></i>
+                            <span>View Bill</span>
                           </button>
                           {ord.orderType !== 'Takeaway' && String(ord.table).toLowerCase() !== 'takeaway' && String(ord.status || '').toUpperCase() !== 'CANCELLED' && !isPaid && (
                             <button
                               type="button"
                               onClick={() => handleContinueOrder(ord)}
-                              className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
+                              className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
                               style={{ fontSize: '12px' }}
                             >
-                              <i className="bi bi-plus-circle"></i>
+                              <i className="bi bi-plus-circle me-1"></i>
                               <span>Continue Order</span>
                             </button>
                           )}
@@ -861,14 +875,43 @@ export const Home = () => {
           </div>
         )}
 
+        {/* Continuing Order Alert Pill for Customer */}
+        {Boolean(sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')) && (
+          <div className="alert alert-danger rounded-4 py-2.5 px-3.5 mb-3.5 d-flex align-items-center justify-content-between gap-2 shadow-xs border-0 bg-danger text-white">
+            <div className="d-flex align-items-center gap-2">
+              <i className="bi bi-arrow-repeat fs-5" />
+              <div>
+                <strong className="d-block" style={{ fontSize: '13px' }}>
+                  Continuing Order #{sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')}
+                </strong>
+                <span className="opacity-90" style={{ fontSize: '11.5px' }}>
+                  Any new dishes you add to your cart will be appended to your active dining table order ticket.
+                </span>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                sessionStorage.removeItem('foodie_parent_order_id');
+                localStorage.removeItem('foodie_parent_order_id');
+                window.location.reload();
+              }}
+              className="btn btn-xs btn-outline-light rounded-pill px-3 py-1 fw-bold flex-shrink-0"
+              style={{ fontSize: '11px' }}
+            >
+              Start New Order Instead
+            </button>
+          </div>
+        )}
+
         {/* Sticky Frozen Filter Header Container */}
         <div
           id="customer-menu"
-          className="sticky-filter-header mb-4 py-3 px-3 rounded-4 shadow-sm bg-white border border-light-subtle text-start"
+          className="sticky-filter-header mb-4 py-2.5 px-3 rounded-4 shadow-sm bg-white border border-light-subtle text-start"
           style={{
             position: 'sticky',
-            top: '58px',
-            zIndex: 1000,
+            top: '52px',
+            zIndex: 990,
             backdropFilter: 'blur(10px)',
             backgroundColor: 'rgba(255, 255, 255, 0.98)'
           }}
@@ -967,74 +1010,70 @@ export const Home = () => {
             <div className="d-flex align-items-center gap-2 flex-wrap px-1 pt-2 border-top border-light-subtle w-100">
               <span className="small fw-semibold text-secondary me-1" style={{ fontSize: '12px' }}>Food Type:</span>
 
+              {/* All Food Types Pill */}
+              <button
+                type="button"
+                id="customer-food-filter-all"
+                onClick={() => handleFoodTypeToggle('all')}
+                className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
+                  selectedFoodTypes.length === 0
+                    ? 'btn-danger text-white shadow-xs'
+                    : 'btn-outline-secondary bg-white text-secondary'
+                }`}
+                style={{ fontSize: '12px' }}
+              >
+                <FiGrid size={13} />
+                <span>All</span>
+              </button>
+
               {availableFoodTypes.has('veg') && (
-                <label
-                  htmlFor="customer-food-filter-veg"
-                  className={`food-type-control food-type-control-veg ${
-                    selectedFoodTypes.includes('veg') ? 'is-selected-veg' : ''
+                <button
+                  type="button"
+                  id="customer-food-filter-veg"
+                  onClick={() => handleFoodTypeToggle('veg')}
+                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
+                    selectedFoodTypes.length === 1 && selectedFoodTypes[0] === 'veg'
+                      ? 'btn-success text-white shadow-xs'
+                      : 'btn-outline-success bg-white text-success'
                   }`}
+                  style={{ fontSize: '12px' }}
                 >
-                  <input
-                    type="checkbox"
-                    id="customer-food-filter-veg"
-                    checked={selectedFoodTypes.includes('veg')}
-                    onChange={() => handleFoodTypeToggle('veg')}
-                    className="food-type-checkbox checkbox-veg"
-                    aria-label="Filter Vegetarian"
-                  />
-                  <span className="veg-badge ms-0.5"></span>
-                  <span className="ms-0.5">Veg</span>
-                </label>
+                  <span className="veg-badge" style={{ width: '12px', height: '12px' }}></span>
+                  <span>Veg</span>
+                </button>
               )}
 
               {availableFoodTypes.has('non-veg') && (
-                <label
-                  htmlFor="customer-food-filter-non-veg"
-                  className={`food-type-control food-type-control-non-veg ${
-                    selectedFoodTypes.includes('non-veg') ? 'is-selected-non-veg' : ''
+                <button
+                  type="button"
+                  id="customer-food-filter-non-veg"
+                  onClick={() => handleFoodTypeToggle('non-veg')}
+                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
+                    selectedFoodTypes.length === 1 && selectedFoodTypes[0] === 'non-veg'
+                      ? 'btn-danger text-white shadow-xs'
+                      : 'btn-outline-danger bg-white text-danger'
                   }`}
+                  style={{ fontSize: '12px' }}
                 >
-                  <input
-                    type="checkbox"
-                    id="customer-food-filter-non-veg"
-                    checked={selectedFoodTypes.includes('non-veg')}
-                    onChange={() => handleFoodTypeToggle('non-veg')}
-                    className="food-type-checkbox checkbox-non-veg"
-                    aria-label="Filter Non-Vegetarian"
-                  />
-                  <span className="non-veg-badge ms-0.5"></span>
-                  <span className="ms-0.5">Non-Veg</span>
-                </label>
+                  <span className="non-veg-badge" style={{ width: '12px', height: '12px' }}></span>
+                  <span>Non-Veg</span>
+                </button>
               )}
 
               {availableFoodTypes.has('vegan') && (
-                <label
-                  htmlFor="customer-food-filter-vegan"
-                  className={`food-type-control food-type-control-vegan ${
-                    selectedFoodTypes.includes('vegan') ? 'is-selected-vegan' : ''
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    id="customer-food-filter-vegan"
-                    checked={selectedFoodTypes.includes('vegan')}
-                    onChange={() => handleFoodTypeToggle('vegan')}
-                    className="food-type-checkbox checkbox-vegan"
-                    aria-label="Filter Vegan"
-                  />
-                  <span className="vegan-badge ms-0.5"></span>
-                  <span className="ms-0.5">Vegan</span>
-                </label>
-              )}
-
-              {selectedFoodTypes.length > 0 && (
                 <button
                   type="button"
-                  onClick={() => setSelectedFoodTypes([])}
-                  className="btn btn-link btn-sm text-secondary text-decoration-none p-0 ms-1"
-                  style={{ fontSize: '11px' }}
+                  id="customer-food-filter-vegan"
+                  onClick={() => handleFoodTypeToggle('vegan')}
+                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
+                    selectedFoodTypes.length === 1 && selectedFoodTypes[0] === 'vegan'
+                      ? 'btn-success text-white shadow-xs'
+                      : 'btn-outline-success bg-white text-success'
+                  }`}
+                  style={{ fontSize: '12px' }}
                 >
-                  Clear filter
+                  <span className="vegan-badge" style={{ width: '12px', height: '12px' }}></span>
+                  <span>Vegan</span>
                 </button>
               )}
             </div>

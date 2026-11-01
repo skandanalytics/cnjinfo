@@ -21,9 +21,12 @@ export const Modal = ({
   return (
     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 1050 }} tabIndex="-1">
       <div className={`modal-dialog modal-dialog-centered ${getSizeClass()}`}>
-        <div className="modal-content rounded-4 border-0 shadow-lg p-3">
+        <div 
+          className="modal-content rounded-4 border shadow-lg p-3"
+          style={{ backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+        >
           <div className="modal-header border-bottom-0 pb-0">
-            <h5 className="modal-title fw-bold text-dark">{title}</h5>
+            <h5 className="modal-title fw-bold" style={{ color: 'var(--text-primary)' }}>{title}</h5>
             <button type="button" className="btn-close" onClick={onClose} aria-label="Close"></button>
           </div>
           

@@ -124,26 +124,20 @@ export const calculateBillDetails = ({
   const foodAfterDiscount = Math.max(0, subtotalBeforeGst - discountAmount);
 
   // GST Taxable Amount = (Items Subtotal after coupon) + Takeaway Packing Charges
-  const taxableAmount = foodAfterDiscount + appliedPackingCharge;
+  const taxableAmount = Math.round((foodAfterDiscount + appliedPackingCharge) * 100) / 100;
 
-  // Custom rounding function for GST and other charges
-  const customRound = (value) => {
-    const decimal = value - Math.floor(value);
-    if (decimal >= 0.50) {
-      return Math.ceil(value);
-    } else {
-      return Math.floor(value);
-    }
-  };
+  // GST calculated at 5% on taxable amount (2-decimal precision, matching backend money())
+  const taxAmount = Math.round(taxableAmount * gstRate * 100) / 100;
 
-  // GST calculated at 5% on taxable amount
-  const taxAmount = customRound(taxableAmount * gstRate);
+  // Service Charge (2% on food after discount, strictly 0 for takeaway or if removed)
+  const calculatedServiceCharge = (isServiceChargeRemoved || isTakeaway) 
+    ? 0 
+    : Math.round(foodAfterDiscount * serviceChargeRate * 100) / 100;
 
-  // Service Charge (2% on food after discount, unless removed by customer)
-  const calculatedServiceCharge = isServiceChargeRemoved ? 0 : customRound(foodAfterDiscount * serviceChargeRate);
-
-  // Grand Total = Taxable amount + GST + Service Charge + Delivery Fee
-  const grandTotal = taxableAmount + taxAmount + calculatedServiceCharge + Number(deliveryFee || 0);
+  // Grand Total = Taxable amount + GST + Service Charge + Delivery Fee, rounded to nearest rupee matching backend
+  const rawTotal = taxableAmount + taxAmount + calculatedServiceCharge + Number(deliveryFee || 0);
+  const grandTotal = Math.round(rawTotal);
+  const roundOff = Math.round((grandTotal - rawTotal) * 100) / 100;
 
   return {
     itemsSubtotal: Math.round(itemsSubtotal * 100) / 100,
@@ -157,9 +151,10 @@ export const calculateBillDetails = ({
     taxableAmount: Math.round(taxableAmount * 100) / 100,
     tax: Math.round(taxAmount * 100) / 100,
     serviceCharge: Math.round(calculatedServiceCharge * 100) / 100,
-    isServiceChargeRemoved: !!isServiceChargeRemoved,
+    roundOff,
+    isServiceChargeRemoved: !!isServiceChargeRemoved || !!isTakeaway,
     deliveryFee: Math.round(Number(deliveryFee || 0) * 100) / 100,
-    grandTotal: Math.round(grandTotal * 100) / 100,
+    grandTotal,
     isCouponEligible,
     couponRemaining: Math.max(0, Math.round(couponRemaining * 100) / 100)
   };

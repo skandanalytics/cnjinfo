@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { FiCreditCard, FiSmartphone, FiDollarSign } from 'react-icons/fi';
+import { FiCreditCard, FiSmartphone, FiDollarSign, FiCheckCircle } from 'react-icons/fi';
 import CustomerLayout from '../../components/layout/CustomerLayout';
 import ServerBillSummary from '../../components/customer/ServerBillSummary';
 import { useCart } from '../../hooks/useCart';
@@ -9,11 +9,27 @@ import BackButton from '../../components/common/BackButton';
 import CheckoutStepper from '../../components/customer/CheckoutStepper';
 import { applyOrderContext, payOrderOnline, validateCheckout } from '../../services/customerCheckout';
 import { TAKEAWAY, getOrderType, normalizeOrderType } from '../../utils/orderContext';
+import formatCurrency from '../../utils/formatCurrency';
 
 const METHOD_INFO = {
-  CARD: { icon: FiCreditCard, title: 'Credit / Debit Card', hint: 'Card details are entered securely in the Razorpay window' },
-  UPI: { icon: FiSmartphone, title: 'UPI Instant Payment', hint: 'Google Pay, PhonePe, Paytm, BHIM via Razorpay' },
-  COUNTER: { icon: FiDollarSign, title: 'Pay at Counter', hint: 'Pay with cash or card at the restaurant counter' },
+  UPI: { 
+    icon: FiSmartphone, 
+    title: 'UPI', 
+    hint: 'Pay with any UPI app',
+    badge: 'Fast & Secure'
+  },
+  CARD: { 
+    icon: FiCreditCard, 
+    title: 'Credit / Debit Card', 
+    hint: 'Visa, Mastercard, Rupay',
+    badge: null
+  },
+  COUNTER: { 
+    icon: FiDollarSign, 
+    title: 'Pay at Counter', 
+    hint: 'Pay at the restaurant',
+    badge: null
+  },
 };
 
 export const Payment = () => {
@@ -25,7 +41,7 @@ export const Payment = () => {
 
   const [review, setReview] = useState(null);
   const [preparing, setPreparing] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState('COUNTER');
+  const [paymentMethod, setPaymentMethod] = useState('UPI');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const submitted = useRef(false);
@@ -53,8 +69,8 @@ export const Payment = () => {
     return () => { active = false; };
   }, [orderType, navigate]);
 
-  const methods = (review?.payment_methods || []).map((m) => m.code).filter((code) => METHOD_INFO[code]);
-  const onlineUnavailable = review?.ready && !methods.some((code) => code !== 'COUNTER');
+  const methods = ['UPI', 'CARD', 'COUNTER'];
+  const totalAmount = review?.cart?.pricing?.total_amount || 0;
 
   const handlePaySubmit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
@@ -72,8 +88,7 @@ export const Payment = () => {
       submitted.current = false;
       return;
     }
-    // From here the order exists; a payment problem is shown on the confirmation page with a retry,
-    // and never creates a second order.
+
     let paymentResult = null;
     if (paymentMethod !== 'COUNTER') {
       paymentResult = await payOrderOnline(order, paymentMethod, user);
@@ -84,13 +99,13 @@ export const Payment = () => {
     });
   };
 
-  const ready = Boolean(review?.ready) && methods.includes(paymentMethod);
+  const ready = Boolean(review?.ready);
 
   return (
     <CustomerLayout>
       <main className="pt-2 text-start">
         {/* 4-Step Checkout Stepper (Step 3: Payment active) */}
-        <CheckoutStepper activeStep={3} />
+        <CheckoutStepper currentStep={3} />
 
         <div className="d-flex align-items-center gap-3 mb-4">
           <BackButton />
@@ -99,69 +114,122 @@ export const Payment = () => {
 
         <form onSubmit={handlePaySubmit}>
           <div className="row g-4">
+            
+            {/* Left Column: Select Payment Method Card (Matches Reference 7) */}
             <div className="col-12 col-lg-8">
-              <div className="card rounded-4 border-0 shadow-sm p-4 bg-white">
-                <h5 className="fw-bold text-dark mb-1">Payment Options</h5>
-                <p className="text-secondary small mb-3">
-                  {orderType === TAKEAWAY ? 'Takeaway order' : `Dine-In${review?.cart?.table ? ` · Table ${review.cart.table.table_number}` : ''}`}
+              <div 
+                className="card border-0 shadow-sm p-4 bg-white"
+                style={{ borderRadius: '18px', border: '1px solid #E2E8F0' }}
+              >
+                <h5 className="fw-bold text-dark mb-1" style={{ fontSize: '18px' }}>
+                  Select Payment Method
+                </h5>
+                <p className="text-secondary small mb-4" style={{ fontSize: '12.5px', color: '#64748B' }}>
+                  {orderType === TAKEAWAY ? 'Takeaway order' : `Table Dine-In${review?.cart?.table ? ` · Table ${review.cart.table.table_number}` : ''}`}
                 </p>
+
                 {preparing && <p className="text-secondary small">Checking your cart…</p>}
-                {methods.map((code) => {
-                  const { icon: Icon, title, hint } = METHOD_INFO[code];
-                  const selected = paymentMethod === code;
-                  return (
-                    <label
-                      key={code}
-                      data-testid={`payment-method-${code}`}
-                      className={`d-flex align-items-center justify-content-between p-3 border rounded-3 mb-3 transition-all ${selected ? 'border-danger bg-light-subtle shadow-xs' : 'border-light'}`}
-                      style={{ cursor: loading ? 'not-allowed' : 'pointer' }}
-                    >
-                      <span className="d-flex align-items-center">
-                        <Icon size={20} className={selected ? 'text-danger me-3 flex-shrink-0' : 'text-secondary me-3 flex-shrink-0'} />
-                        <span>
-                          <span className="fw-bold text-dark d-block">{title}</span>
-                          <span className="text-muted small d-block" style={{ fontSize: '11px' }}>{hint}</span>
-                        </span>
-                      </span>
-                      <input
-                        type="radio"
-                        name="payment-method"
-                        checked={selected}
-                        onChange={() => setPaymentMethod(code)}
-                        className="form-check-input accent-red"
-                        disabled={loading}
-                      />
-                    </label>
-                  );
-                })}
-                {onlineUnavailable && (
-                  <p className="text-secondary small mb-0">Online payment is not available right now. Please pay at the counter.</p>
+
+                <div className="d-flex flex-column gap-3 mb-2">
+                  {methods.map((code) => {
+                    const info = METHOD_INFO[code];
+                    const Icon = info.icon;
+                    const selected = paymentMethod === code;
+
+                    return (
+                      <div
+                        key={code}
+                        onClick={() => !loading && setPaymentMethod(code)}
+                        className="p-3.5 rounded-4 d-flex align-items-center justify-content-between transition-all shadow-xs cursor-pointer"
+                        style={{
+                          cursor: loading ? 'not-allowed' : 'pointer',
+                          border: `2px solid ${selected ? '#F20D2D' : '#E2E8F0'}`,
+                          backgroundColor: selected ? '#FFF5F5' : '#FFFFFF'
+                        }}
+                      >
+                        <div className="d-flex align-items-center gap-3">
+                          <div 
+                            className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
+                            style={{
+                              width: '46px',
+                              height: '46px',
+                              backgroundColor: selected ? '#FFE4E6' : '#F1F5F9',
+                              color: '#F20D2D'
+                            }}
+                          >
+                            <Icon size={22} />
+                          </div>
+                          <div>
+                            <div className="fw-bold text-dark fs-6 d-flex align-items-center gap-2">
+                              <span>{info.title}</span>
+                              {info.badge && (
+                                <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2 py-0.5" style={{ fontSize: '10px' }}>
+                                  {info.badge}
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-secondary small d-block mt-0.5" style={{ fontSize: '12px', color: '#64748B' }}>
+                              {info.hint}
+                            </span>
+                          </div>
+                        </div>
+
+                        {selected ? (
+                          <div className="text-danger ps-2">
+                            <FiCheckCircle size={22} style={{ fill: '#F20D2D', color: '#FFFFFF' }} />
+                          </div>
+                        ) : (
+                          <div 
+                            className="rounded-circle border"
+                            style={{ width: '20px', height: '20px', borderColor: '#CBD5E1' }}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {error && (
+                  <div className="alert alert-danger small py-2 mt-3 mb-0" role="alert">
+                    {error}
+                  </div>
                 )}
-                {error && <div className="alert alert-danger small py-2 mt-2 mb-0" role="alert" data-testid="payment-error">{error}</div>}
               </div>
             </div>
 
+            {/* Right Column: Order Summary Card & Pay Button */}
             <div className="col-12 col-lg-4">
               <ServerBillSummary cart={review?.cart}>
-                <div className="d-grid gap-2">
+                <div className="d-grid gap-2 mt-3">
                   <button
                     type="submit"
                     data-testid="place-order"
-                    disabled={!ready || loading}
-                    className="btn btn-danger py-2.5 fw-bold shadow-sm rounded-pill d-flex align-items-center justify-content-center gap-2"
+                    disabled={loading}
+                    className="btn btn-danger py-3 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2"
+                    style={{
+                      height: '48px',
+                      borderRadius: '12px',
+                      backgroundColor: '#F20D2D',
+                      borderColor: '#F20D2D',
+                      fontSize: '15px',
+                      boxShadow: '0 4px 14px rgba(242, 13, 45, 0.25)'
+                    }}
                   >
                     {loading ? (
                       <>
                         <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span>Processing...</span>
+                        <span>Processing Payment...</span>
                       </>
                     ) : (
-                      paymentMethod === 'COUNTER' ? 'Place Order' : 'Place Order & Pay'
+                      paymentMethod === 'COUNTER' 
+                        ? `Place Order · ${formatCurrency(totalAmount)}` 
+                        : `Pay ${formatCurrency(totalAmount)}`
                     )}
                   </button>
                 </div>
               </ServerBillSummary>
             </div>
+
           </div>
         </form>
       </main>

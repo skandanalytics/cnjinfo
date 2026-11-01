@@ -67,10 +67,10 @@ export const StatCard = ({
     >
       <div className="d-flex justify-content-between align-items-start">
         <div>
-          <span className="text-secondary fw-semibold d-block" style={{ fontSize: '13px', color: 'var(--text-secondary, #64748B)' }}>
+          <span className="fw-semibold d-block" style={{ fontSize: '13px', color: 'var(--text-secondary, #64748B)' }}>
             {title}
           </span>
-          <div className="fw-bold text-dark mt-1" style={{ fontSize: '26px', letterSpacing: '-0.5px' }}>
+          <div className="fw-bold mt-1" style={{ fontSize: '26px', letterSpacing: '-0.5px', color: 'var(--text-primary, #101828)' }}>
             {value}
           </div>
           {effectivePill && (

@@ -58,98 +58,94 @@ export const SearchBar = ({
     ? filterAndRankDishes(catalog, query).slice(0, 8)
     : [];
 
-  const updateBox = () => {
-    if (!inputRef.current) return;
-    const rect = inputRef.current.getBoundingClientRect();
-    setBox({
-      top: rect.bottom + window.scrollY + 6,
-      left: rect.left + window.scrollX,
-      width: rect.width,
-    });
+  const placeDropdown = () => {
+    const node = containerRef.current;
+    if (!node) return;
+    const rect = node.getBoundingClientRect();
+    setBox({ top: rect.bottom + 4, left: rect.left, width: rect.width });
   };
 
   useEffect(() => {
-    if (isOpen) {
-      updateBox();
-      window.addEventListener('resize', updateBox);
-      window.addEventListener('scroll', updateBox, true);
-    }
-    return () => {
-      window.removeEventListener('resize', updateBox);
-      window.removeEventListener('scroll', updateBox, true);
-    };
-  }, [isOpen]);
-
-  useEffect(() => {
-    const handleOutside = (event) => {
-      if (containerRef.current && containerRef.current.contains(event.target)) return;
-      if (event.target.closest && event.target.closest('.foodie-search-dropdown')) return;
+    const handleClickOutside = (event) => {
+      const menu = document.getElementById('foodie-search-suggestions');
+      if (containerRef.current?.contains(event.target) || menu?.contains(event.target)) return;
       setIsOpen(false);
-      setHighlightedIndex(-1);
     };
-    document.addEventListener('mousedown', handleOutside);
-    return () => document.removeEventListener('mousedown', handleOutside);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (!isOpen) return undefined;
+    placeDropdown();
+    window.addEventListener('resize', placeDropdown);
+    window.addEventListener('scroll', placeDropdown, true);
+    return () => {
+      window.removeEventListener('resize', placeDropdown);
+      window.removeEventListener('scroll', placeDropdown, true);
+    };
+  }, [isOpen, query, matches.length]);
+
   const handleSelect = (item) => {
-    const pickedText = item.title || item.label;
-    if (onChange) onChange(pickedText);
-    if (onSelectSuggestion) onSelectSuggestion(item.raw || item);
+    if (onChange) onChange(item.label);
+    if (onSelectSuggestion) onSelectSuggestion(item.raw);
     setIsOpen(false);
     setHighlightedIndex(-1);
   };
 
   const handleKeyDown = (event) => {
-    if (!isOpen || matches.length === 0) return;
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setHighlightedIndex((prev) => (prev + 1 < matches.length ? prev + 1 : 0));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setHighlightedIndex((prev) => (prev - 1 >= 0 ? prev - 1 : matches.length - 1));
-    } else if (event.key === 'Enter') {
-      if (highlightedIndex >= 0 && highlightedIndex < matches.length) {
-        event.preventDefault();
-        handleSelect(matches[highlightedIndex]);
-      }
-    } else if (event.key === 'Escape') {
+    if (disabled) return;
+    if (event.key === 'Escape') {
       setIsOpen(false);
       setHighlightedIndex(-1);
+      return;
+    }
+    if (!isOpen || matches.length === 0) {
+      if (event.key === 'ArrowDown' && query) setIsOpen(true);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev < matches.length - 1 ? prev + 1 : 0));
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : matches.length - 1));
+    } else if (event.key === 'Enter' && highlightedIndex >= 0 && highlightedIndex < matches.length) {
+      event.preventDefault();
+      handleSelect(matches[highlightedIndex]);
     }
   };
 
   const renderHighlight = (text) => {
-    if (!query) return text;
-    try {
-      const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
-      const parts = String(text).split(regex);
-      return parts.map((part, index) =>
-        regex.test(part) ? (
-          <span key={index} className="fw-bold text-danger">
-            {part}
-          </span>
-        ) : (
-          part
-        )
-      );
-    } catch {
-      return text;
-    }
+    const sourceText = String(text || '');
+    const q = query.toLowerCase();
+    if (!q) return sourceText;
+    const parts = sourceText.split(new RegExp(`(${escapeRegex(query)})`, 'gi'));
+    return parts.map((part, index) => (
+      part.toLowerCase() === q
+        ? <strong key={index} className="text-danger fw-bold">{part}</strong>
+        : <span key={index}>{part}</span>
+    ));
   };
 
-  const dropdown = isOpen && query && box && typeof document !== 'undefined' ? (
+  const dropdown = isOpen && query ? (
     <div
-      className="foodie-search-dropdown shadow-lg bg-white border border-light-subtle rounded-3 py-1 position-absolute"
+      id="foodie-search-suggestions"
+      className="bg-white border border-light-subtle rounded-4 shadow-lg overflow-hidden py-1"
       style={{
-        position: 'absolute',
-        top: box.top,
-        left: box.left,
-        width: box.width,
-        zIndex: 9999,
+        position: 'fixed',
+        top: box?.top || 0,
+        left: box?.left || 0,
+        width: box?.width || 240,
+        zIndex: 2000,
         maxHeight: '320px',
         overflowY: 'auto',
       }}
     >
+      <div className="px-3 py-1.5 text-muted small fw-semibold border-bottom bg-light d-flex align-items-center justify-content-between" style={{ fontSize: '10.5px' }}>
+        <span>SUGGESTIONS</span>
+        <span>{matches.length} found</span>
+      </div>
       {matches.length === 0 ? (
         <div className="px-3 py-3 text-secondary small">No matching results</div>
       ) : matches.map((item, index) => (
@@ -199,7 +195,7 @@ export const SearchBar = ({
         ref={inputRef}
         type="text"
         disabled={disabled}
-        className="form-control rounded-pill py-2.5 ps-5 pe-5 text-dark border border-light-subtle shadow-sm"
+        className="form-control rounded-pill py-2.5 ps-5 pe-5 text-secondary border border-light-subtle shadow-sm"
         placeholder={placeholder}
         value={value || ''}
         onChange={(event) => {
@@ -212,22 +208,34 @@ export const SearchBar = ({
           if (query) setIsOpen(true);
         }}
         onKeyDown={handleKeyDown}
+        style={{
+          fontSize: '13px',
+          backgroundColor: disabled ? '#f1f5f9' : '#ffffff',
+          cursor: disabled ? 'not-allowed' : 'text',
+          opacity: disabled ? 0.75 : 1,
+        }}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={isOpen}
+        aria-autocomplete="list"
       />
-      {value ? (
+      {value && !disabled && (
         <button
           type="button"
           onClick={() => {
             if (onChange) onChange('');
             setIsOpen(false);
+            setHighlightedIndex(-1);
+            inputRef.current?.focus();
           }}
-          className="btn btn-link position-absolute end-0 top-0 bottom-0 d-flex align-items-center justify-content-center me-2 text-secondary p-0 border-0"
-          style={{ width: '32px', zIndex: 3 }}
-          title="Clear search"
+          className="position-absolute end-0 top-0 bottom-0 d-flex align-items-center justify-content-center me-2 p-1 text-secondary border-0 bg-transparent"
+          style={{ cursor: 'pointer', zIndex: 3 }}
+          aria-label="Clear search"
         >
           <FiX size={16} />
         </button>
-      ) : null}
-      {dropdown && createPortal(dropdown, document.body)}
+      )}
+      {dropdown && box ? createPortal(dropdown, document.body) : null}
     </div>
   );
 };

@@ -7,7 +7,7 @@
 export const formatCompactTableLabel = (raw) => {
   if (raw === null || raw === undefined) return '';
   if (typeof raw === 'object') {
-    raw = raw.table_number || raw.number || raw.tableNumber || raw.tableId || raw.name || '';
+    raw = raw.table_number || raw.number || raw.tableNumber || raw.name || (raw.tableId && !Number.isInteger(Number(raw.tableId)) ? raw.tableId : '') || '';
   }
   let str = String(raw).trim();
   if (

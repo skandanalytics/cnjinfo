@@ -348,7 +348,10 @@ export const Orders = () => {
       />
 
       {/* Panel 12 Filter Toolbar: Segmented Type Pills & View Mode */}
-      <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
+      <div 
+        className="card rounded-4 border shadow-sm p-3 mb-4 d-flex flex-row align-items-center justify-content-between flex-wrap gap-2"
+        style={{ backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)' }}
+      >
         <div className="d-flex align-items-center gap-2 flex-wrap">
           {/* Segmented Type Pills */}
           <div className="p-1 rounded-pill d-inline-flex align-items-center" style={{ backgroundColor: 'var(--surface-muted, #F1F5F9)' }}>
@@ -356,19 +359,19 @@ export const Orders = () => {
               type="button"
               onClick={() => setTypeFilter('ALL')}
               className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
-                typeFilter === 'ALL' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+                typeFilter === 'ALL' ? 'text-white shadow-xs' : 'text-secondary bg-transparent'
               }`}
-              style={{ fontSize: '12px' }}
+              style={{ fontSize: '12px', backgroundColor: typeFilter === 'ALL' ? 'var(--primary-color, #F20D2D)' : 'transparent' }}
             >
-              All
+              All Orders
             </button>
             <button
               type="button"
               onClick={() => setTypeFilter('DINE_IN')}
               className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
-                typeFilter === 'DINE_IN' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+                typeFilter === 'DINE_IN' ? 'text-white shadow-xs' : 'text-secondary bg-transparent'
               }`}
-              style={{ fontSize: '12px' }}
+              style={{ fontSize: '12px', backgroundColor: typeFilter === 'DINE_IN' ? 'var(--primary-color, #F20D2D)' : 'transparent' }}
             >
               Dine-In
             </button>
@@ -376,9 +379,9 @@ export const Orders = () => {
               type="button"
               onClick={() => setTypeFilter('TAKEAWAY')}
               className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
-                typeFilter === 'TAKEAWAY' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+                typeFilter === 'TAKEAWAY' ? 'text-white shadow-xs' : 'text-secondary bg-transparent'
               }`}
-              style={{ fontSize: '12px' }}
+              style={{ fontSize: '12px', backgroundColor: typeFilter === 'TAKEAWAY' ? 'var(--primary-color, #F20D2D)' : 'transparent' }}
             >
               Takeaway
             </button>
@@ -388,8 +391,14 @@ export const Orders = () => {
           <select
             value={activeTab}
             onChange={(e) => handleTabClick(e.target.value)}
-            className="form-select form-select-sm rounded-pill border-light-subtle fw-semibold px-3 py-1.5"
-            style={{ width: '150px', fontSize: '12.5px', backgroundColor: 'var(--surface-muted, #F8FAFC)' }}
+            className="form-select form-select-sm rounded-pill fw-semibold px-3 py-1.5"
+            style={{ 
+              width: '150px', 
+              fontSize: '12.5px', 
+              backgroundColor: 'var(--surface-color)', 
+              borderColor: 'var(--border-color)', 
+              color: 'var(--text-primary)' 
+            }}
             aria-label="Filter by order status"
           >
             {tabs.map((tab) => (
@@ -435,14 +444,18 @@ export const Orders = () => {
           icon="bi-basket2-fill"
         />
       ) : viewMode === 'table' ? (
-        <div className="card rounded-4 border-0 shadow-sm overflow-hidden bg-white mb-4">
+        <div 
+          className="card rounded-4 border shadow-sm overflow-hidden mb-4"
+          style={{ backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)' }}
+        >
           <div className="table-responsive">
-            <table className="table align-middle mb-0">
-              <thead className="bg-light-subtle">
-                <tr className="text-secondary small fw-semibold" style={{ fontSize: '12px', borderBottom: '1px solid var(--border-color, #E2E8F0)' }}>
-                  <th className="ps-4 py-3">Order #</th>
+            <table className="table align-middle mb-0" style={{ backgroundColor: 'transparent' }}>
+              <thead>
+                <tr className="small fw-semibold" style={{ fontSize: '12px', backgroundColor: 'var(--background-color)', borderBottom: '1px solid var(--border-color)', color: 'var(--text-secondary)' }}>
+                  <th className="ps-4 py-3">Order No</th>
                   <th className="py-3">Table</th>
-                  <th className="py-3">Type</th>
+                  <th className="py-3">Order Type</th>
+                  <th className="py-3">Customer</th>
                   <th className="py-3">Amount</th>
                   <th className="py-3">Status</th>
                   <th className="py-3">Payment</th>
@@ -458,69 +471,87 @@ export const Orders = () => {
                   const displayTable = isTakeaway ? '—' : (rawTable ? `T${rawTable.padStart(2, '0')}` : (order.table || '—'));
                   const displayNo = formatOrderDisplayNumber(order, order.id);
                   const isPaid = String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID';
+                  const customerDisplay = order.customerName || order.customer_name || (order.customerPhone || order.customer_phone ? order.customerPhone || order.customer_phone : 'Walk-in');
 
                   // Status Badge Variant
                   const st = String(order.status || '').toLowerCase().trim();
-                  let stVariant = 'bg-secondary-subtle text-secondary';
+                  let stBg = '#FEF3C7';
+                  let stColor = '#B45309';
                   let stLabel = order.status;
                   if (['pending', 'placed', 'new'].includes(st)) {
-                    stVariant = 'bg-warning-subtle text-warning-emphasis';
+                    stBg = 'rgba(245, 158, 11, 0.12)';
+                    stColor = '#D97706';
                     stLabel = 'New';
                   } else if (['preparing', 'cooking', 'in_kitchen'].includes(st)) {
-                    stVariant = 'bg-info-subtle text-info-emphasis';
-                    stLabel = 'Preparing';
+                    stBg = 'rgba(37, 99, 235, 0.12)';
+                    stColor = '#2563EB';
+                    stLabel = 'In Kitchen';
                   } else if (['ready', 'prepared'].includes(st)) {
-                    stVariant = 'bg-primary-subtle text-primary';
+                    stBg = 'rgba(14, 165, 233, 0.12)';
+                    stColor = '#0284C7';
                     stLabel = 'Ready';
+                  } else if (['serving', 'served'].includes(st)) {
+                    stBg = 'rgba(99, 102, 241, 0.12)';
+                    stColor = '#4F46E5';
+                    stLabel = 'Serving';
                   } else if (['completed', 'delivered', 'done', 'settled'].includes(st)) {
-                    stVariant = 'bg-success-subtle text-success';
+                    stBg = 'rgba(22, 163, 74, 0.12)';
+                    stColor = '#16A34A';
                     stLabel = 'Completed';
                   } else if (['cancelled', 'canceled', 'rejected'].includes(st)) {
-                    stVariant = 'bg-danger-subtle text-danger';
+                    stBg = 'rgba(239, 68, 68, 0.12)';
+                    stColor = '#DC2626';
                     stLabel = 'Cancelled';
                   }
 
                   return (
-                    <tr key={order.id} className="border-bottom border-light">
-                      <td className="ps-4 py-3 fw-bold text-dark font-monospace" style={{ fontSize: '13px' }}>
+                    <tr key={order.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+                      <td className="ps-4 py-3 fw-bold font-monospace" style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
                         #{displayNo}
                       </td>
-                      <td className="py-3 text-secondary fw-semibold" style={{ fontSize: '13px' }}>
+                      <td className="py-3 fw-semibold" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
                         {displayTable}
                       </td>
-                      <td className="py-3 text-secondary" style={{ fontSize: '13px' }}>
-                        {isTakeaway ? 'Takeaway' : 'Dine-In'}
+                      <td className="py-3" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                        <span className="badge rounded-pill px-2.5 py-1" style={{ backgroundColor: isTakeaway ? 'rgba(37, 99, 235, 0.1)' : 'rgba(242, 13, 45, 0.08)', color: isTakeaway ? '#2563EB' : 'var(--primary-color)' }}>
+                          {isTakeaway ? 'Takeaway' : 'Dine-In'}
+                        </span>
                       </td>
-                      <td className="py-3 fw-bold text-dark" style={{ fontSize: '13.5px' }}>
+                      <td className="py-3 fw-medium text-truncate" style={{ fontSize: '13px', maxWidth: '140px', color: 'var(--text-primary)' }}>
+                        {customerDisplay}
+                      </td>
+                      <td className="py-3 fw-bold" style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>
                         {formatCurrency(adj.total || adj.total_amount)}
                       </td>
                       <td className="py-3">
-                        <span className={`badge rounded-pill fw-semibold px-2.5 py-1 ${stVariant}`} style={{ fontSize: '11px' }}>
-                          {stLabel}
+                        <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: stBg, color: stColor }}>
+                          ● {stLabel}
                         </span>
                       </td>
                       <td className="py-3">
-                        <span className={`badge rounded-pill fw-semibold px-2.5 py-1 ${isPaid ? 'bg-success-subtle text-success' : 'bg-light text-secondary border'}`} style={{ fontSize: '11px' }}>
-                          {isPaid ? 'Paid' : 'Unpaid'}
+                        <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: isPaid ? 'rgba(22, 163, 74, 0.12)' : 'rgba(239, 68, 68, 0.12)', color: isPaid ? '#16A34A' : '#DC2626' }}>
+                          ● {isPaid ? 'Paid' : 'Unpaid'}
                         </span>
                       </td>
                       <td className="text-end pe-4 py-3">
-                        <div className="d-flex align-items-center justify-content-end gap-1.5">
+                        <div className="d-flex align-items-center justify-content-end gap-2">
                           <button
                             type="button"
                             onClick={() => setSelectedOrder(order)}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
-                            style={{ fontSize: '11.5px' }}
+                            className="btn btn-sm text-white rounded-pill px-3 py-1 fw-bold shadow-xs border-0"
+                            style={{ fontSize: '11.5px', backgroundColor: 'var(--primary-color, #F20D2D)' }}
                           >
-                            View
+                            View Details
                           </button>
                           <button
                             type="button"
                             onClick={() => setEBillOrder(adj)}
-                            className="btn btn-sm btn-link text-secondary p-1 border-0"
-                            title="View Bill"
+                            className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold"
+                            style={{ fontSize: '11.5px' }}
+                            title="Show Bill"
                           >
-                            <FiEye size={15} />
+                            <FiEye size={13} className="me-1" />
+                            Show Bill
                           </button>
                         </div>
                       </td>

@@ -1,0 +1,50 @@
+
+--- PAGE 1 ---
+30-10-2026 customer module 
+ 
+ 
+ 
+ 01-reduce the delicious food for every mood and see in dosa image when we are adding plus 
+button showing color 
+ 
+02-we dont want click both buttons 
+
+--- PAGE 2 ---
+ 
+03- keep gap between box to non veg 
+ 
+04 :- 1 rupee is difference when we wre calculating 
+
+--- PAGE 3 ---
+ 
+5 :-gap between buttons-
+  
+06:-here payment status is to far change it (pyment status: paid), check the calculation is missing 
+subtotal also different here. this is print bill 
+  
+
+--- PAGE 4 ---
+ 
+07 :- this download bill 
+ 
+08:- here table no showing t6 but we ordered t2 
+
+--- PAGE 5 ---
+ 
+09:- after completing order i am again ordereing in same table it is taking time 
+ 
+
+--- PAGE 6 ---
+10;- gap between plus to continue order 
+ 
+ 
+11:- space between symbol to view 
+
+--- PAGE 7 ---
+ 
+12: - in take away service charges is not required 
+ 
+13:- give space between symbol to view bill/recepit 
+
+--- PAGE 8 ---
+ 

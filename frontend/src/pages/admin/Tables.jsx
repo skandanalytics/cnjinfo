@@ -16,7 +16,7 @@ import { useBranches } from '../../hooks/useBranches';
 import { productService } from '../../services/productService';
 import { menuService } from '../../services/menuService';
 import { useAuth } from '../../hooks/useAuth';
-import { FiPlus, FiShoppingCart, FiAlertTriangle } from 'react-icons/fi';
+import { FiPlus, FiShoppingCart, FiAlertTriangle, FiSearch } from 'react-icons/fi';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
 import { OrderContext } from '../../context/OrderContext';
@@ -384,7 +384,15 @@ export const Tables = () => {
 
   const occupiedCount = tables.filter(t => t.status === 'Occupied' || t.is_occupied).length;
 
+  const [searchQuery, setSearchQuery] = useState('');
+
   const filteredTables = tables.filter((t) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const num = String(t.number || t.table_number || '').toLowerCase();
+      const loc = String(t.location || t.area || '').toLowerCase();
+      if (!num.includes(q) && !loc.includes(q) && !('t' + num).includes(q)) return false;
+    }
     if (selectedLocation !== 'ALL') {
       const loc = t.location || t.area || 'Indoor';
       if (loc !== selectedLocation) return false;
@@ -461,85 +469,159 @@ export const Tables = () => {
   return (
     <AdminLayout contentClassName="p-0">
       <div className="tables-page-container">
-        <PageHeader 
-          title="Tables" 
-          showBackButton
-          actions={
-            <div className="d-flex align-items-center gap-2">
-              <Button 
-                onClick={handleTakeawayOrder} 
-                variant="outline" 
-                disabled={!hasDishes}
-                title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable because no dishes are currently available.'}
-                className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs rounded-pill"
-                style={{ fontSize: '13px' }}
-              >
-                <FiShoppingCart /> Takeaway Order
-              </Button>
-              {isAdmin && hasBranches && (
-                <Button 
-                  onClick={() => setIsAddOpen(true)} 
-                  variant="primary" 
-                  className="d-flex align-items-center gap-2 py-2 px-3.5 rounded-pill fw-bold"
-                  style={{ fontSize: '13px' }}
-                >
-                  <FiPlus /> Add Table
-                </Button>
-              )}
-            </div>
-          }
-        />
-
-        {/* Panel 9 Filter Toolbar: Location dropdown & Status pills */}
-        <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
-          <div className="d-flex align-items-center gap-2">
-            <select
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value)}
-              className="form-select form-select-sm rounded-pill border-light-subtle fw-semibold px-3 py-1.5"
-              style={{ minWidth: '150px', fontSize: '13px', backgroundColor: 'var(--surface-muted)' }}
-              aria-label="Filter tables by location"
-            >
-              <option value="ALL">All Locations</option>
-              {uniqueLocations.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
-            </select>
+        {/* Page Header (Matches Reference Screenshot 1) */}
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
+          <div>
+            <h2 className="fw-bold mb-1 text-dark" style={{ fontSize: '26px', letterSpacing: '-0.5px' }}>
+              Manage Tables
+            </h2>
+            <p className="text-secondary small mb-0" style={{ fontSize: '13px' }}>
+              Manage dine-in tables, locations and availability.
+            </p>
           </div>
 
           <div className="d-flex align-items-center gap-2">
-            <button
+            <button 
               type="button"
-              onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'available' ? 'ALL' : 'available')}
-              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 transition-all ${
-                selectedStatusFilter === 'available' ? 'bg-success text-white shadow-xs' : 'bg-success-subtle text-success border border-success-subtle'
-              }`}
-              style={{ fontSize: '12px' }}
+              onClick={handleTakeawayOrder} 
+              disabled={!hasDishes}
+              title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable.'}
+              className="btn btn-outline-danger d-inline-flex align-items-center gap-2 py-2 px-3.5 fw-bold bg-white rounded-pill shadow-xs"
+              style={{ fontSize: '13px', borderColor: '#F20D2D', color: '#F20D2D' }}
             >
-              <span className="rounded-circle bg-success d-inline-block" style={{ width: '6px', height: '6px' }}></span>
-              <span>Available ({availableCount})</span>
+              <FiShoppingCart /> Takeaway Order
             </button>
-            <button
-              type="button"
-              onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'occupied' ? 'ALL' : 'occupied')}
-              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 transition-all ${
-                selectedStatusFilter === 'occupied' ? 'bg-danger text-white shadow-xs' : 'bg-danger-subtle text-danger border border-danger-subtle'
-              }`}
-              style={{ fontSize: '12px' }}
-            >
-              <span className="rounded-circle bg-danger d-inline-block" style={{ width: '6px', height: '6px' }}></span>
-              <span>Occupied ({occupiedCount})</span>
-            </button>
-            {selectedStatusFilter !== 'ALL' && (
-              <button
+            {isAdmin && hasBranches && (
+              <button 
                 type="button"
-                onClick={() => setSelectedStatusFilter('ALL')}
-                className="btn btn-sm btn-link text-secondary text-decoration-none fw-semibold p-0 ms-1"
-                style={{ fontSize: '12px' }}
+                onClick={() => setIsAddOpen(true)} 
+                className="btn btn-danger d-inline-flex align-items-center gap-2 py-2 px-4 rounded-pill fw-bold text-white shadow-sm"
+                style={{ 
+                  fontSize: '13px', 
+                  backgroundColor: '#F20D2D', 
+                  borderColor: '#F20D2D'
+                }}
               >
-                Clear
+                <FiPlus size={16} /> Add Table
               </button>
             )}
+          </div>
+        </div>
+
+        {/* 2 KPI Stat Cards & Filter Toolbar (Matches Reference Screenshot 1) */}
+        <div className="row g-3 mb-4 align-items-center">
+          {/* Stat Card 1: Available Tables */}
+          <div className="col-12 col-sm-6 col-lg-3">
+            <div 
+              className="card h-100 p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3 transition-all"
+              style={{ 
+                borderColor: selectedStatusFilter === 'available' ? '#16A34A' : '#E2E8F0', 
+                cursor: 'pointer',
+                backgroundColor: selectedStatusFilter === 'available' ? '#F6FBF7' : '#FFFFFF'
+              }}
+              onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'available' ? 'ALL' : 'available')}
+            >
+              <div 
+                className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                style={{ width: '48px', height: '48px', backgroundColor: '#DCFCE7', color: '#16A34A' }}
+              >
+                <svg width="24" height="20" viewBox="0 0 24 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <ellipse cx="12" cy="7" rx="10" ry="4" />
+                  <path d="M5 9V17" />
+                  <path d="M19 9V17" />
+                  <path d="M12 11V18" />
+                </svg>
+              </div>
+              <div className="flex-grow-1 text-start">
+                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Available Tables</div>
+                <div className="fw-bold text-dark fs-3 mb-0.5">{availableCount}</div>
+                <span className="badge rounded-pill px-2.5 py-0.5 fw-bold d-inline-flex align-items-center gap-1" style={{ fontSize: '11px', backgroundColor: '#DCFCE7', color: '#16A34A' }}>
+                  <span className="rounded-circle" style={{ width: '6px', height: '6px', backgroundColor: '#16A34A' }}></span>
+                  Available
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stat Card 2: Occupied Tables */}
+          <div className="col-12 col-sm-6 col-lg-3">
+            <div 
+              className="card h-100 p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3 transition-all"
+              style={{ 
+                borderColor: selectedStatusFilter === 'occupied' ? '#DC2626' : '#E2E8F0', 
+                cursor: 'pointer',
+                backgroundColor: selectedStatusFilter === 'occupied' ? '#FFF6F6' : '#FFFFFF'
+              }}
+              onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'occupied' ? 'ALL' : 'occupied')}
+            >
+              <div 
+                className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                style={{ width: '48px', height: '48px', backgroundColor: '#FEE2E2', color: '#DC2626' }}
+              >
+                <svg width="24" height="20" viewBox="0 0 24 20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <ellipse cx="12" cy="7" rx="10" ry="4" />
+                  <path d="M5 9V17" />
+                  <path d="M19 9V17" />
+                  <path d="M12 11V18" />
+                </svg>
+              </div>
+              <div className="flex-grow-1 text-start">
+                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Occupied Tables</div>
+                <div className="fw-bold text-dark fs-3 mb-0.5">{occupiedCount}</div>
+                <span className="badge rounded-pill px-2.5 py-0.5 fw-bold d-inline-flex align-items-center gap-1" style={{ fontSize: '11px', backgroundColor: '#FEE2E2', color: '#DC2626' }}>
+                  <span className="rounded-circle" style={{ width: '6px', height: '6px', backgroundColor: '#DC2626' }}></span>
+                  Occupied
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Filter Toolbar on Right: Location, Status, Search */}
+          <div className="col-12 col-lg-6">
+            <div className="card h-100 p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center flex-wrap gap-2.5" style={{ borderColor: '#E2E8F0' }}>
+              <div className="d-flex align-items-center gap-2 flex-grow-1">
+                <div className="d-flex flex-column text-start flex-grow-1" style={{ minWidth: '130px' }}>
+                  <label className="text-muted small fw-semibold mb-1" style={{ fontSize: '11px' }}>Location</label>
+                  <select
+                    value={selectedLocation}
+                    onChange={(e) => setSelectedLocation(e.target.value)}
+                    className="form-select form-select-sm rounded-pill fw-semibold border bg-light px-3 py-1.5 text-dark"
+                    style={{ fontSize: '12.5px', borderColor: '#CBD5E1' }}
+                  >
+                    <option value="ALL">All Locations</option>
+                    {uniqueLocations.map(loc => (
+                      <option key={loc} value={loc}>{loc}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="d-flex flex-column text-start flex-grow-1" style={{ minWidth: '120px' }}>
+                  <label className="text-muted small fw-semibold mb-1" style={{ fontSize: '11px' }}>Status</label>
+                  <select
+                    value={selectedStatusFilter}
+                    onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                    className="form-select form-select-sm rounded-pill fw-semibold border bg-light px-3 py-1.5 text-dark"
+                    style={{ fontSize: '12.5px', borderColor: '#CBD5E1' }}
+                  >
+                    <option value="ALL">All Status</option>
+                    <option value="available">Available</option>
+                    <option value="occupied">Occupied</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="position-relative flex-grow-1 mt-auto" style={{ minWidth: '180px' }}>
+                <FiSearch className="position-absolute text-muted" style={{ left: '12px', top: '10px' }} size={14} />
+                <input
+                  type="text"
+                  placeholder="Search table (e.g., T01)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="form-control form-control-sm rounded-pill ps-4 py-1.5 border bg-light text-dark"
+                  style={{ fontSize: '12.5px', borderColor: '#CBD5E1' }}
+                />
+              </div>
+            </div>
           </div>
         </div>
 

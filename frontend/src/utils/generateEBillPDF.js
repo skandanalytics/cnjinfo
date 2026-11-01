@@ -183,7 +183,7 @@ const printHtmlInvoice = (order, backendId, payment, customer) => {
         </div>
         <div class="neat-footer">
           <div>
-            <strong>Thank you for dining with Foodie Restaurant!</strong><br>
+            <strong>${isTakeaway ? 'Thank you for choosing Foodie. Visit again.' : 'Thank you for dining with Foodie. Visit again.'}</strong><br>
             <span>For feedback or queries: www.foodie.com | Helpline: +91 98765 43210</span>
           </div>
           <div style="text-align:right;">
@@ -700,13 +700,15 @@ export const generateEBillPDF = async (orderOrId) => {
     doc.text(formatPdfCurrency(tax), valX, sumY, { align: "right" });
     sumY += 5;
 
-    // Service Charge (2%)
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(...textGray);
-    doc.text("Service Charge (2%):", labelX, sumY);
-    doc.setTextColor(...darkSlate);
-    doc.text(isServiceChargeRemoved || serviceCharge === 0 ? "Rs. 0.00" : formatPdfCurrency(serviceCharge), valX, sumY, { align: "right" });
-    sumY += 5;
+    // Service Charge (2%) (Zero / Not applicable for Takeaway)
+    if (!isTakeaway && serviceCharge > 0 && !isServiceChargeRemoved) {
+      doc.setFont("helvetica", "normal");
+      doc.setTextColor(...textGray);
+      doc.text("Service Charge (2%):", labelX, sumY);
+      doc.setTextColor(...darkSlate);
+      doc.text(formatPdfCurrency(serviceCharge), valX, sumY, { align: "right" });
+      sumY += 5;
+    }
 
     if (deliveryFee > 0) {
       doc.setFont("helvetica", "normal");
@@ -757,7 +759,7 @@ export const generateEBillPDF = async (orderOrId) => {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
       doc.setTextColor(...darkSlate);
-      doc.text("Thank you for dining with Foodie Restaurant!", margin, footerY + 5);
+      doc.text(isTakeaway ? "Thank you for choosing Foodie. Visit again." : "Thank you for dining with Foodie Restaurant!", margin, footerY + 5);
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);

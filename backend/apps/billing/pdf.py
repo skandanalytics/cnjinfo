@@ -218,11 +218,14 @@ def render_invoice_pdf(invoice, for_customer=False):
         name_flow = [Paragraph(_text(item.get("name") or "Dish"), cell)]
         if extras:
             name_flow.append(Paragraph(_text(", ".join(extras)), extra))
+        qty = _decimal(item.get("quantity") or 1)
+        unit = _decimal(item.get("unit_price") or 0)
+        base_line = qty * unit
         rows.append([
             name_flow,
             Paragraph(_text(item.get("quantity") or ""), cell_center),
-            Paragraph(_money(item.get("unit_price")), cell_right),
-            Paragraph(_money(item.get("line_total")), cell_right),
+            Paragraph(_money(unit), cell_right),
+            Paragraph(_money(base_line), cell_right),
         ])
     if len(rows) == 1:
         rows.append([
@@ -312,20 +315,25 @@ def render_invoice_pdf(invoice, for_customer=False):
     ]
 
     payment_code = str(snap.get("payment_status") or "").upper()
-    payment_label = PAYMENT_LABELS.get(payment_code, payment_code or "Unpaid")
+    is_paid = payment_code in ("PAID", "SUCCESS")
+    status_display = "Paid" if is_paid else "Unpaid / pending"
+    status_color = "#16a34a" if is_paid else "#dc2626"
     method = snap.get("payment_method") or ""
-    payment_lines = [f"<b>Payment status</b>&nbsp;&nbsp;{_text(payment_label)}"]
+    payment_lines = [
+        f"<b>Payment status</b>&nbsp;&nbsp;<font color='{status_color}'><b>{_text(status_display)}</b></font>"
+    ]
     if method:
         payment_lines.append(f"<b>Payment method</b>&nbsp;&nbsp;{_text(method)}")
     payment = Paragraph("<br/>".join(payment_lines), body)
     closing_items.extend([
-        Spacer(1, 10),
+        Spacer(1, 4),
         payment,
     ])
 
+    thank_you_msg = "Thank you for choosing Foodie. Visit again." if takeaway else "Thank you for dining with Foodie. Visit again."
     closing_items.extend([
-        Spacer(1, 12),
-        Paragraph("Thank you for dining with Foodie.", footer),
+        Spacer(1, 10),
+        Paragraph(thank_you_msg, footer),
         Paragraph("Computer-generated invoice from the saved order.", footer),
     ])
     closing = KeepTogether(closing_items)

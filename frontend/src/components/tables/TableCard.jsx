@@ -1,15 +1,45 @@
 import React from 'react';
-import { FiLayers, FiShoppingCart, FiEdit2, FiTrash2 } from 'react-icons/fi';
+import { FiEdit2, FiEye, FiMapPin, FiUsers } from 'react-icons/fi';
+import { tableService } from '../../services/tableService';
 
 export function getShortTableNumber(val) {
   if (!val && val !== 0) return 'T1';
   const str = String(val).trim();
   const digits = str.replace(/\D/g, '');
   if (digits) {
-    return `T${parseInt(digits, 10)}`;
+    return 'T' + parseInt(digits, 10);
   }
-  return str.startsWith('T') ? str : `T${str}`;
+  return str.startsWith('T') ? str : 'T' + str;
 }
+
+
+
+// Cute restaurant table & chairs SVG graphic matching reference screenshot
+const TableIllustration = ({ isOccupied }) => (
+  <svg width="68" height="52" viewBox="0 0 68 52" fill="none" xmlns="http://www.w3.org/2000/svg" className="flex-shrink-0">
+    {/* Left Chair */}
+    <rect x="2" y="16" width="6" height="24" rx="3" fill={isOccupied ? '#DC2626' : '#B45309'} />
+    <path d="M5 24H12V32C12 33.1 11.1 34 10 34H5V24Z" fill={isOccupied ? '#EF4444' : '#D97706'} />
+    <rect x="4" y="34" width="3" height="14" rx="1.5" fill="#78350F" />
+
+    {/* Right Chair */}
+    <rect x="60" y="16" width="6" height="24" rx="3" fill={isOccupied ? '#DC2626' : '#B45309'} />
+    <path d="M56 24H63V34H58C56.9 34 56 33.1 56 32V24Z" fill={isOccupied ? '#EF4444' : '#D97706'} />
+    <rect x="61" y="34" width="3" height="14" rx="1.5" fill="#78350F" />
+
+    {/* Center Tabletop */}
+    <ellipse cx="34" cy="24" rx="24" ry="11" fill="#F59E0B" stroke="#B45309" strokeWidth="2" />
+    <ellipse cx="34" cy="23" rx="20" ry="8" fill="#FDE68A" />
+
+    {/* Table Center Vase / Flower */}
+    <circle cx="34" cy="20" r="3.5" fill="#10B981" />
+    <path d="M34 14C34 14 31 17 34 19C37 17 34 14 34 14Z" fill="#059669" />
+
+    {/* Table Legs & Base */}
+    <rect x="32" y="32" width="4" height="14" rx="1" fill="#92400E" />
+    <ellipse cx="34" cy="46" rx="10" ry="3" fill="#78350F" />
+  </svg>
+);
 
 export const TableCard = ({
   table,
@@ -18,6 +48,7 @@ export const TableCard = ({
   onEdit,
   onDelete,
   onViewQR,
+  onTrackOrder,
   isAdmin = false,
   showActions = false,
   hasDishes = true,
@@ -27,159 +58,120 @@ export const TableCard = ({
   const isReserved = table.status === 'Reserved';
   const isInactive = table.is_active === false;
 
-  const statusColor = isOccupied ? '#ef4444' : isReserved ? '#f59e0b' : '#22c55e';
-  const statusLabel = isOccupied ? 'Occupied' : isReserved ? 'Reserved' : 'Available';
-
-  const isTakeOrderDisabled = !hasDishes || isOccupied || isInactive;
-  const hasUnfinishedOrders = Boolean(table.has_active_order || hasActiveOrder);
-
-  const getTakeOrderTooltip = () => {
-    if (isOccupied) return 'Table is occupied.';
-    if (isInactive) return 'This table is inactive.';
-    if (!hasDishes) return 'Cannot take order: menu categories and dishes required.';
-    return 'Take Order';
-  };
-
+  const currentStatus = isOccupied ? 'Occupied' : isReserved ? 'Reserved' : (table.status || 'Available');
   const rawNum = table.number || table.table_number || table.id || '';
-  const shortNum = getShortTableNumber(rawNum);
+  const displayTableNum = tableService.getCanonicalTableNumber(rawNum);
+  const locationLabel = table.location || table.area || 'Indoor';
+  const capacityNumber = table.capacity || table.seating_capacity || 4;
 
   return (
-    <div className={`table-card transition-all ${
-      !isOccupied && !isReserved ? 'table-available' : 
-      isOccupied ? 'table-occupied' : 'table-reserved'
-    } ${isInactive ? 'opacity-75' : ''}`}>
-      {/* Top Header: Table Short Name & Availability Indicator */}
-      <div className="d-flex align-items-center justify-content-between mb-2.5 pb-2 border-bottom flex-shrink-0">
-        <div className="d-flex align-items-center" style={{ gap: '8px' }}>
-          <FiLayers size={17} className="text-secondary flex-shrink-0" />
-          <span className="fw-bold text-dark text-nowrap fs-6" style={{ letterSpacing: '-0.2px' }}>
-            {shortNum}
-          </span>
-          <span
-            className="rounded-circle d-inline-block flex-shrink-0"
-            style={{
-              width: '9px',
-              height: '9px',
-              backgroundColor: statusColor,
-              boxShadow: `0 0 0 2.5px ${statusColor}33`,
+    <div 
+      className="card shadow-xs transition-all position-relative overflow-hidden"
+      style={{
+        borderRadius: '16px',
+        backgroundColor: isOccupied ? '#FFF6F6' : '#F6FBF7',
+        border: isOccupied ? '1.5px solid #FCDAD9' : '1.5px solid #D6EFE0',
+        padding: '14px 16px',
+        cursor: 'default'
+      }}
+    >
+      {/* Top Status Pill (Right Aligned) */}
+      <div className="d-flex justify-content-end mb-1">
+        <span 
+          className="badge rounded-pill fw-bold px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-2xs"
+          style={{
+            fontSize: '11px',
+            backgroundColor: isOccupied ? '#FEE2E2' : '#DCFCE7',
+            color: isOccupied ? '#DC2626' : '#16A34A',
+            border: isOccupied ? '1px solid #FECACA' : '1px solid #BBF7D0'
+          }}
+        >
+          <span 
+            className="rounded-circle d-inline-block"
+            style={{ 
+              width: '6px', 
+              height: '6px', 
+              backgroundColor: isOccupied ? '#DC2626' : '#16A34A' 
             }}
-            title={statusLabel}
-            aria-label={`Table status: ${statusLabel}`}
-            role="status"
           />
-        </div>
-        <div className="d-flex align-items-center flex-shrink-0" style={{ gap: '6px' }}>
-          {isAdmin && (
-            <div className="d-flex align-items-center gap-1 ms-1">
-              <button 
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onEdit(table); }}
-                className="btn btn-sm btn-outline-secondary p-0 border-0"
-                style={{ borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                title="Edit Table"
-              >
-                <FiEdit2 size={12} />
-              </button>
-              <button 
-                type="button"
-                onClick={(e) => { e.stopPropagation(); onDelete(table); }}
-                className="btn btn-sm btn-outline-danger p-0 border-0"
-                style={{ borderRadius: '50%', width: '24px', height: '24px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                title="Delete Table"
-              >
-                <FiTrash2 size={12} />
-              </button>
+          <span>{currentStatus}</span>
+        </span>
+      </div>
+
+      {/* Middle Row: Table Illustration on Left, Info on Right */}
+      <div className="d-flex align-items-center gap-3 my-1">
+        <TableIllustration isOccupied={isOccupied} />
+
+        <div className="text-start flex-grow-1">
+          <h4 className="fw-bold mb-1 text-dark" style={{ fontSize: '19px', letterSpacing: '-0.3px' }}>
+            {displayTableNum.startsWith('T') ? displayTableNum : `T${String(displayTableNum).padStart(2, '0')}`}
+          </h4>
+
+          <div className="d-flex flex-column gap-0.5 text-secondary" style={{ fontSize: '11.5px' }}>
+            <div className="d-flex align-items-center gap-1.5 fw-medium text-secondary">
+              <FiMapPin size={12} className="text-muted flex-shrink-0" />
+              <span>{locationLabel}</span>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* Middle Body: Capacity & Details */}
-      <div className="text-start mb-2.5 text-secondary flex-grow-1" style={{ fontSize: '12px', lineHeight: '1.5' }}>
-        <div className="mb-1 text-truncate">
-          Capacity: <strong className="text-dark">{table.capacity || 4} Diners</strong>
-        </div>
-        <div className="mb-1 text-truncate">
-          Location: <strong className="text-dark">{table.location || table.area || 'Indoor Main'}</strong>
-        </div>
-        {isReserved && table.reservationName && (
-          <div className="text-warning-emphasis fw-semibold text-truncate mt-1" style={{ fontSize: '11.5px' }}>
-            Reserved for: {table.reservationName}
+            <div className="d-flex align-items-center gap-1.5 fw-medium text-muted">
+              <FiUsers size={12} className="text-muted flex-shrink-0" />
+              <span>{capacityNumber} Seats</span>
+            </div>
           </div>
-        )}
+        </div>
       </div>
 
-      {/* Footer Action Buttons */}
-      {showActions && (
-        <div className="d-flex justify-content-end align-items-center pt-2.5 border-top mt-auto flex-shrink-0 flex-nowrap" style={{ gap: '8px' }}>
-          {hasDishes && onViewQR && (
-            <button 
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                onViewQR(table);
-              }} 
-              className="table-card-btn btn btn-outline-dark d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0"
-              title="View Table QR Code"
-              style={{ fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
-            >
-              <i className="bi bi-qr-code me-1"></i>
-              <span>QR Code</span>
-            </button>
-          )}
-          {!isOccupied && !isReserved && (
-            <button 
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                if (!hasDishes) return;
-                onStatusChange(table.id, 'Reserved');
-              }} 
-              disabled={!hasDishes}
-              className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${!hasDishes ? 'btn-outline-secondary opacity-50' : 'btn-outline-warning'}`}
-              style={{ cursor: !hasDishes ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
-              title={!hasDishes ? "Cannot reserve: menu categories and dishes required" : "Reserve Table"}
-            >
-              <span>Reserve</span>
-            </button>
-          )}
-          {(isOccupied || isReserved) && (
-            <button 
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                e.preventDefault();
-                if (hasUnfinishedOrders) return;
-                onStatusChange(table.id, 'Available');
-              }} 
-              disabled={hasUnfinishedOrders}
-              className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${hasUnfinishedOrders ? 'btn-outline-secondary opacity-50' : 'btn-outline-success'}`}
-              style={{ cursor: hasUnfinishedOrders ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
-              title={hasUnfinishedOrders ? "Cannot vacate: active order in progress" : (isReserved ? "Release Reservation / Vacate" : "Vacate Table")}
-            >
-              <span>Vacate</span>
-            </button>
-          )}
-          <button 
+      {/* Footer Action Buttons (3 Buttons: Edit, View Order, QR Code) */}
+      <div className="d-flex align-items-center justify-content-between gap-1.5 pt-3 mt-2 border-top" style={{ borderColor: isOccupied ? '#FEE2E2' : '#E2F3E9' }}>
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (onEdit) onEdit(table);
+          }}
+          className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
+          style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
+          title="Edit Table"
+        >
+          <FiEdit2 size={12} className="text-muted" />
+          <span>Edit</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            if (isOccupied && onTrackOrder) {
+              onTrackOrder(table);
+            } else if (!isOccupied && onSelect) {
+              onSelect(table);
+            } else if (onTrackOrder) {
+              onTrackOrder(table);
+            }
+          }}
+          className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
+          style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
+          title={isOccupied ? "View active order" : "Take table order"}
+        >
+          <FiEye size={12} className="text-muted" />
+          <span>View Order</span>
+        </button>
+
+        {onViewQR && (
+          <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              e.preventDefault();
-              if (isTakeOrderDisabled) return;
-              onSelect(table);
-            }} 
-            disabled={isTakeOrderDisabled}
-            className={`table-card-btn btn d-inline-flex align-items-center justify-content-center text-nowrap flex-grow-1 flex-shrink-0 ${isTakeOrderDisabled ? 'btn-secondary opacity-50' : 'btn-danger shadow-xs'}`}
-            style={{ cursor: isTakeOrderDisabled ? 'not-allowed' : 'pointer', fontSize: '11.5px', padding: '4px 10px', height: '32px' }}
-            title={getTakeOrderTooltip()}
+              onViewQR(table);
+            }}
+            className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
+            style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
+            title="View Table QR Code"
           >
-            <FiShoppingCart size={12} className="me-1" />
-            <span>Take Order</span>
+            <i className="bi bi-qr-code text-muted" style={{ fontSize: '11px' }} />
+            <span>QR Code</span>
           </button>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };

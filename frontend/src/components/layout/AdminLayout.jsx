@@ -2,7 +2,7 @@ import React, { useContext, useState, useEffect, useRef } from 'react';
 import Sidebar from './Sidebar';
 import { AppContext } from '../../context/AppContext';
 import { useAuth } from '../../hooks/useAuth';
-import { FiAlignLeft, FiBell, FiChevronDown, FiLogOut, FiShoppingBag, FiX } from 'react-icons/fi';
+import { FiAlignLeft, FiBell, FiChevronDown, FiLogOut, FiShoppingBag, FiX, FiSearch, FiMessageSquare } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { orderService } from '../../services/orderService';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
@@ -131,13 +131,14 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
             </button>
 
             {/* Header Search Input */}
-            <div className="d-none d-md-flex align-items-center position-relative" style={{ width: '280px' }}>
+            <div className="d-none d-md-flex align-items-center position-relative" style={{ width: '320px' }}>
+              <FiSearch size={16} className="position-absolute start-0 ms-3 text-secondary" style={{ pointerEvents: 'none', zIndex: 1 }} />
               <input 
                 type="text" 
                 placeholder="Search anything..." 
-                className="form-control rounded-pill ps-4 pe-3 border-0"
+                className="form-control rounded-pill ps-5 pe-3 border-0"
                 style={{ 
-                  backgroundColor: isDarkMode ? '#182234' : '#F1F5F9', 
+                  backgroundColor: isDarkMode ? '#1E2D42' : '#F1F5F9', 
                   fontSize: '13px', 
                   height: '38px',
                   color: 'var(--text-primary)'
@@ -181,7 +182,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                   style={{
                     width: '38px',
                     height: '38px',
-                    backgroundColor: isDarkMode ? '#182234' : '#F1F5F9',
+                    backgroundColor: isDarkMode ? '#1E2D42' : '#F1F5F9',
                     color: 'var(--text-secondary)'
                   }}
                   title="Notifications"
@@ -288,21 +289,48 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
             </div>
             )}
 
+            {/* Messages / Chat Button */}
+            <div className="position-relative">
+              <button
+                type="button"
+                className="btn p-2 rounded-circle border-0 position-relative d-flex align-items-center justify-content-center"
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  backgroundColor: isDarkMode ? '#1E2D42' : '#F1F5F9',
+                  color: 'var(--text-secondary)'
+                }}
+                title="Messages"
+              >
+                <FiMessageSquare size={18} />
+                <span 
+                  className="position-absolute top-0 start-100 translate-middle badge rounded-circle bg-danger p-1"
+                  style={{ transform: 'translate(-30%, 30%) !important' }}
+                >
+                  <span className="visually-hidden">unread messages</span>
+                </span>
+              </button>
+            </div>
+
             {/* User Profile Pill & Dropdown */}
             <div className="position-relative">
               <div 
-                className="d-flex align-items-center gap-2 p-1 pe-2 rounded-pill cursor-pointer"
-                style={{ cursor: 'pointer', backgroundColor: isDarkMode ? '#182234' : '#F8FAFC' }}
+                className="d-flex align-items-center gap-2 p-1 pe-2.5 rounded-pill cursor-pointer border"
+                style={{ 
+                  cursor: 'pointer', 
+                  backgroundColor: isDarkMode ? '#182638' : '#FFFFFF',
+                  borderColor: 'var(--border-color)'
+                }}
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
               >
                 <div 
-                  className="text-white rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-sm"
-                  style={{ width: '32px', height: '32px', fontSize: '13px', backgroundColor: 'var(--primary-color)' }}
+                  className="text-white rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
+                  style={{ width: '32px', height: '32px', fontSize: '14px', backgroundColor: 'var(--primary-color)' }}
                 >
-                  {user?.name?.charAt(0).toUpperCase() || (user?.role === 'admin' ? 'A' : 'E')}
+                  {user?.name?.charAt(0).toUpperCase() || 'F'}
                 </div>
                 <div className="d-none d-sm-block text-start">
-                  <div className="small fw-bold text-dark" style={{ lineHeight: '1.2', fontSize: '12px' }}>
+                  <div className="small fw-bold" style={{ lineHeight: '1.2', fontSize: '12px', color: 'var(--text-primary)' }}>
                     {user?.name || (user?.role === 'admin' ? 'foodieadmin' : 'Staff')}
                   </div>
                   <div className="text-secondary" style={{ fontSize: '10px', lineHeight: '1' }}>

@@ -52,31 +52,11 @@ export const AppRoutes = () => {
       <Route path="/customer/home" element={<Home />} />
       <Route path="/customer/food/:id" element={<FoodDetails />} />
       <Route path="/customer/cart" element={<Cart />} />
-      <Route path="/customer/checkout" element={
-        <ProtectedRoute>
-          <Checkout />
-        </ProtectedRoute>
-      } />
-      <Route path="/customer/payment" element={
-        <ProtectedRoute>
-          <Payment />
-        </ProtectedRoute>
-      } />
-      <Route path="/customer/order-confirmation" element={
-        <ProtectedRoute>
-          <OrderConfirmation />
-        </ProtectedRoute>
-      } />
-      <Route path="/customer/orders" element={
-        <ProtectedRoute>
-          <OrderHistory />
-        </ProtectedRoute>
-      } />
-      <Route path="/customer/order-tracking/:orderId" element={
-        <ProtectedRoute>
-          <OrderTracking />
-        </ProtectedRoute>
-      } />
+      <Route path="/customer/checkout" element={<Checkout />} />
+      <Route path="/customer/payment" element={<Payment />} />
+      <Route path="/customer/order-confirmation" element={<OrderConfirmation />} />
+      <Route path="/customer/orders" element={<OrderHistory />} />
+      <Route path="/customer/order-tracking/:orderId" element={<OrderTracking />} />
       <Route path="/customer/display-board" element={<DisplayBoard />} />
       <Route path="/display-board" element={<DisplayBoard />} />
 

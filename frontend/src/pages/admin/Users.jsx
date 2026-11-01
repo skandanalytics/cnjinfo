@@ -354,8 +354,11 @@ export const Users = () => {
         /* When employees are present: directory, filters, and records */
         <>
           {/* Filter Tabs & Search Bar */}
-          <div className="card border-0 shadow-sm rounded-4 p-4 bg-white mb-4">
-            <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4 pb-3 border-bottom">
+          <div 
+            className="card border shadow-sm rounded-4 p-4 mb-4"
+            style={{ backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)' }}
+          >
+            <div className="d-flex flex-column flex-lg-row align-items-lg-center justify-content-between gap-3 mb-4 pb-3 border-bottom" style={{ borderColor: 'var(--border-subtle)' }}>
               {/* Tabs */}
               <div className="d-flex flex-wrap gap-2">
                 {[
@@ -369,10 +372,10 @@ export const Users = () => {
                     key={tab.key}
                     onClick={() => setSelectedTab(tab.key)}
                     className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all ${selectedTab === tab.key
-                      ? 'bg-danger text-white border-0 shadow-xs'
+                      ? 'text-white border-0 shadow-xs'
                       : 'bg-light text-secondary border border-light-subtle'
                       }`}
-                    style={{ fontSize: '12px' }}
+                    style={{ fontSize: '12px', backgroundColor: selectedTab === tab.key ? 'var(--primary-color, #F20D2D)' : undefined }}
                   >
                     {tab.label}
                   </button>
@@ -862,11 +865,18 @@ export const Users = () => {
                   </div>
                 </div>
 
-                <div className="modal-footer border-0 p-3 bg-light">
+                <div className="modal-footer border-0 p-3" style={{ backgroundColor: 'var(--background-color)' }}>
                   <button
                     type="button"
                     disabled={isSubmitting}
-                    className="btn btn-outline-danger btn-sm rounded-pill px-4"
+                    className="btn rounded-pill px-4 fw-bold"
+                    style={{
+                      height: '38px',
+                      backgroundColor: '#FFFFFF',
+                      color: 'var(--primary-color, #F20D2D)',
+                      border: '1.5px solid var(--primary-color, #F20D2D)',
+                      fontSize: '13px'
+                    }}
                     onClick={() => {
                       setIsAddModalOpen(false);
                       setEditingUser(null);
@@ -878,7 +888,12 @@ export const Users = () => {
                   <button
                     type="submit"
                     disabled={isSubmitting}
-                    className="btn btn-danger btn-sm rounded-pill px-4 fw-bold d-flex align-items-center gap-1.5"
+                    className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm border-0 d-flex align-items-center gap-1.5"
+                    style={{
+                      height: '38px',
+                      backgroundColor: 'var(--primary-color, #F20D2D)',
+                      fontSize: '13px'
+                    }}
                   >
                     {isSubmitting ? (
                       <>
@@ -914,7 +929,7 @@ export const Users = () => {
                   <button 
                     type="button" 
                     className="btn btn-danger rounded-pill px-5 py-2 fw-bold shadow-sm"
-                    style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)' }}
+                    style={{ backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)' }}
                     onClick={() => setCreatedName('')}
                   >
                     Done

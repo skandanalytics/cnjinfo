@@ -1,6 +1,6 @@
 import React from 'react';
 import Modal from './Modal';
-import Button from './Button';
+import { FiCheck, FiAlertTriangle, FiAlertCircle } from 'react-icons/fi';
 
 export const ConfirmModal = ({
   isOpen,
@@ -10,34 +10,71 @@ export const ConfirmModal = ({
   onClose,
   confirmText = "Yes, Confirm",
   cancelText = "Cancel",
-  loading = false
+  loading = false,
+  type = "danger", // 'danger' | 'warning' | 'success' | 'info'
+  singleAction = false,
 }) => {
-  const footerActions = (
-    <div className="d-flex align-items-center justify-content-end gap-3 w-100">
-      <button
-        type="button"
-        onClick={onClose}
-        disabled={loading}
-        className="btn rounded-pill px-4 fw-bold"
-        style={{
-          height: '40px',
-          backgroundColor: '#FFFFFF',
-          color: 'var(--primary-color, #C8102E)',
-          border: '1.5px solid var(--primary-color, #C8102E)',
-          fontSize: '13px'
-        }}
+  const isSuccess = type === 'success';
+  const isWarning = type === 'warning';
+
+  const getIcon = () => {
+    if (isSuccess) {
+      return (
+        <div 
+          className="rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow-xs"
+          style={{ width: '60px', height: '60px', backgroundColor: '#DCFCE7', color: '#16A34A', border: '2px solid #22C55E' }}
+        >
+          <FiCheck size={28} strokeWidth={3} />
+        </div>
+      );
+    }
+    if (isWarning) {
+      return (
+        <div 
+          className="rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow-xs"
+          style={{ width: '60px', height: '60px', backgroundColor: '#FEF3C7', color: '#D97706', border: '2px solid #F59E0B' }}
+        >
+          <FiAlertTriangle size={28} />
+        </div>
+      );
+    }
+    return (
+      <div 
+        className="rounded-circle d-inline-flex align-items-center justify-content-center mb-3 shadow-xs"
+        style={{ width: '60px', height: '60px', backgroundColor: '#FEE2E2', color: '#EF4444', border: '2px solid #EF4444' }}
       >
-        {cancelText}
-      </button>
+        <FiAlertCircle size={28} />
+      </div>
+    );
+  };
+
+  const footerActions = (
+    <div className="d-flex align-items-center justify-content-center gap-2.5 w-100">
+      {!singleAction && (
+        <button
+          type="button"
+          onClick={onClose}
+          disabled={loading}
+          className="btn rounded-pill px-4 fw-bold flex-grow-1"
+          style={{
+            height: '42px',
+            backgroundColor: '#FFFFFF',
+            color: '#64748B',
+            border: '1.5px solid #CBD5E1',
+            fontSize: '13px'
+          }}
+        >
+          {cancelText}
+        </button>
+      )}
       <button
         type="button"
-        onClick={onConfirm}
+        onClick={onConfirm || onClose}
         disabled={loading}
-        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm"
+        className="btn btn-danger rounded-pill px-4 fw-bold shadow-xs border-0 flex-grow-1"
         style={{
-          height: '40px',
-          backgroundColor: 'var(--primary-color, #C8102E)',
-          borderColor: 'var(--primary-color, #C8102E)',
+          height: '42px',
+          backgroundColor: '#F20D2D',
           fontSize: '13px'
         }}
       >
@@ -47,8 +84,12 @@ export const ConfirmModal = ({
   );
 
   return (
-    <Modal isOpen={isOpen} title={title} onClose={onClose} footerActions={footerActions} size="sm">
-      <p className="text-secondary small mb-0">{message}</p>
+    <Modal isOpen={isOpen} title="" onClose={onClose} footerActions={footerActions} size="sm">
+      <div className="text-center py-2 px-1">
+        {getIcon()}
+        <h5 className="fw-bold mb-2 text-dark">{title}</h5>
+        <p className="text-secondary small mb-0 px-2">{message}</p>
+      </div>
     </Modal>
   );
 };

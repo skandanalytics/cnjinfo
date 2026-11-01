@@ -87,7 +87,7 @@ export const RevenueChart = ({
       <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
         <div>
           <div className="d-flex align-items-center gap-2">
-            <h5 className="fw-bold text-dark mb-0" style={{ fontSize: '16px' }}>Sales Overview</h5>
+            <h5 className="fw-bold mb-0" style={{ fontSize: '16px', color: 'var(--text-primary)' }}>Sales Overview</h5>
             {percentageChange && (
               <span className={`badge rounded-pill px-2.5 py-1 fw-bold ${
                 percentageChange.startsWith('+') ? 'bg-success-subtle text-success' : 'bg-danger-subtle text-danger'
@@ -97,8 +97,8 @@ export const RevenueChart = ({
               </span>
             )}
           </div>
-          <p className="text-secondary small mb-0 mt-1" style={{ fontSize: '12px' }}>
-            {period === 'Today' ? "Today's Revenue" : period === 'Weekly' ? "Weekly Revenue" : period === 'Monthly' ? "Monthly Revenue" : period === 'Quarterly' ? "Quarterly Revenue" : period === 'Yearly' ? "Yearly Revenue" : "Period Revenue"}: <span className="fw-bold text-dark">{formatCurrency(totalSales)}</span>
+          <p className="small mb-0 mt-1" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+            {period === 'Today' ? "Today's Revenue" : period === 'Weekly' ? "Weekly Revenue" : period === 'Monthly' ? "Monthly Revenue" : period === 'Quarterly' ? "Quarterly Revenue" : period === 'Yearly' ? "Yearly Revenue" : "Period Revenue"}: <span className="fw-bold" style={{ color: 'var(--text-primary)' }}>{formatCurrency(totalSales)}</span>
             {comparison ? ` (${comparison})` : ''}
           </p>
         </div>
@@ -157,8 +157,8 @@ export const RevenueChart = ({
         >
           <defs>
             <linearGradient id="foodieCurveGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#C8102E" stopOpacity="0.28" />
-              <stop offset="100%" stopColor="#C8102E" stopOpacity="0.0" />
+              <stop offset="0%" stopColor="#F20D2D" stopOpacity="0.25" />
+              <stop offset="100%" stopColor="#F20D2D" stopOpacity="0.0" />
             </linearGradient>
           </defs>
 
@@ -177,7 +177,7 @@ export const RevenueChart = ({
             <path 
               d={curveLine} 
               fill="none" 
-              stroke="#C8102E" 
+              stroke="#F20D2D" 
               strokeWidth="3.5" 
               strokeLinecap="round" 
               strokeLinejoin="round" 
@@ -207,8 +207,8 @@ export const RevenueChart = ({
                   cx={pt.x} 
                   cy={pt.y} 
                   r={isHovered ? 7 : (isPeak ? 5 : 4)} 
-                  fill={isHovered || isPeak ? '#C8102E' : 'var(--surface-color)'}
-                  stroke="#C8102E"
+                  fill={isHovered || isPeak ? '#F20D2D' : 'var(--surface-color)'}
+                  stroke="#F20D2D"
                   strokeWidth={isHovered ? 3 : 2}
                   style={{ transition: 'all 0.2s ease', pointerEvents: 'none' }}
                 />

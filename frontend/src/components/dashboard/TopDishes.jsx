@@ -17,13 +17,13 @@ export const TopDishes = ({ dishes = [] }) => {
       }}
     >
       <div className="d-flex align-items-center justify-content-between mb-3">
-        <h5 className="fw-bold text-dark mb-0" style={{ fontSize: '18px', letterSpacing: '-0.3px' }}>
+        <h5 className="fw-bold mb-0" style={{ fontSize: '18px', letterSpacing: '-0.3px', color: 'var(--text-primary)' }}>
           Top Selling Items
         </h5>
         <button
           onClick={() => navigate('/admin/menus')}
-          className="btn btn-sm btn-link text-danger text-decoration-none fw-bold p-0"
-          style={{ fontSize: '13px', color: 'var(--primary-color, #C8102E)' }}
+          className="btn btn-sm btn-link text-decoration-none fw-bold p-0"
+          style={{ fontSize: '13px', color: 'var(--primary-color)' }}
         >
           View All
         </button>
@@ -71,7 +71,7 @@ export const TopDishes = ({ dishes = [] }) => {
 
                 {/* Name & Orders */}
                 <div className="flex-grow-1 overflow-hidden">
-                  <div className="fw-bold text-dark text-truncate" style={{ fontSize: '14px' }}>
+                  <div className="fw-bold text-truncate" style={{ fontSize: '14px', color: 'var(--text-primary)' }}>
                     {dish.name}
                   </div>
                   <div className="text-secondary small" style={{ fontSize: '12px' }}>
@@ -89,7 +89,7 @@ export const TopDishes = ({ dishes = [] }) => {
                       className="h-100 rounded-pill transition-all"
                       style={{ 
                         width: `${percentage}%`, 
-                        backgroundColor: isOrange ? '#F59E0B' : 'var(--primary-color, #C8102E)',
+                        backgroundColor: isOrange ? '#F59E0B' : 'var(--primary-color, #F20D2D)',
                         transition: 'width 0.6s ease'
                       }}
                     />

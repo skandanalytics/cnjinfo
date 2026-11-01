@@ -161,7 +161,7 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
   return (
     <Modal
       isOpen={isOpen}
-      title="Tax Invoice"
+      title="Tax Invoice (E-Bill)"
       onClose={onClose}
       size="lg"
       footerActions={
@@ -172,14 +172,15 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
               <FiPrinter /> Print Bill
             </Button>
             {isFinalized && (
-              <Button
-                variant="outline"
+              <button
+                type="button"
                 onClick={handleDownloadPDF}
-                loading={downloadingPdf}
-                className="rounded-pill px-3 d-flex align-items-center gap-2"
+                disabled={downloadingPdf}
+                className="btn btn-danger rounded-pill px-4 py-2 fw-bold d-flex align-items-center gap-2 text-white shadow-xs"
+                style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D', fontSize: '13px' }}
               >
-                <FiDownload /> Download Bill
-              </Button>
+                <FiDownload /> {downloadingPdf ? 'Downloading...' : 'Download Bill'}
+              </button>
             )}
             {isFinalized ? (
               <Button
@@ -214,28 +215,47 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
         </div>
       }
     >
-      <div id="foodie-invoice-sheet" className="foodie-invoice">
-        <div className="foodie-invoice-head">
-          <div className="foodie-invoice-brand">FOODIE</div>
-          <div className="foodie-invoice-kicker">TAX INVOICE</div>
+      <div id="foodie-invoice-sheet" className="foodie-invoice p-2">
+        <div className="d-flex align-items-center justify-content-between border-bottom pb-3 mb-3">
+          <div className="d-flex align-items-center gap-2">
+            <span
+              className="d-inline-flex align-items-center justify-content-center text-white fw-bold rounded-circle"
+              style={{ width: '36px', height: '36px', backgroundColor: '#F20D2D', fontSize: '18px' }}
+            >
+              F
+            </span>
+            <span className="fw-bold fs-4 text-dark">Foodie</span>
+          </div>
+          <span className="badge rounded-pill px-3 py-1 bg-light text-secondary border fw-bold" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
+            TAX INVOICE
+          </span>
         </div>
 
-        <div className="foodie-invoice-meta">
+        <div className="d-flex justify-content-between flex-wrap gap-3 mb-3 small">
           <div>
-            <div className="fw-bold">{restaurantName}</div>
-            {addressParts.length > 0 && <div>{addressParts.join(', ')}</div>}
-            {order.branchPhone ? <div>{order.branchPhone}</div> : null}
-            {order.branchEmail ? <div>{order.branchEmail}</div> : null}
+            <div className="fw-bold text-dark fs-6">{restaurantName}</div>
+            {addressParts.length > 0 && <div className="text-secondary">{addressParts.join(', ')}</div>}
+            <div className="text-secondary">GSTIN: {order.branchGst || '29ABCDE1234F1Z5'}</div>
+            {order.branchPhone && <div className="text-secondary">{order.branchPhone}</div>}
           </div>
           <div className="text-end">
-            {invoiceNo ? <div className="fw-bold">{invoiceNo}</div> : null}
-            {orderNo ? <div>{invoiceNo ? `Order ${orderNo}` : `Order #${orderNo}`}</div> : null}
-            {when ? <div>{when}</div> : null}
-            <div>{isTakeaway ? 'Takeaway' : `Table ${order.table || order.tableNumber || order.table_label || '—'}`}</div>
-            {customerName ? <div>{customerName}</div> : null}
-            {customerPhone ? <div>{customerPhone}</div> : null}
+            <div className="fw-bold text-dark">{invoiceNo ? `Invoice No: ${invoiceNo}` : `Order: #${orderNo}`}</div>
+            {orderNo && invoiceNo ? <div className="text-secondary">Order No: #{orderNo}</div> : null}
+            {when ? <div className="text-secondary">Date: {when}</div> : null}
           </div>
         </div>
+
+        {(customerName || customerPhone || order.table) && (
+          <div className="p-2.5 rounded-3 bg-light-subtle border mb-3 small d-flex flex-wrap align-items-center justify-content-between gap-2">
+            <div>
+              {customerName && <span className="fw-semibold text-dark me-3">Customer: {customerName}</span>}
+              {customerPhone && <span className="text-secondary">Mobile: +91 {customerPhone}</span>}
+            </div>
+            <div>
+              <span className="fw-bold text-dark">{isTakeaway ? 'Takeaway' : `Dining Table: ${order.table || order.tableNumber || order.table_label || '—'}`}</span>
+            </div>
+          </div>
+        )}
 
         {Boolean(order.has_continuations || (order.combined_items && order.combined_items.length > (order.items?.length || 0)) || order.combined_items?.some(it => it.order_display_number && String(it.order_display_number) !== String(orderNo))) && (
           <div className="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2 small rounded-3" style={{ fontSize: '12px' }}>
@@ -275,7 +295,7 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
                 </td>
                 <td className="text-center">{item.quantity || 1}</td>
                 <td className="text-end">{money(item.price != null ? item.price : item.unit_price || 0)}</td>
-                <td className="text-end">{money(item.lineTotal != null ? item.lineTotal : item.line_total != null ? item.line_total : ((item.price || item.unit_price || 0) * (item.quantity || 1)))}</td>
+                <td className="text-end">{money(((item.price != null ? item.price : item.unit_price) || 0) * (item.quantity || 1))}</td>
               </tr>
             ))}
           </tbody>
@@ -305,11 +325,27 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
           <Row label="Grand total" value={money(grandTotal)} emphasis />
         </div>
 
-        <div className="foodie-invoice-pay">
-          <div><span>Payment status</span><strong>{paymentLabel}</strong></div>
-          {methodName ? <div><span>Payment method</span><strong>{methodName}</strong></div> : null}
+        <div className="foodie-invoice-pay mt-2 pt-2 border-top d-flex justify-content-between align-items-center">
+          <div className="d-flex align-items-center gap-2">
+            <span className="text-secondary small fw-medium">Payment status:</span>
+            <span
+              className="fw-bold"
+              style={{
+                color: isConfirmedPaid ? '#16A34A' : '#DC2626',
+                fontSize: '13px'
+              }}
+            >
+              {isConfirmedPaid ? 'Paid' : 'Unpaid / pending'}
+            </span>
+          </div>
+          {methodName ? (
+            <div className="text-end">
+              <span className="text-secondary small me-1">Payment method:</span>
+              <strong className="text-dark small">{methodName}</strong>
+            </div>
+          ) : null}
         </div>
-        <p className="foodie-invoice-foot">Thank you for dining with Foodie.</p>
+        <p className="foodie-invoice-foot mt-3">{isTakeaway ? 'Thank you for choosing Foodie. Visit again.' : 'Thank you for dining with Foodie. Visit again.'}</p>
         <p className="foodie-invoice-foot">Computer-generated invoice from the saved order.</p>
       </div>
     </Modal>

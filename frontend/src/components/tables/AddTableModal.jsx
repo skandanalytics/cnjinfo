@@ -3,6 +3,7 @@ import Modal from '../common/Modal';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+import { FiMapPin, FiUsers } from 'react-icons/fi';
 import { TABLE_LOCATIONS, TABLE_LOCATION_VALUES } from '../../constants/tableLocations';
 
 export const AddTableModal = ({
@@ -151,8 +152,8 @@ export const AddTableModal = ({
         style={{
           height: '42px',
           backgroundColor: '#FFFFFF',
-          color: 'var(--primary-color, #C8102E)',
-          border: '1.5px solid var(--primary-color, #C8102E)',
+          color: 'var(--primary-color, #F20D2D)',
+          border: '1.5px solid var(--primary-color, #F20D2D)',
           fontSize: '13px'
         }}
       >
@@ -162,11 +163,10 @@ export const AddTableModal = ({
         type="button"
         onClick={handleSubmit}
         disabled={loading}
-        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm"
+        className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm border-0"
         style={{
           height: '42px',
-          backgroundColor: 'var(--primary-color, #C8102E)',
-          borderColor: 'var(--primary-color, #C8102E)',
+          backgroundColor: 'var(--primary-color, #F20D2D)',
           fontSize: '13px'
         }}
       >
@@ -182,31 +182,17 @@ export const AddTableModal = ({
           <div className="alert alert-danger py-2 small fw-semibold mb-3">{errorMsg}</div>
         )}
 
-        <div className="mb-3">
-          <label className="form-label small fw-semibold text-secondary">
-            Table Number <span className="text-danger">*</span>
-          </label>
-          <div className="input-group">
-            <span 
-              className="input-group-text fw-bold text-white px-3"
-              style={{ backgroundColor: 'var(--primary-color, #dc2626)', borderTopLeftRadius: '0.5rem', borderBottomLeftRadius: '0.5rem', fontSize: '15px' }}
-            >
-              T
-            </span>
+        <div className="row g-3 mb-3">
+          <div className="col-6">
+            <label className="form-label small fw-semibold text-secondary mb-1">
+              Table Number <span className="text-danger">*</span>
+            </label>
             <input 
               type="text"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              maxLength={3}
-              className="form-control py-2 fw-semibold text-dark"
-              style={{ borderTopRightRadius: '0.5rem', borderBottomRightRadius: '0.5rem' }}
-              placeholder="01" 
-              value={numberDigits} 
-              onKeyDown={(e) => {
-                if (!/[0-9]|Backspace|Delete|ArrowLeft|ArrowRight|Tab/.test(e.key) && !e.ctrlKey && !e.metaKey) {
-                  e.preventDefault();
-                }
-              }}
+              className="form-control rounded-3 py-2 fw-semibold text-dark"
+              style={{ fontSize: '13.5px', borderColor: '#CBD5E1' }}
+              placeholder="T11" 
+              value={formatTableNumber(numberDigits) || (numberDigits ? `T${numberDigits}` : '')}
               onChange={(e) => {
                 const val = e.target.value.replace(/\D/g, '').slice(0, 3);
                 setNumberDigits(val);
@@ -215,76 +201,65 @@ export const AddTableModal = ({
               required 
             />
           </div>
-          <div className="form-text text-muted" style={{ fontSize: '11.5px' }}>
-            Prefix <strong>T</strong> is fixed. Digits only, max 3 numbers (e.g. <strong>01</strong> to create <strong>Table T01</strong>, or <strong>100</strong> for <strong>Table T100</strong>).
+
+          <div className="col-6">
+            <label className="form-label small fw-semibold text-secondary mb-1">
+              Seating Capacity <span className="text-danger">*</span>
+            </label>
+            <div className="position-relative">
+              <FiUsers className="position-absolute text-muted" style={{ left: '12px', top: '12px' }} size={15} />
+              <input 
+                type="number"
+                min={1}
+                max={15}
+                className="form-control rounded-3 py-2 ps-4 fw-semibold text-dark"
+                style={{ fontSize: '13.5px', borderColor: '#CBD5E1' }}
+                placeholder="4"
+                value={capacity} 
+                onChange={(e) => {
+                  const raw = e.target.value.replace(/\D/g, '');
+                  setCapacity(raw ? String(Math.min(15, parseInt(raw, 10))) : '');
+                }}
+                required 
+              />
+            </div>
           </div>
         </div>
 
-        <Input 
-          label="Seating Capacity" 
-          type="number"
-          min={1}
-          max={15}
-          placeholder="1 - 15" 
-          value={capacity} 
-          onKeyDown={(e) => {
-            if (['-', '+', 'e', 'E', '.', ','].includes(e.key)) {
-              e.preventDefault();
-              return;
-            }
-            if (e.key === 'ArrowUp') {
-              e.preventDefault();
-              const cur = parseInt(capacity, 10);
-              const next = isNaN(cur) ? 1 : Math.min(15, cur + 1);
-              setCapacity(String(next));
-              return;
-            }
-            if (e.key === 'ArrowDown') {
-              e.preventDefault();
-              const cur = parseInt(capacity, 10);
-              const next = isNaN(cur) ? 1 : Math.max(1, cur - 1);
-              setCapacity(String(next));
-              return;
-            }
-          }}
-          onChange={(e) => {
-            const raw = e.target.value.replace(/\D/g, '');
-            if (raw === '') {
-              setCapacity('');
-              return;
-            }
-            const val = parseInt(raw, 10);
-            if (val > 15) {
-              setCapacity('15');
-            } else {
-              setCapacity(String(val));
-            }
-          }}
-          onBlur={() => {
-            const cap = parseInt(capacity, 10);
-            if (isNaN(cap) || cap < 1) {
-              setCapacity('1');
-            } else if (cap > 15) {
-              setCapacity('15');
-            }
-          }}
-          required 
-        />
+        <div className="mb-3">
+          <label className="form-label small fw-semibold text-secondary mb-1">
+            Area / Location <span className="text-danger">*</span>
+          </label>
+          <div className="position-relative">
+            <FiMapPin className="position-absolute text-muted" style={{ left: '12px', top: '12px' }} size={15} />
+            <select 
+              className="form-select rounded-3 py-2 ps-4 fw-semibold text-dark"
+              style={{ fontSize: '13.5px', borderColor: '#CBD5E1' }}
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              required
+            >
+              {areas.map(a => (
+                <option key={a.value || a} value={a.value || a}>{a.label || a}</option>
+              ))}
+            </select>
+          </div>
+        </div>
 
-        <Select 
-          label="Area Location"
-          options={areas}
-          value={area}
-          onChange={(e) => setArea(e.target.value)}
-          required
-        />
-
-        <Select 
-          label="Initial Status"
-          options={statuses}
-          value={status}
-          onChange={(e) => setStatus(e.target.value)}
-        />
+        <div className="mb-3">
+          <label className="form-label small fw-semibold text-secondary mb-1">
+            Table Status <span className="text-danger">*</span>
+          </label>
+          <select 
+            className="form-select rounded-3 py-2 fw-semibold text-dark"
+            style={{ fontSize: '13.5px', borderColor: '#CBD5E1' }}
+            value={status}
+            onChange={(e) => setStatus(e.target.value)}
+          >
+            <option value="Available">● Available</option>
+            <option value="Occupied">● Occupied</option>
+          </select>
+        </div>
       </form>
     </Modal>
   );

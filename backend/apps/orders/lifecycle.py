@@ -201,7 +201,7 @@ def _owns_order(order, user):
 
 
 @transaction.atomic
-def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True, parent_order_id=None):
+def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True, parent_order_id=None, customer_phone="", customer_name=""):
     from apps.accounts.permissions import get_active_employee
     from apps.accounts.scoping import can_access_branch
 
@@ -292,7 +292,14 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
         raise OrderError("; ".join(e["detail"] for e in exc.errors), "cart_invalid", 409)
 
     order_customer = (user if not assisted and getattr(user, 'is_authenticated', False) and getattr(user, 'user_type', None) == User.UserType.CUSTOMER else None) or (parent_order.customer if parent_order else None)
-    order_customer_phone = (getattr(user, 'phone', '') if not assisted and getattr(user, 'user_type', None) == User.UserType.CUSTOMER else '') or (parent_order.customer_phone if parent_order else '')
+    if not order_customer and customer_phone:
+        order_customer = User.objects.filter(phone=customer_phone, user_type=User.UserType.CUSTOMER).first()
+
+    order_customer_phone = (
+        customer_phone or
+        (getattr(user, 'phone', '') if not assisted and getattr(user, 'user_type', None) == User.UserType.CUSTOMER else '') or
+        (parent_order.customer_phone if parent_order else '')
+    )
 
     order = Order(
         order_number=f"TMP{uuid4().hex[:12]}",

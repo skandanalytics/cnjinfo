@@ -7,6 +7,7 @@ import { branchService } from '../../services/branchService';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
+import { FiUser, FiShoppingBag, FiClock, FiFileText, FiCheck, FiChevronRight } from 'react-icons/fi';
 import EBillModal from '../../components/orders/EBillModal';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
@@ -18,7 +19,7 @@ export const Kitchen = () => {
   const [actionError, setActionError] = useState('');
   const [eBillOrder, setEBillOrder] = useState(null);
   const [branches, setBranches] = useState([]);
-  const [activeStageTab, setActiveStageTab] = useState('READY');
+  const [activeStageTab, setActiveStageTab] = useState('ALL');
   const headerRef = useRef(null);
   const [gridHeight, setGridHeight] = useState(null);
 
@@ -360,512 +361,583 @@ export const Kitchen = () => {
   const completedOrders = sortCompletedQueue(activeBranchFilteredOrders.filter((o) => isCompleted(o.status)));
 
   return (
-    <AdminLayout fullHeight={true}>
-      <div className="kitchen-queue-page">
-        <div className="kitchen-queue-header" ref={headerRef}>
-          <PageHeader
-            title="Kitchen Queue & Live Status Monitor"
-            showBackButton
-            actions={
-              <div className="d-flex align-items-center gap-2 pe-2 pe-md-3">
-                {(!isBranchRestricted && (user?.role === 'admin' || user?.role === 'super_admin' || user?.isSuperAdmin) && branches.length > 1) && (
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="text-secondary small fw-semibold d-none d-md-inline">Branch:</span>
-                    <select
-                      value={selectedBranch}
-                      onChange={(e) => {
-                        const targetId = e.target.value;
-                        const targetBranch = branches.find(b => String(b.id) === String(targetId));
-                        if (targetBranch && isBranchUnderConstruction(targetBranch)) return;
-                        setSelectedBranch(targetId);
-                      }}
-                      className="form-select form-select-sm rounded-pill border-secondary-subtle fw-semibold ps-3 pe-4 py-1.5"
-                      style={{ minWidth: '270px', fontSize: '13px', cursor: 'pointer', backgroundColor: '#ffffff' }}
-                      aria-label="Filter Kitchen by Branch"
-                    >
-                      {branches.map(b => {
-                        const underConst = isBranchUnderConstruction(b);
-                        return (
-                          <option key={b.id} value={String(b.id)} disabled={underConst}>
-                            {b.name}{underConst ? ' — Under Construction' : ''}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-                )}
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1"
-                  onClick={() => fetchOrders(true)}
-                  title="Refresh Kitchen Queue from Backend"
-                  aria-label="Refresh Kitchen Queue"
+    <AdminLayout>
+      <div className="kitchen-queue-page pb-4" style={{ overflow: "visible" }}>
+        {/* Header (Matches Reference Screenshot 3) */}
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3" ref={headerRef}>
+          <div className="d-flex align-items-center gap-3">
+            <div 
+              className="rounded-circle d-flex align-items-center justify-content-center text-danger flex-shrink-0"
+              style={{ width: '46px', height: '46px', backgroundColor: '#FEECEE' }}
+            >
+              <i className="bi bi-person-workspace fs-4"></i>
+            </div>
+            <div>
+              <h2 className="fw-bold mb-0.5 text-dark" style={{ fontSize: '23px', letterSpacing: '-0.4px' }}>
+                Kitchen Queue & Live Status Monitor
+              </h2>
+              <p className="text-secondary small mb-0" style={{ fontSize: '12.5px' }}>
+                Manage, track and update kitchen orders in real-time.
+              </p>
+            </div>
+          </div>
+
+          <div className="d-flex align-items-center gap-2">
+            {(!isBranchRestricted && (user?.role === 'admin' || user?.role === 'super_admin' || user?.isSuperAdmin) && branches.length > 1) && (
+              <div className="d-flex align-items-center gap-2">
+                <select
+                  value={selectedBranch}
+                  onChange={(e) => {
+                    const targetId = e.target.value;
+                    const targetBranch = branches.find(b => String(b.id) === String(targetId));
+                    if (targetBranch && isBranchUnderConstruction(targetBranch)) return;
+                    setSelectedBranch(targetId);
+                  }}
+                  className="form-select form-select-sm rounded-pill border bg-white fw-semibold ps-3 pe-4 py-1.5 shadow-2xs text-dark"
+                  style={{ minWidth: '220px', fontSize: '12.5px', borderColor: '#CBD5E1' }}
+                  aria-label="Filter Kitchen by Branch"
                 >
-                  <i className="bi bi-arrow-clockwise"></i>
-                </button>
+                  {branches.map(b => {
+                    const underConst = isBranchUnderConstruction(b);
+                    return (
+                      <option key={b.id} value={String(b.id)} disabled={underConst}>
+                        Branch: {b.name}{underConst ? ' — Under Construction' : ''}
+                      </option>
+                    );
+                  })}
+                </select>
               </div>
-            }
-          />
+            )}
 
-          {actionError && (
-            <div className="alert alert-warning small py-2 mb-3" role="alert">{actionError}</div>
-          )}
-        </div>
+            <select
+              className="form-select form-select-sm rounded-pill border bg-white fw-semibold px-3 py-1.5 shadow-2xs text-dark"
+              style={{ minWidth: '120px', fontSize: '12.5px', borderColor: '#CBD5E1' }}
+              value={activeStageTab}
+              onChange={(e) => setActiveStageTab(e.target.value)}
+            >
+              <option value="ALL">All Status</option>
+              <option value="NEW">New</option>
+              <option value="PREPARING">Preparing</option>
+              <option value="READY">Ready</option>
+              <option value="COMPLETED">Completed</option>
+            </select>
 
-        {/* Kitchen Status Tabs */}
-        <div className="card rounded-4 border-0 shadow-sm p-2.5 mb-3 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
-          <div className="d-flex align-items-center gap-2 flex-wrap">
             <button
               type="button"
-              onClick={() => setActiveStageTab('READY')}
-              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border-0 ${
-                activeStageTab === 'READY' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
-              }`}
-              style={{ fontSize: '12px' }}
+              className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-2xs bg-white"
+              style={{ width: '34px', height: '34px', borderColor: '#CBD5E1' }}
+              onClick={() => fetchOrders(true)}
+              title="Refresh Kitchen Queue"
             >
-              Ready ({readyOrders.length})
+              <i className="bi bi-arrow-clockwise fs-6"></i>
             </button>
+          </div>
+        </div>
+
+        {actionError && (
+          <div className="alert alert-warning small py-2 mb-3" role="alert">{actionError}</div>
+        )}
+
+        {/* Sub-bar: Active / Completed tabs & Live updates indicator */}
+        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <div className="d-flex align-items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveStageTab('ALL')}
+              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold shadow-2xs transition-all ${
+                activeStageTab !== 'COMPLETED' ? 'text-white' : 'btn-outline-secondary bg-white text-secondary'
+              }`}
+              style={{ 
+                fontSize: '12px',
+                backgroundColor: activeStageTab !== 'COMPLETED' ? '#F20D2D' : undefined,
+                borderColor: activeStageTab !== 'COMPLETED' ? '#F20D2D' : '#CBD5E1'
+              }}
+            >
+              Active ({pendingOrders.length + preparingOrders.length + readyOrders.length})
+            </button>
+
             <button
               type="button"
               onClick={() => setActiveStageTab('COMPLETED')}
-              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold transition-all border-0 ${
-                activeStageTab === 'COMPLETED' ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold shadow-2xs transition-all ${
+                activeStageTab === 'COMPLETED' ? 'text-white' : 'btn-outline-secondary bg-white text-secondary'
               }`}
-              style={{ fontSize: '12px' }}
+              style={{ 
+                fontSize: '12px',
+                backgroundColor: activeStageTab === 'COMPLETED' ? '#F20D2D' : undefined,
+                borderColor: activeStageTab === 'COMPLETED' ? '#F20D2D' : '#CBD5E1'
+              }}
             >
               Completed ({completedOrders.length})
             </button>
           </div>
+
+          <div className="d-flex align-items-center gap-2">
+            <span className="badge rounded-pill fw-bold px-2.5 py-1 d-inline-flex align-items-center gap-1" style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontSize: '11px', border: '1px solid #BBF7D0' }}>
+              <span className="rounded-circle" style={{ width: '6px', height: '6px', backgroundColor: '#16A34A' }}></span>
+              Live Updates
+            </span>
+            <span className="text-muted small" style={{ fontSize: '11.5px' }}>
+              Last updated: {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}, {new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true })}
+            </span>
+          </div>
         </div>
 
+        {/* 4 Top KPI Stat Cards (Matches Reference Screenshot 3) */}
+        <div className="row g-3 mb-4">
+          <div className="col-6 col-md-3">
+            <div className="card p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3" style={{ borderColor: '#E2E8F0' }}>
+              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '48px', height: '48px', backgroundColor: '#FEECEE', color: '#EF4444' }}>
+                <i className="bi bi-receipt fs-4"></i>
+              </div>
+              <div className="text-start">
+                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>New Tickets</div>
+                <div className="fw-bold text-dark fs-3 mb-0">{pendingOrders.length}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-6 col-md-3">
+            <div className="card p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3" style={{ borderColor: '#E2E8F0' }}>
+              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '48px', height: '48px', backgroundColor: '#FEF3C7', color: '#F59E0B' }}>
+                <i className="bi bi-fire fs-4"></i>
+              </div>
+              <div className="text-start">
+                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Preparing</div>
+                <div className="fw-bold text-dark fs-3 mb-0">{preparingOrders.length}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-6 col-md-3">
+            <div className="card p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3" style={{ borderColor: '#E2E8F0' }}>
+              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '48px', height: '48px', backgroundColor: '#E0F2FE', color: '#0284C7' }}>
+                <i className="bi bi-box-seam fs-4"></i>
+              </div>
+              <div className="text-start">
+                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Ready / Serving</div>
+                <div className="fw-bold text-dark fs-3 mb-0">{readyOrders.length}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="col-6 col-md-3">
+            <div className="card p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3" style={{ borderColor: '#E2E8F0' }}>
+              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '48px', height: '48px', backgroundColor: '#DCFCE7', color: '#16A34A' }}>
+                <i className="bi bi-check-circle fs-4"></i>
+              </div>
+              <div className="text-start">
+                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Completed (Today)</div>
+                <div className="fw-bold text-dark fs-3 mb-0">{completedOrders.length}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 4 Kanban Columns with Solid Color Headers (Matches Reference Screenshot 3) */}
         {loading ? (
           <Loader />
         ) : (
-          <div 
-            className="kitchen-queue-grid"
-            style={gridHeight ? { height: `${gridHeight}px`, maxHeight: `${gridHeight}px` } : undefined}
-          >
+          <div className="row g-3 align-items-stretch">
             {/* Column 1: New Tickets */}
-            <div className="kitchen-queue-column">
-              <div className="card border-0 rounded-3 shadow-sm bg-white kitchen-queue-card">
-                <div className="kitchen-queue-column-header d-flex align-items-center justify-content-between p-3 border-bottom pb-2">
+            <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
+              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', height: '620px', maxHeight: 'calc(100vh - 300px)', minHeight: '440px' }}>
+                {/* Solid Red Header Banner */}
+                <div 
+                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
+                  style={{ backgroundColor: '#EF4444', borderTopLeftRadius: '14px', borderTopRightRadius: '14px' }}
+                >
                   <div className="d-flex align-items-center gap-2">
-                    <span className="p-1 rounded bg-danger-subtle text-danger">
-                      <i className="bi bi-receipt"></i>
-                    </span>
-                    <h6 className="fw-bold text-dark mb-0">New Tickets</h6>
+                    <i className="bi bi-receipt"></i>
+                    <span style={{ fontSize: '14px' }}>New Tickets ({pendingOrders.length})</span>
                   </div>
-                  <span className="badge bg-danger rounded-pill px-2.5 py-1">{pendingOrders.length}</span>
+                  <FiChevronRight size={16} />
                 </div>
 
-                <div className="kitchen-queue-column-content p-3 d-flex flex-column gap-3">
-                {pendingOrders.length === 0 ? (
-                  <EmptyState title="No New Tickets" description="Pending orders appear here." icon="bi-patch-check" />
-                ) : (
-                  pendingOrders.map((ord) => (
-                    <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket shadow-xs border-danger-subtle">
-                      <div className="d-flex align-items-center justify-content-between fw-bold mb-2">
-                        <span className="text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
-                        <span className="badge bg-danger text-white rounded-pill px-2.5 py-1">
-                          {formatTableBadge(ord.table)}
-                        </span>
-                      </div>
+                <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
+                  {pendingOrders.length === 0 ? (
+                    <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
+                      <i className="bi bi-check2-circle text-muted fs-1 mb-2"></i>
+                      <h6 className="fw-bold text-dark mb-1">No New Tickets</h6>
+                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Incoming orders will appear here.</p>
+                    </div>
+                  ) : (
+                    pendingOrders.map((ord) => {
+                      const itemsList = getTicketItems(ord);
+                      const isTakeaway = isTakeawayOrder(ord);
 
-                      <div className="small border-bottom pb-2 mb-2 text-secondary">
-                        {(() => {
-                          const itemsList = getTicketItems(ord);
-                          const isFallback = itemsList.length === 0 || (itemsList.length === 1 && itemsList[0].name === 'Dish Item');
-
-                          if (itemsList.length > 0 && !isFallback) {
-                            return itemsList.map((i, idx) => (
-                              <div key={idx} className="mb-2" title={i.name || i.title || i.food_name || i.dish_name}>
-                                <div className="d-flex justify-content-between align-items-start">
-                                  <span className="text-dark fw-medium">• {i.name || i.title || i.food_name || i.dish_name || 'Dish Item'}</span>
-                                  <strong className="text-danger ms-2 flex-shrink-0">× {i.quantity || i.qty || 1}</strong>
-                                </div>
-                                {(() => {
-                                  const customs = getCustomizationsList(i);
-                                  const instructions = getInstructions(i);
-                                  return (
-                                    <>
-                                      {customs.length > 0 && (
-                                        <div className="text-secondary ms-2 text-wrap fw-medium mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3', color: '#64748b' }}>
-                                          <span className="fw-semibold text-dark">• Extra ingredients:</span> {customs.join(', ')}
-                                        </div>
-                                      )}
-                                      {Boolean(instructions) && (
-                                        <div className="text-muted fst-italic ms-2 text-wrap mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3' }}>
-                                          <span className="fw-semibold text-secondary fst-normal">• Instructions:</span> {instructions}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            ));
-                          }
-                          return (
-                            <div className="mb-1 text-truncate" style={{ maxWidth: '240px' }}>
-                              <span className="text-dark fw-medium">• Dish Item</span> <strong className="text-danger">× 1</strong>
-                            </div>
-                          );
-                        })()}
-                        {ord.special_instructions && (
-                          <div className="text-danger fw-semibold mt-1 fst-italic" style={{ fontSize: '11px' }}>
-                            Order Note: {ord.special_instructions}
+                      return (
+                        <div key={ord.id} className="card border rounded-3 p-3 bg-white shadow-2xs text-start" style={{ borderColor: '#E2E8F0' }}>
+                          <div className="d-flex align-items-center justify-content-between mb-2">
+                            <span className="fw-bold text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
+                            <span className="text-muted small" style={{ fontSize: '11px' }}>{ord.time || '2 mins ago'}</span>
                           </div>
-                        )}
 
-                      </div>
+                          <div className="mb-2">
+                            <span 
+                              className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
+                              style={{ 
+                                backgroundColor: isTakeaway ? '#FEF3C7' : '#FEE2E2', 
+                                color: isTakeaway ? '#D97706' : '#DC2626',
+                                border: isTakeaway ? '1px solid #FDE68A' : '1px solid #FECACA',
+                                fontSize: '11px' 
+                              }}
+                            >
+                              {isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
+                              <span>{isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
+                            </span>
+                          </div>
 
-                      <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                        <span className="text-muted small" style={{ fontSize: '11.5px' }}>
-                          {ord.time || 'Placed'}
-                        </span>
-                        <div className="d-flex align-items-center gap-2">
-                          <Button
-                            onClick={() => handleReject(ord.id)}
-                            disabled={isRejecting(ord.id)}
-                            loading={isRejecting(ord.id)}
-                            size="sm"
-                            variant="outline"
-                            className="py-1 px-3 fw-bold shadow-xs rounded-pill"
-                            style={{ fontSize: '11.5px' }}
-                          >
-                            Reject
-                          </Button>
-                          <Button
-                            onClick={() => handleAction(ord.id, 'Preparing')}
-                            disabled={isAccepting(ord.id)}
-                            loading={isAccepting(ord.id)}
-                            size="sm"
-                            variant="primary"
-                            className="py-1 px-3 fw-bold shadow-xs rounded-pill"
-                            style={{ fontSize: '11.5px' }}
-                          >
-                            Start Preparing
-                          </Button>
+                          {/* Items List */}
+                          <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
+                            {itemsList.map((i, idx) => (
+                              <div key={idx} className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
+                                <span className="text-dark fw-medium">
+                                  {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
+                                </span>
+                                <span className="fw-bold text-dark">
+                                  ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* Special Instructions Note Box */}
+                          {Boolean(ord.special_instructions || ord.notes) && (
+                            <div className="rounded-2 p-2 mt-2 mb-1" style={{ backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7', fontSize: '11px' }}>
+                              <span className="text-secondary fw-bold d-block mb-0.5">Special Instructions</span>
+                              <span className="text-dark">{ord.special_instructions || ord.notes}</span>
+                            </div>
+                          )}
+
+                          {/* Action Buttons */}
+                          <div className="d-flex align-items-center justify-content-between gap-2 pt-3 mt-1">
+                            <button
+                              type="button"
+                              onClick={() => handleReject(ord.id)}
+                              disabled={isRejecting(ord.id)}
+                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs"
+                              style={{ borderColor: '#F20D2D', color: '#F20D2D', border: '1px solid #F20D2D', fontSize: '12px' }}
+                            >
+                              Reject
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleAction(ord.id, 'Preparing')}
+                              disabled={isAccepting(ord.id)}
+                              className="btn btn-sm btn-danger rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs text-white"
+                              style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D', fontSize: '12px' }}
+                            >
+                              Start Preparing
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    </div>
-                  ))
-                )}
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Column 2: Preparing */}
-          <div className="kitchen-queue-column">
-            <div className="card border-0 rounded-3 shadow-sm bg-white kitchen-queue-card">
-              <div className="kitchen-queue-column-header d-flex align-items-center justify-content-between p-3 border-bottom pb-2">
-                <div className="d-flex align-items-center gap-2">
-                  <span className="p-1 rounded bg-warning-subtle text-warning">
+            {/* Column 2: Preparing */}
+            <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
+              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', height: '620px', maxHeight: 'calc(100vh - 300px)', minHeight: '440px' }}>
+                {/* Solid Orange Header Banner */}
+                <div 
+                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
+                  style={{ backgroundColor: '#F59E0B', borderTopLeftRadius: '14px', borderTopRightRadius: '14px' }}
+                >
+                  <div className="d-flex align-items-center gap-2">
                     <i className="bi bi-fire"></i>
-                  </span>
-                  <h6 className="fw-bold text-dark mb-0">Preparing</h6>
+                    <span style={{ fontSize: '14px' }}>Preparing ({preparingOrders.length})</span>
+                  </div>
+                  <FiChevronRight size={16} />
                 </div>
-                <span className="badge bg-warning text-dark rounded-pill px-2.5 py-1">{preparingOrders.length}</span>
-              </div>
 
-              <div className="kitchen-queue-column-content p-3 d-flex flex-column gap-3">
-                {preparingOrders.length === 0 ? (
-                  <EmptyState title="Idle Kitchen" description="Cooking orders appear here." icon="bi-fire" />
-                ) : (
-                  preparingOrders.map((ord) => (
-                    <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket ticket-preparing shadow-xs">
-                      <div className="d-flex align-items-center justify-content-between fw-bold mb-2">
-                        <span className="text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
-                        <span className="badge bg-warning text-dark rounded-pill px-2.5 py-1">
-                          {formatTableBadge(ord.table)}
-                        </span>
+                <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
+                  {preparingOrders.length === 0 ? (
+                    <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
+                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-warning" style={{ width: '48px', height: '48px', backgroundColor: '#FEF3C7' }}>
+                        <i className="bi bi-fire fs-3"></i>
                       </div>
+                      <h6 className="fw-bold text-dark mb-1">No more orders in Preparing</h6>
+                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>New orders will appear here.</p>
+                    </div>
+                  ) : (
+                    preparingOrders.map((ord) => {
+                      const itemsList = getTicketItems(ord);
+                      const isTakeaway = isTakeawayOrder(ord);
 
-                      <div className="small border-bottom pb-2 mb-2 text-secondary">
-                        {(() => {
-                          const itemsList = getTicketItems(ord);
-                          const isFallback = itemsList.length === 0 || (itemsList.length === 1 && itemsList[0].name === 'Dish Item');
-
-                          if (itemsList.length > 0 && !isFallback) {
-                            return itemsList.map((i, idx) => (
-                              <div key={idx} className="mb-2" title={i.name || i.title || i.food_name || i.dish_name}>
-                                <div className="d-flex justify-content-between align-items-start">
-                                  <span className="text-dark fw-medium">• {i.name || i.title || i.food_name || i.dish_name || 'Dish Item'}</span>
-                                  <strong className="text-warning-emphasis ms-2 flex-shrink-0">× {i.quantity || i.qty || 1}</strong>
-                                </div>
-                                {(() => {
-                                  const customs = getCustomizationsList(i);
-                                  const instructions = getInstructions(i);
-                                  return (
-                                    <>
-                                      {customs.length > 0 && (
-                                        <div className="text-secondary ms-2 text-wrap fw-medium mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3', color: '#64748b' }}>
-                                          <span className="fw-semibold text-dark">• Extra ingredients:</span> {customs.join(', ')}
-                                        </div>
-                                      )}
-                                      {Boolean(instructions) && (
-                                        <div className="text-muted fst-italic ms-2 text-wrap mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3' }}>
-                                          <span className="fw-semibold text-secondary fst-normal">• Instructions:</span> {instructions}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            ));
-                          }
-                          return (
-                            <div className="mb-1 text-truncate" style={{ maxWidth: '240px' }}>
-                              <span className="text-dark fw-medium">• Dish Item</span> <strong className="text-warning-emphasis">× 1</strong>
-                            </div>
-                          );
-                        })()}
-                        {ord.special_instructions && (
-                          <div className="text-warning-emphasis fw-semibold mt-1 fst-italic" style={{ fontSize: '11px' }}>
-                            Order Note: {ord.special_instructions}
+                      return (
+                        <div key={ord.id} className="card border rounded-3 p-3 bg-white shadow-2xs text-start" style={{ borderColor: '#E2E8F0' }}>
+                          <div className="d-flex align-items-center justify-content-between mb-2">
+                            <span className="fw-bold text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
+                            <span className="text-muted small" style={{ fontSize: '11px' }}>{ord.time || '5 mins ago'}</span>
                           </div>
-                        )}
 
-                      </div>
+                          <div className="mb-2">
+                            <span 
+                              className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
+                              style={{ 
+                                backgroundColor: isTakeaway ? '#FEF3C7' : '#FEE2E2', 
+                                color: isTakeaway ? '#D97706' : '#DC2626',
+                                border: isTakeaway ? '1px solid #FDE68A' : '1px solid #FECACA',
+                                fontSize: '11px' 
+                              }}
+                            >
+                              {isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
+                              <span>{isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
+                            </span>
+                          </div>
 
-                      <div className="d-flex align-items-center justify-content-between">
-                        <span className="text-muted small" style={{ fontSize: '11.5px' }}>
-                          {ord.time || 'Cooking'}
-                        </span>
-                        <Button
-                          onClick={() => handleAction(ord.id, isTakeawayOrder(ord) ? 'Served' : 'Ready')}
-                          disabled={isUpdatingStatus(ord.id, isTakeawayOrder(ord) ? 'Served' : 'Ready')}
-                          loading={isUpdatingStatus(ord.id, isTakeawayOrder(ord) ? 'Served' : 'Ready')}
-                          size="sm"
-                          variant="primary"
-                          className="py-1 px-3 fw-bold shadow-xs rounded-pill"
-                          style={{
-                            backgroundColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14',
-                            borderColor: isTakeawayOrder(ord) ? '#198754' : '#fd7e14'
-                          }}
-                        >
-                          {isTakeawayOrder(ord) ? 'Mark Serving' : 'Mark Ready'}
-                        </Button>
-                      </div>
-                    </div>
-                  ))
-                )}
+                          <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
+                            {itemsList.map((i, idx) => (
+                              <div key={idx} className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
+                                <span className="text-dark fw-medium">
+                                  {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
+                                </span>
+                                <span className="fw-bold text-dark">
+                                  ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {Boolean(ord.special_instructions || ord.notes) && (
+                            <div className="rounded-2 p-2 mt-2 mb-1" style={{ backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7', fontSize: '11px' }}>
+                              <span className="text-secondary fw-bold d-block mb-0.5">Special Instructions</span>
+                              <span className="text-dark">{ord.special_instructions || ord.notes}</span>
+                            </div>
+                          )}
+
+                          <div className="d-flex align-items-center justify-content-between gap-2 pt-3 mt-1">
+                            <button
+                              type="button"
+                              onClick={() => setEBillOrder(ord)}
+                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-semibold flex-grow-1 shadow-2xs border text-secondary"
+                              style={{ fontSize: '12px', borderColor: '#CBD5E1' }}
+                            >
+                              View Details
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleAction(ord.id, isTakeaway ? 'Served' : 'Ready')}
+                              disabled={isUpdatingStatus(ord.id, isTakeaway ? 'Served' : 'Ready')}
+                              className="btn btn-sm rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs text-white"
+                              style={{ backgroundColor: '#F59E0B', borderColor: '#F59E0B', fontSize: '12px' }}
+                            >
+                              Mark Ready
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
-          </div>
 
-          {/* Column 3: Ready for Counter */}
-          <div className="kitchen-queue-column">
-            <div className="card border-0 rounded-3 shadow-sm bg-white kitchen-queue-card">
-              <div className="kitchen-queue-column-header d-flex align-items-center justify-content-between p-3 border-bottom pb-2">
-                <div className="d-flex align-items-center gap-2">
-                  <span className="p-1 rounded bg-info-subtle text-info">
+            {/* Column 3: Ready / Serving */}
+            <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
+              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', height: '620px', maxHeight: 'calc(100vh - 300px)', minHeight: '440px' }}>
+                {/* Solid Cyan / Blue Header Banner */}
+                <div 
+                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
+                  style={{ backgroundColor: '#0284C7', borderTopLeftRadius: '14px', borderTopRightRadius: '14px' }}
+                >
+                  <div className="d-flex align-items-center gap-2">
                     <i className="bi bi-box-seam"></i>
-                  </span>
-                  <h6 className="fw-bold text-dark mb-0">Ready / Serving</h6>
+                    <span style={{ fontSize: '14px' }}>Ready / Serving ({readyOrders.length})</span>
+                  </div>
+                  <FiChevronRight size={16} />
                 </div>
-                <span className="badge bg-info text-white rounded-pill px-2.5 py-1">{readyOrders.length}</span>
-              </div>
 
-              <div className="kitchen-queue-column-content p-3 d-flex flex-column gap-3">
-                {readyOrders.length === 0 ? (
-                  <EmptyState title="Counter Cleared" description="Prepared food items appear here." icon="bi-collection-play" />
-                ) : (
-                  readyOrders.map((ord) => (
-                    <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket ticket-ready shadow-xs">
-                      <div className="d-flex align-items-center justify-content-between fw-bold mb-2">
-                        <span className="text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
-                        <span className="badge bg-info text-white rounded-pill px-2.5 py-1">
-                          {formatTableBadge(ord.table)}
-                        </span>
+                <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
+                  {readyOrders.length === 0 ? (
+                    <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
+                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-info" style={{ width: '48px', height: '48px', backgroundColor: '#E0F2FE' }}>
+                        <i className="bi bi-collection-play fs-3"></i>
                       </div>
-
-                      <div className="small border-bottom pb-2 mb-2 text-secondary">
-                        {(() => {
-                          const itemsList = getTicketItems(ord);
-                          const isFallback = itemsList.length === 0 || (itemsList.length === 1 && itemsList[0].name === 'Dish Item');
-
-                          if (itemsList.length > 0 && !isFallback) {
-                            return itemsList.map((i, idx) => (
-                              <div key={idx} className="mb-2" title={i.name || i.title || i.food_name || i.dish_name}>
-                                <div className="d-flex justify-content-between align-items-start">
-                                  <span className="text-dark fw-medium">• {i.name || i.title || i.food_name || i.dish_name || 'Dish Item'}</span>
-                                  <strong className="text-info ms-2 flex-shrink-0">× {i.quantity || i.qty || 1}</strong>
-                                </div>
-                                {(() => {
-                                  const customs = getCustomizationsList(i);
-                                  const instructions = getInstructions(i);
-                                  return (
-                                    <>
-                                      {customs.length > 0 && (
-                                        <div className="text-secondary ms-2 text-wrap fw-medium mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3', color: '#64748b' }}>
-                                          <span className="fw-semibold text-dark">• Extra ingredients:</span> {customs.join(', ')}
-                                        </div>
-                                      )}
-                                      {Boolean(instructions) && (
-                                        <div className="text-muted fst-italic ms-2 text-wrap mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3' }}>
-                                          <span className="fw-semibold text-secondary fst-normal">• Instructions:</span> {instructions}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            ));
-                          }
-                          return (
-                            <div className="mb-1 text-truncate" style={{ maxWidth: '240px' }}>
-                              <span className="text-dark fw-medium">• Dish Item</span> <strong className="text-info">× 1</strong>
-                            </div>
-                          );
-                        })()}
-
-                      </div>
-
-                      <div className="d-flex align-items-center justify-content-between">
-                        <span className="text-muted small" style={{ fontSize: '11.5px' }}>
-                          {ord.time || 'Ready'}
-                        </span>
-                        <Button
-                          onClick={() => handleAction(ord.id, 'Served')}
-                          disabled={isUpdatingStatus(ord.id, 'Served')}
-                          loading={isUpdatingStatus(ord.id, 'Served')}
-                          size="sm"
-                          variant="primary"
-                          className="py-1 px-3 fw-bold shadow-xs rounded-pill"
-                          style={{ backgroundColor: '#198754', borderColor: '#198754' }}
-                        >
-                          Mark Serving
-                        </Button>
-                      </div>
+                      <h6 className="fw-bold text-dark mb-1">No more orders in Ready</h6>
+                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Orders marked ready will appear here.</p>
                     </div>
-                  ))
-                )}
+                  ) : (
+                    readyOrders.map((ord) => {
+                      const itemsList = getTicketItems(ord);
+                      const isTakeaway = isTakeawayOrder(ord);
+
+                      return (
+                        <div key={ord.id} className="card border rounded-3 p-3 bg-white shadow-2xs text-start" style={{ borderColor: '#E2E8F0' }}>
+                          <div className="d-flex align-items-center justify-content-between mb-2">
+                            <span className="fw-bold text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
+                            <span className="text-muted small" style={{ fontSize: '11px' }}>{ord.time || '2 mins ago'}</span>
+                          </div>
+
+                          <div className="mb-2">
+                            <span 
+                              className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
+                              style={{ 
+                                backgroundColor: isTakeaway ? '#FEF3C7' : '#E0F2FE', 
+                                color: isTakeaway ? '#D97706' : '#0284C7',
+                                border: isTakeaway ? '1px solid #FDE68A' : '1px solid #BAE6FD',
+                                fontSize: '11px' 
+                              }}
+                            >
+                              {isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
+                              <span>{isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
+                            </span>
+                          </div>
+
+                          <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
+                            {itemsList.map((i, idx) => (
+                              <div key={idx} className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
+                                <span className="text-dark fw-medium">
+                                  {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
+                                </span>
+                                <span className="fw-bold text-dark">
+                                  ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          {Boolean(ord.special_instructions || ord.notes) && (
+                            <div className="rounded-2 p-2 mt-2 mb-1" style={{ backgroundColor: '#FFFBEB', border: '1px solid #FEF3C7', fontSize: '11px' }}>
+                              <span className="text-secondary fw-bold d-block mb-0.5">Special Instructions</span>
+                              <span className="text-dark">{ord.special_instructions || ord.notes}</span>
+                            </div>
+                          )}
+
+                          <div className="d-flex align-items-center justify-content-between gap-2 pt-3 mt-1">
+                            <button
+                              type="button"
+                              onClick={() => setEBillOrder(ord)}
+                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-semibold flex-grow-1 shadow-2xs border text-secondary"
+                              style={{ fontSize: '12px', borderColor: '#CBD5E1' }}
+                            >
+                              View Details
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handleAction(ord.id, 'Served')}
+                              disabled={isUpdatingStatus(ord.id, 'Served')}
+                              className="btn btn-sm rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs text-white"
+                              style={{ backgroundColor: '#0284C7', borderColor: '#0284C7', fontSize: '12px' }}
+                            >
+                              Mark Serving
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Column 4: Completed */}
+            <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
+              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', height: '620px', maxHeight: 'calc(100vh - 300px)', minHeight: '440px' }}>
+                {/* Solid Green Header Banner */}
+                <div 
+                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
+                  style={{ backgroundColor: '#16A34A', borderTopLeftRadius: '14px', borderTopRightRadius: '14px' }}
+                >
+                  <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-check-circle"></i>
+                    <span style={{ fontSize: '14px' }}>Completed ({completedOrders.length})</span>
+                  </div>
+                  <FiChevronRight size={16} />
+                </div>
+
+                <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
+                  {completedOrders.length === 0 ? (
+                    <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
+                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-success" style={{ width: '48px', height: '48px', backgroundColor: '#DCFCE7' }}>
+                        <i className="bi bi-check2-all fs-3"></i>
+                      </div>
+                      <h6 className="fw-bold text-dark mb-1">All caught up!</h6>
+                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Completed orders will be listed here.</p>
+                    </div>
+                  ) : (
+                    completedOrders.map((ord) => {
+                      const itemsList = getTicketItems(ord);
+                      const isTakeaway = isTakeawayOrder(ord);
+
+                      return (
+                        <div key={ord.id} className="card border rounded-3 p-3 bg-white shadow-2xs text-start" style={{ borderColor: '#E2E8F0' }}>
+                          <div className="d-flex align-items-center justify-content-between mb-2">
+                            <span className="fw-bold text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
+                            <span className="badge rounded-pill px-2.5 py-0.5 fw-semibold" style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontSize: '10.5px' }}>
+                              Completed
+                            </span>
+                          </div>
+
+                          <div className="mb-2">
+                            <span 
+                              className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
+                              style={{ 
+                                backgroundColor: isTakeaway ? '#FEF3C7' : '#DCFCE7', 
+                                color: isTakeaway ? '#D97706' : '#16A34A',
+                                border: isTakeaway ? '1px solid #FDE68A' : '1px solid #BBF7D0',
+                                fontSize: '11px' 
+                              }}
+                            >
+                              {isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
+                              <span>{isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
+                            </span>
+                          </div>
+
+                          <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
+                            {itemsList.map((i, idx) => (
+                              <div key={idx} className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
+                                <span className="text-dark fw-medium">
+                                  {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
+                                </span>
+                                <span className="fw-bold text-dark">
+                                  ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+
+                          <div className="d-flex align-items-center justify-content-between pt-2 text-secondary small" style={{ fontSize: '12px' }}>
+                            <span>Total Amount</span>
+                            <span className="fw-bold fs-6" style={{ color: '#16A34A' }}>
+                              ₹{(Number(ord.total_amount || ord.total || 0)).toFixed(2)}
+                            </span>
+                          </div>
+
+                          <div className="pt-2 mt-2 border-top" style={{ borderColor: '#F1F5F9' }}>
+                            <button
+                              type="button"
+                              onClick={() => setEBillOrder(ord)}
+                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-bold w-100 shadow-2xs"
+                              style={{ border: '1px solid #16A34A', color: '#16A34A', fontSize: '12px' }}
+                            >
+                              <FiFileText size={13} className="me-1.5" />
+                              View Bill
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
               </div>
             </div>
           </div>
-
-          {/* Column 4: Completed */}
-          <div className="kitchen-queue-column">
-            <div className="card border-0 rounded-3 shadow-sm bg-white kitchen-queue-card">
-              <div className="kitchen-queue-column-header d-flex align-items-center justify-content-between p-3 border-bottom pb-2">
-                <div className="d-flex align-items-center gap-2">
-                  <span className="p-1 rounded bg-success-subtle text-success">
-                    <i className="bi bi-check2-circle"></i>
-                  </span>
-                  <h6 className="fw-bold text-dark mb-0">Completed</h6>
-                </div>
-                <span className="badge bg-success text-white rounded-pill px-2.5 py-1">{completedOrders.length}</span>
-              </div>
-
-              <div className="kitchen-queue-column-content p-3 d-flex flex-column gap-3">
-                {completedOrders.length === 0 ? (
-                  <EmptyState title="No Completed Orders" description="Served orders appear here." icon="bi-check2-all" />
-                ) : (
-                  completedOrders.map((ord) => (
-                    <div key={ord.id} className="p-3 border rounded-3 bg-light-subtle kitchen-ticket ticket-completed shadow-xs">
-                      <div className="d-flex align-items-center justify-content-between fw-bold mb-3">
-                        <span className="text-dark fs-6">#{formatOrderDisplayNumber(ord, ord.id)}</span>
-                        <span className="badge bg-success text-white rounded-pill px-2.5 py-1">
-                          {formatTableBadge(ord.table)}
-                        </span>
-                      </div>
-
-                      <div className="small border-bottom pb-3 mb-3 text-secondary">
-                        {(() => {
-                          const itemsList = getTicketItems(ord);
-                          if (itemsList.length > 0) {
-                            return itemsList.map((i, idx) => (
-                              <div key={idx} className="mb-2" title={i.name || i.title || i.food_name || i.dish_name}>
-                                <div className="d-flex justify-content-between align-items-start">
-                                  <span className="text-dark fw-medium">• {i.name || i.title || i.food_name || i.dish_name || 'Dish Item'}</span>
-                                  <strong className="text-success ms-2 flex-shrink-0">× {i.quantity || i.qty || 1}</strong>
-                                </div>
-                                {(() => {
-                                  const customs = getCustomizationsList(i);
-                                  const instructions = getInstructions(i);
-                                  return (
-                                    <>
-                                      {customs.length > 0 && (
-                                        <div className="text-secondary ms-2 text-wrap fw-medium mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3', color: '#64748b' }}>
-                                          <span className="fw-semibold text-dark">• Extra ingredients:</span> {customs.join(', ')}
-                                        </div>
-                                      )}
-                                      {Boolean(instructions) && (
-                                        <div className="text-muted fst-italic ms-2 text-wrap mt-0.5" style={{ fontSize: '11px', whiteSpace: 'normal', lineHeight: '1.3' }}>
-                                          <span className="fw-semibold text-secondary fst-normal">• Instructions:</span> {instructions}
-                                        </div>
-                                      )}
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            ));
-                          }
-                          return (
-                            <div className="mb-1 text-truncate" style={{ maxWidth: '240px' }}>
-                              <span className="text-dark fw-medium">• Dish Item</span> <strong className="text-success ms-2">× 1</strong>
-                            </div>
-                          );
-                        })()}
-                      </div>
-
-                      <div className="d-flex flex-wrap align-items-center gap-2 mt-2">
-                        {String(ord.status).toLowerCase() === 'served' && !isTakeawayOrder(ord) && (
-                          <Button
-                            size="sm"
-                            variant="primary"
-                            className="py-1 px-3 text-nowrap"
-                            style={{ fontSize: '12px', whiteSpace: 'nowrap', borderRadius: '999px' }}
-                            onClick={() => handleAction(ord.id, 'Completed')}
-                          >
-                            Mark Completed
-                          </Button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => setEBillOrder(ord)}
-                          className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-1 fw-bold btn btn-sm d-inline-flex align-items-center text-nowrap"
-                          style={{ fontSize: '12px', cursor: 'pointer', whiteSpace: 'nowrap', height: '31px' }}
-                        >
-                          <i className="bi bi-receipt me-1"></i>View E-Bill
-                        </button>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        )}
       </div>
 
-      {/* E-Bill Modal for completed orders */}
-      {eBillOrder && (
-        <EBillModal
-          isOpen={!!eBillOrder}
-          order={eBillOrder}
-          onClose={() => setEBillOrder(null)}
-          onProceedToBill={async (ord) => {
-            const targetOrder = ord || eBillOrder;
-            if (!targetOrder) return;
-            const targetId = targetOrder.backendOrderId || targetOrder.id || targetOrder.order_id;
-            if (!targetId) return;
-            try {
-              await updateStatus(targetId, 'Completed');
-              await fetchOrders(false);
-              window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: targetId, status: 'Completed' } }));
-              setEBillOrder(null);
-              window.alert(`Order #${targetOrder.orderNumber || targetId} marked as Completed.`);
-            } catch (err) {
-              console.error('Failed to complete order on Proceed to Bill:', err);
-              const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
-              window.alert(msg);
-              throw err;
-            }
-          }}
-        />
-      )}
+      <EBillModal
+        isOpen={Boolean(eBillOrder)}
+        order={eBillOrder}
+        onClose={() => setEBillOrder(null)}
+      />
     </AdminLayout>
   );
 };
