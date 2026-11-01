@@ -11,6 +11,7 @@ export const ConfirmModal = ({
   confirmText = "Yes, Confirm",
   cancelText = "Cancel",
   loading = false,
+  size = "sm",
   type = "danger", // 'danger' | 'warning' | 'success' | 'info'
   singleAction = false,
 }) => {
@@ -49,19 +50,21 @@ export const ConfirmModal = ({
   };
 
   const footerActions = (
-    <div className="d-flex align-items-center justify-content-center gap-2.5 w-100">
+    <div className="d-flex align-items-center justify-content-center gap-2.5 w-100 flex-wrap">
       {!singleAction && (
         <button
           type="button"
           onClick={onClose}
           disabled={loading}
-          className="btn rounded-pill px-4 fw-bold flex-grow-1"
+          className="btn rounded-pill px-4 fw-bold text-nowrap flex-grow-1"
           style={{
-            height: '42px',
+            height: '40px',
+            minWidth: '100px',
             backgroundColor: '#FFFFFF',
             color: '#64748B',
             border: '1.5px solid #CBD5E1',
-            fontSize: '13px'
+            fontSize: '13px',
+            whiteSpace: 'nowrap'
           }}
         >
           {cancelText}
@@ -71,11 +74,14 @@ export const ConfirmModal = ({
         type="button"
         onClick={onConfirm || onClose}
         disabled={loading}
-        className="btn btn-danger rounded-pill px-4 fw-bold shadow-xs border-0 flex-grow-1"
+        className="btn btn-danger rounded-pill px-4 fw-bold shadow-xs border-0 text-nowrap d-inline-flex align-items-center justify-content-center flex-grow-1"
         style={{
-          height: '42px',
-          backgroundColor: '#F20D2D',
-          fontSize: '13px'
+          height: '40px',
+          minWidth: singleAction ? '140px' : '110px',
+          backgroundColor: isSuccess ? '#16A34A' : isWarning ? '#D97706' : 'var(--primary-color, #F20D2D)',
+          borderColor: isSuccess ? '#16A34A' : isWarning ? '#D97706' : 'var(--primary-color, #F20D2D)',
+          fontSize: '13px',
+          whiteSpace: 'nowrap'
         }}
       >
         {loading ? 'Please wait...' : confirmText}
@@ -84,13 +90,18 @@ export const ConfirmModal = ({
   );
 
   return (
-    <Modal isOpen={isOpen} title="" onClose={onClose} footerActions={footerActions} size="sm">
-      <div className="text-center py-2 px-1">
-        {getIcon()}
-        <h5 className="fw-bold mb-2 text-dark">{title}</h5>
-        <p className="text-secondary small mb-0 px-2">{message}</p>
-      </div>
+    <Modal isOpen={isOpen} title={type ? "" : title} onClose={onClose} footerActions={footerActions} size={size}>
+      {type ? (
+        <div className="text-center py-2 px-1">
+          {getIcon()}
+          {title && <h5 className="fw-bold mb-2 text-dark">{title}</h5>}
+          <p className="text-secondary small mb-0 px-2" style={{ lineHeight: '1.6' }}>{message}</p>
+        </div>
+      ) : (
+        <p className="text-secondary small mb-0" style={{ lineHeight: '1.6' }}>{message}</p>
+      )}
     </Modal>
   );
 };
+
 export default ConfirmModal;

@@ -22,6 +22,37 @@ export const CustomerLogin = () => {
   const [otpLoading, setOtpLoading] = useState(false);
   const [showDiningOption, setShowDiningOption] = useState(Boolean(location.state?.chooseDining));
   const [selectedDining, setSelectedDining] = useState('DINE_IN');
+  const [openTables, setOpenTables] = useState([]);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [tablesLoading, setTablesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!showDiningOption) return;
+    let mounted = true;
+    const loadTables = async () => {
+      setTablesLoading(true);
+      try {
+        const { resolvePublicBranchId, availableTables } = await import('../../services/customerCheckout');
+        const bId = await resolvePublicBranchId();
+        if (bId) {
+          const list = await availableTables(bId);
+          if (mounted) {
+            const avail = (list || []).filter(t => t.available === true || t.status === 'AVAILABLE' || t.status === 'Available');
+            setOpenTables(avail);
+            if (avail.length > 0) {
+              const savedTableId = sessionStorage.getItem('foodie_selected_table');
+              const found = avail.find(t => String(t.id) === String(savedTableId));
+              setSelectedTable(found || avail[0]);
+            }
+          }
+        }
+      } catch (e) { } finally {
+        if (mounted) setTablesLoading(false);
+      }
+    };
+    loadTables();
+    return () => { mounted = false; };
+  }, [showDiningOption]);
 
   const [error, setError] = useState('');
   const [infoMessage, setInfoMessage] = useState('');
@@ -185,6 +216,14 @@ export const CustomerLogin = () => {
   const handleConfirmDining = () => {
     sessionStorage.setItem('foodie_order_type', selectedDining);
     localStorage.setItem('foodie_order_type', selectedDining);
+    if (selectedDining === 'DINE_IN' && selectedTable) {
+      const tableNum = selectedTable.table_number || selectedTable.number || selectedTable.id;
+      const cleanTableNum = String(tableNum).startsWith('T') ? String(tableNum) : `T${tableNum}`;
+      sessionStorage.setItem('foodie_selected_table', String(selectedTable.id));
+      localStorage.setItem('foodie_selected_table', String(selectedTable.id));
+      sessionStorage.setItem('foodie_table_number', String(cleanTableNum));
+      localStorage.setItem('foodie_table_number', String(cleanTableNum));
+    }
     const hasGuestCartItems = Array.isArray(cartItems) && cartItems.length > 0;
     if (destination) {
       navigate(destination, { replace: true });
@@ -287,6 +326,74 @@ export const CustomerLogin = () => {
                 </div>
               )}
             </div>
+
+            {selectedDining === 'DINE_IN' && (
+              <div className="text-start mb-3 p-3 rounded-4 bg-light border border-light-subtle shadow-2xs">
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>
+                    Select Your Dining Table
+                  </span>
+                  <span className="badge rounded-pill bg-success-subtle text-success fw-semibold" style={{ fontSize: '11px' }}>
+                    {tablesLoading ? 'Checking...' : `${openTables.length} Available`}
+                  </span>
+                </div>
+
+                {tablesLoading ? (
+                  <div className="py-2 text-center text-muted small">Loading available tables...</div>
+                ) : openTables.length === 0 ? (
+                  <div className="p-2 text-center text-danger small rounded bg-white border border-danger-subtle">
+                    No tables available. Please select Takeaway.
+                  </div>
+                ) : (
+                  <div>
+                    <select
+                      value={selectedTable?.id || ''}
+                      onChange={(e) => {
+                        const found = openTables.find(t => String(t.id) === String(e.target.value));
+                        setSelectedTable(found || null);
+                      }}
+                      className="form-select form-select-sm rounded-pill py-2 px-3 fw-semibold border shadow-xs text-dark"
+                      style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' }}
+                    >
+                      {openTables.map(t => {
+                        const num = t.table_number || t.number || `T${t.id}`;
+                        const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                        const loc = t.location || t.area || 'Indoor';
+                        const cap = t.capacity || 4;
+                        return (
+                          <option key={t.id} value={t.id}>
+                            {cleanNum} — {loc} ({cap} Seats)
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    <div className="d-flex align-items-center gap-1.5 flex-wrap mt-2.5">
+                      {openTables.slice(0, 8).map(t => {
+                        const num = t.table_number || t.number || `T${t.id}`;
+                        const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                        const isSelected = selectedTable && String(selectedTable.id) === String(t.id);
+                        return (
+                          <button
+                            key={t.id}
+                            type="button"
+                            onClick={() => setSelectedTable(t)}
+                            className={`btn btn-sm rounded-pill px-2.5 py-1 fw-bold transition-all ${
+                              isSelected
+                                ? 'btn-danger text-white shadow-xs'
+                                : 'btn-outline-secondary bg-white text-secondary'
+                            }`}
+                            style={{ fontSize: '11.5px', minWidth: '48px' }}
+                          >
+                            {cleanNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Selectable Card 2: Takeaway */}
             <div

@@ -51,14 +51,17 @@ def _occupy(table):
         publish_catalog_event(table.branch_id, "table", "updated")
 
 
-def _release_if_idle(table):
+def _release_if_idle(table, force=False):
     if table is None:
         return
     table = DiningTable.objects.select_for_update().get(pk=table.pk)
-    still = Order.objects.filter(
-        models.Q(table=table) | models.Q(parent_order__table=table),
-        status__in=Order.ACTIVE_STATUSES,
-    ).exists()
+    if force:
+        still = False
+    else:
+        still = Order.objects.filter(
+            models.Q(table=table) | models.Q(parent_order__table=table),
+            status__in=Order.ACTIVE_STATUSES,
+        ).exclude(status__in=[Order.Status.CANCELLED, Order.Status.COMPLETED]).exists()
     if not still and table.status == DiningTable.Status.OCCUPIED:
         table.status = DiningTable.Status.AVAILABLE
         table.save(update_fields=["status", "updated_at"])

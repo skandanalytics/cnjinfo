@@ -22,6 +22,7 @@ import { useCart } from '../../hooks/useCart';
 import { OrderContext } from '../../context/OrderContext';
 import TrackOrderModal from '../../components/orders/TrackOrderModal';
 import EBillModal from '../../components/orders/EBillModal';
+import Toast from '../../components/common/Toast';
 import { orderService } from '../../services/orderService';
 
 export const Tables = () => {
@@ -377,12 +378,32 @@ export const Tables = () => {
 
   const uniqueLocations = Array.from(new Set(tables.map(t => t.location || t.area || 'Indoor').filter(Boolean)));
 
-  const availableCount = tables.filter(t => {
-    const isOccupied = t.status === 'Occupied' || t.is_occupied;
-    return !isOccupied && t.status !== 'Inactive';
-  }).length;
+  const ONGOING_ORDER_STATUSES = ['pending', 'preparing', 'ready', 'serving', 'in_progress', 'accepted'];
 
-  const occupiedCount = tables.filter(t => t.status === 'Occupied' || t.is_occupied).length;
+  const getActiveOrderForTable = (table) => {
+    const canonNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
+    const tableIdStr = String(table.id || '').trim();
+    return (orders || []).find(o => {
+      if (!o) return false;
+      const s = String(o.status || '').toLowerCase().trim();
+      if (!ONGOING_ORDER_STATUSES.includes(s)) return false;
+
+      const rawVal = o.tableNumber || o.table_number || o.table_no || (typeof o.table === 'object' ? (o.table?.number || o.table?.table_number || o.table?.id) : o.table);
+      const oCanon = tableService.getCanonicalTableNumber(rawVal || '');
+      const oTableId = String(o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : (typeof o.table === 'number' ? o.table : ''))).trim();
+
+      return (oCanon && oCanon === canonNum) || (tableIdStr && oTableId && tableIdStr === oTableId);
+    });
+  };
+
+  const isTableOccupied = (t) => {
+    const isDirectlyOccupied = t.status === 'Occupied' || t.status === 'OCCUPIED' || Boolean(t.is_occupied);
+    const activeOrder = getActiveOrderForTable(t);
+    return isDirectlyOccupied || Boolean(activeOrder);
+  };
+
+  const availableCount = tables.filter(t => !isTableOccupied(t) && t.status !== 'Inactive').length;
+  const occupiedCount = tables.filter(t => isTableOccupied(t)).length;
 
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -397,15 +418,15 @@ export const Tables = () => {
       const loc = t.location || t.area || 'Indoor';
       if (loc !== selectedLocation) return false;
     }
-    const isOccupied = t.status === 'Occupied' || t.is_occupied;
+    const occupied = isTableOccupied(t);
     if (selectedStatusFilter === 'available') {
-      return !isOccupied;
+      return !occupied;
     }
     if (selectedStatusFilter === 'occupied') {
-      return isOccupied;
+      return occupied;
     }
     if (isAvailableOnly) {
-      return !isOccupied;
+      return !occupied;
     }
     return true;
   });
@@ -646,25 +667,16 @@ export const Tables = () => {
               {showBranchHeadings && <h6 className="fw-bold text-dark mb-3">{group.name}</h6>}
               <div className="tables-grid">
                 {group.tables.map((table) => {
-                  const canonNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
-                  const tableIdStr = String(table.id || '').trim();
-                  const activeOrderForTable = (orders || []).find(o => {
-                    if (!o) return false;
-                    const INACTIVE_STATUSES = ['completed', 'cancelled', 'canceled', 'cancel', 'done', 'settled', 'delivered', 'rejected', 'void', 'voided'];
-                    const isActive = !INACTIVE_STATUSES.includes(String(o.status || '').toLowerCase().trim());
-                    if (!isActive) return false;
-
-                    const rawVal = o.tableNumber || o.table_number || o.table_no || (typeof o.table === 'object' ? (o.table?.number || o.table?.table_number || o.table?.id) : o.table);
-                    const oCanon = tableService.getCanonicalTableNumber(rawVal || '');
-                    const oTableId = String(o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : (typeof o.table === 'number' ? o.table : ''))).trim();
-
-                    return (oCanon && oCanon === canonNum) || (tableIdStr && oTableId && tableIdStr === oTableId);
-                  });
-                  const isTableOccupiedWithOrder = table.status === 'Occupied' || !!activeOrderForTable;
+                  const activeOrderForTable = getActiveOrderForTable(table);
+                  const isTableOccupiedWithOrder = isTableOccupied(table);
+                  const effectiveTable = {
+                    ...table,
+                    status: isTableOccupiedWithOrder ? 'Occupied' : (table.status === 'Reserved' ? 'Reserved' : 'Available')
+                  };
                   return (
                     <TableCard
                       key={table.id}
-                      table={table}
+                      table={effectiveTable}
                       onSelect={handleTakeOrder}
                       onTrackOrder={handleTrackTableOrder}
                       onStatusChange={handleStatusChange}

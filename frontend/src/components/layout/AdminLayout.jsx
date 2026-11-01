@@ -52,25 +52,11 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
     navigate('/login', { replace: true });
   };
 
-  const [isDarkMode, setIsDarkMode] = useState(() => {
-    return localStorage.getItem('foodie_theme') === 'dark';
-  });
-
+  // Enforce light appearance for Admin portal
   useEffect(() => {
-    if (isDarkMode) {
-      document.documentElement.setAttribute('data-theme', 'dark');
-      document.documentElement.setAttribute('data-bs-theme', 'dark');
-      localStorage.setItem('foodie_theme', 'dark');
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-      document.documentElement.removeAttribute('data-bs-theme');
-      localStorage.setItem('foodie_theme', 'light');
-    }
-  }, [isDarkMode]);
-
-  const toggleTheme = () => {
-    setIsDarkMode(prev => !prev);
-  };
+    document.documentElement.removeAttribute('data-theme');
+    document.documentElement.removeAttribute('data-bs-theme');
+  }, []);
 
   return (
     <div className="admin-wrapper bg-light position-relative">
@@ -138,8 +124,8 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                 placeholder="Search anything..." 
                 className="form-control rounded-pill ps-5 pe-3 border-0"
                 style={{ 
-                  backgroundColor: isDarkMode ? '#1E2D42' : '#F1F5F9', 
-                  fontSize: '13px', 
+                  backgroundColor: '#F1F5F9',
+                  fontSize: '13px',
                   height: '38px',
                   color: 'var(--text-primary)'
                 }}
@@ -148,26 +134,6 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
           </div>
 
           <div className="d-flex align-items-center gap-2 gap-md-3">
-            {/* Dark Mode Toggle Button */}
-            <button
-              type="button"
-              onClick={toggleTheme}
-              className="btn p-2 rounded-circle border-0 d-flex align-items-center justify-content-center"
-              style={{
-                width: '38px',
-                height: '38px',
-                backgroundColor: isDarkMode ? '#182234' : '#F1F5F9',
-                color: isDarkMode ? '#F59E0B' : '#64748B',
-                transition: 'all 0.2s ease'
-              }}
-              title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {isDarkMode ? (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-              ) : (
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-              )}
-            </button>
 
             {/* Notification Badge & Dropdown */}
             {user?.role !== 'employee' && (
@@ -182,7 +148,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                   style={{
                     width: '38px',
                     height: '38px',
-                    backgroundColor: isDarkMode ? '#1E2D42' : '#F1F5F9',
+                    backgroundColor: '#F1F5F9',
                     color: 'var(--text-secondary)'
                   }}
                   title="Notifications"
@@ -297,7 +263,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                 style={{
                   width: '38px',
                   height: '38px',
-                  backgroundColor: isDarkMode ? '#1E2D42' : '#F1F5F9',
+                  backgroundColor: '#F1F5F9',
                   color: 'var(--text-secondary)'
                 }}
                 title="Messages"
@@ -318,14 +284,14 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                 className="d-flex align-items-center gap-2 p-1 pe-2.5 rounded-pill cursor-pointer border"
                 style={{ 
                   cursor: 'pointer', 
-                  backgroundColor: isDarkMode ? '#182638' : '#FFFFFF',
-                  borderColor: 'var(--border-color)'
+                  backgroundColor: '#FFFFFF',
+                  borderColor: 'var(--border-color, #E2E8F0)'
                 }}
                 onClick={() => setShowProfileDropdown(!showProfileDropdown)}
               >
                 <div 
                   className="text-white rounded-circle d-flex align-items-center justify-content-center fw-bold shadow-xs flex-shrink-0"
-                  style={{ width: '32px', height: '32px', fontSize: '14px', backgroundColor: 'var(--primary-color)' }}
+                  style={{ width: '32px', height: '32px', fontSize: '14px', backgroundColor: 'var(--primary-color, #F20D2D)' }}
                 >
                   {user?.name?.charAt(0).toUpperCase() || 'F'}
                 </div>

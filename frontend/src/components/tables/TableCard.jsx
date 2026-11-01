@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiEdit2, FiEye, FiMapPin, FiUsers } from 'react-icons/fi';
+import { FiEdit2, FiEye, FiMapPin, FiUsers, FiTrash2 } from 'react-icons/fi';
 import { tableService } from '../../services/tableService';
 
 export function getShortTableNumber(val) {
@@ -11,8 +11,6 @@ export function getShortTableNumber(val) {
   }
   return str.startsWith('T') ? str : 'T' + str;
 }
-
-
 
 // Cute restaurant table & chairs SVG graphic matching reference screenshot
 const TableIllustration = ({ isOccupied }) => (
@@ -66,7 +64,7 @@ export const TableCard = ({
 
   return (
     <div 
-      className="card shadow-xs transition-all position-relative overflow-hidden"
+      className={`card shadow-xs transition-all position-relative overflow-hidden ${isInactive ? 'opacity-75' : ''}`}
       style={{
         borderRadius: '16px',
         backgroundColor: isOccupied ? '#FFF6F6' : '#F6FBF7',
@@ -75,8 +73,20 @@ export const TableCard = ({
         cursor: 'default'
       }}
     >
-      {/* Top Status Pill (Right Aligned) */}
-      <div className="d-flex justify-content-end mb-1">
+      {/* Top Status Pill (Right Aligned, with optional Admin Delete) */}
+      <div className="d-flex justify-content-between align-items-center mb-1">
+        {isAdmin && onDelete ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(table); }}
+            className="btn btn-sm btn-link text-danger p-0 border-0 opacity-50 hover-opacity-100"
+            title="Delete Table"
+            style={{ fontSize: '13px' }}
+          >
+            <FiTrash2 size={13} />
+          </button>
+        ) : <div />}
+
         <span 
           className="badge rounded-pill fw-bold px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-2xs"
           style={{
@@ -128,7 +138,7 @@ export const TableCard = ({
             e.stopPropagation();
             if (onEdit) onEdit(table);
           }}
-          className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
+          className="btn btn-sm bg-white rounded-pill px-2 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
           style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
           title="Edit Table"
         >
@@ -148,7 +158,7 @@ export const TableCard = ({
               onTrackOrder(table);
             }
           }}
-          className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
+          className="btn btn-sm bg-white rounded-pill px-2 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
           style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
           title={isOccupied ? "View active order" : "Take table order"}
         >
@@ -163,7 +173,7 @@ export const TableCard = ({
               e.stopPropagation();
               onViewQR(table);
             }}
-            className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
+            className="btn btn-sm bg-white rounded-pill px-2 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
             style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
             title="View Table QR Code"
           >

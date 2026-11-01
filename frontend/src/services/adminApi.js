@@ -132,20 +132,32 @@ export async function staffLogout() {
 }
 
 function mapBranch(b) {
+  let branchStatus = b.is_active ? 'Active' : 'Inactive';
+  try {
+    const savedStatusMap = JSON.parse(localStorage.getItem('foodie_branch_statuses') || '{}');
+    if (savedStatusMap[String(b.id)]) {
+      branchStatus = savedStatusMap[String(b.id)];
+    }
+  } catch (e) {}
+
+  // Actual table count should reflect live dining tables count if > 0, otherwise configured
+  const effectiveTablesCount = (b.tables_count !== undefined && b.tables_count !== null && b.tables_count > 0)
+    ? b.tables_count
+    : (b.configured_table_count ?? b.tables_count ?? 0);
+
   return {
     id: b.id,
     name: b.name,
     code: b.code,
-    city: '',
     address: b.address || '',
     phone: b.contact_number || '',
     email: b.email || '',
     city: b.city || '',
     managerName: b.manager_name || '',
     openingHours: b.opening_hours || '',
-    tablesCount: b.configured_table_count ?? b.tables_count ?? 0,
-    liveTables: b.tables_count || 0,
-    status: b.is_active ? 'Active' : 'Inactive',
+    tablesCount: effectiveTablesCount,
+    liveTables: b.tables_count ?? effectiveTablesCount,
+    status: branchStatus,
     isMainBranch: Boolean(b.is_primary),
     image: b.cover_image_url || '',
     gst_rate: b.gst_rate,
@@ -179,6 +191,13 @@ export async function saveBranch(form, existingId) {
     ? await staffJson(`/branches/${existingId}/`, { method: 'PATCH', body: JSON.stringify(body) })
     : await staffJson('/branches/', { method: 'POST', body: JSON.stringify(body) });
   branchMemo = null;
+  if (data && data.id && form.status) {
+    try {
+      const savedStatusMap = JSON.parse(localStorage.getItem('foodie_branch_statuses') || '{}');
+      savedStatusMap[String(data.id)] = form.status;
+      localStorage.setItem('foodie_branch_statuses', JSON.stringify(savedStatusMap));
+    } catch (e) {}
+  }
   return mapBranch(data);
 }
 
@@ -269,6 +288,14 @@ export async function updateTableStatus(id, status) {
   const data = await staffJson(`/tables/${id}/set-status/`, {
     method: 'POST',
     body: JSON.stringify({ status: tableStatusToApi(status) }),
+  });
+  return mapTable(data);
+}
+
+export async function cleanTable(id) {
+  const data = await staffJson(`/tables/${id}/clean/`, {
+    method: 'POST',
+    body: JSON.stringify({}),
   });
   return mapTable(data);
 }

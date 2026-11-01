@@ -73,6 +73,64 @@ export const Pos = () => {
   const [couponCodeInput, setCouponCodeInput] = useState('');
   const [couponError, setCouponError] = useState('');
   const userDismissedCouponRef = useRef(false);
+  const [hasSavedCart, setHasSavedCart] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        return Array.isArray(parsed?.items) && parsed.items.length > 0;
+      }
+    } catch (e) { }
+    return false;
+  });
+
+  // Sync cart state automatically to sessionStorage
+  useEffect(() => {
+    try {
+      if (cartItems.length > 0) {
+        const payload = {
+          items: cartItems,
+          orderType,
+          coupon: appliedCoupon,
+          tableId: selectedTable?.id || null,
+          customerPhone,
+          customerName,
+          branchId: selectedBranchId,
+          timestamp: Date.now(),
+        };
+        sessionStorage.setItem('foodie_pos_cart', JSON.stringify(payload));
+        setHasSavedCart(true);
+      } else {
+        sessionStorage.removeItem('foodie_pos_cart');
+        setHasSavedCart(false);
+      }
+    } catch (e) {
+      console.warn('Failed to save POS cart to sessionStorage:', e);
+    }
+  }, [cartItems, orderType, appliedCoupon, selectedTable, customerPhone, customerName, selectedBranchId]);
+
+  const handleContinueSavedCart = () => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed?.items) && parsed.items.length > 0) {
+          setCartItems(parsed.items);
+          if (parsed.orderType) setOrderType(parsed.orderType);
+          if (parsed.coupon) setAppliedCoupon(parsed.coupon);
+          if (parsed.customerPhone) setCustomerPhone(parsed.customerPhone);
+          if (parsed.customerName) setCustomerName(parsed.customerName);
+          if (parsed.tableId && tables && tables.length > 0) {
+            const tbl = tables.find(t => String(t.id) === String(parsed.tableId));
+            if (tbl) setSelectedTable(tbl);
+          }
+          setToast({ show: true, message: 'Saved cart restored successfully.', type: 'info' });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to restore saved cart:', e);
+    }
+  };
 
   const [serviceTaxEnabled, setServiceTaxEnabled] = useState(() => {
     try {
@@ -2065,6 +2123,19 @@ export const Pos = () => {
                       <FiShoppingBag size={28} className="mb-2 text-secondary opacity-50" />
                       <p className="small mb-0 fw-bold text-dark" style={{ fontSize: '13px' }}>No dishes in order ticket.</p>
                       <p className="text-secondary small mb-0 mt-0.5" style={{ fontSize: '11.5px' }}>Select dishes from the menu to start order.</p>
+                      {hasSavedCart && (
+                        <div className="mt-2.5">
+                          <button
+                            type="button"
+                            onClick={handleContinueSavedCart}
+                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center gap-1.5 shadow-xs"
+                            style={{ fontSize: '12px' }}
+                          >
+                            <FiRefreshCw size={13} />
+                            <span>Continue Saved Order</span>
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     cartItems.map((item, idx) => {

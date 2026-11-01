@@ -11,6 +11,7 @@ import { OrderContext } from '../../context/OrderContext';
 import { restaurantService } from '../../services/restaurantService';
 import { useAuth } from '../../hooks/useAuth';
 import EBillModal from '../../components/orders/EBillModal';
+import Toast from '../../components/common/Toast';
 import { FiEye, FiGrid, FiList } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
@@ -26,6 +27,7 @@ export const Orders = () => {
   const [employeeFilter, setEmployeeFilter] = useState('ALL');
   const [employees, setEmployees] = useState([]);
   const [eBillOrder, setEBillOrder] = useState(null);
+  const [toast, setToast] = useState({ show: false, message: '', type: 'add' });
 
   const getInitialTab = () => {
     const p = (searchParams.get('status') || searchParams.get('tab') || '').toLowerCase();
@@ -259,30 +261,6 @@ export const Orders = () => {
         actions={
           orders && orders.length > 0 ? (
             <div className="d-flex align-items-center gap-2 flex-wrap">
-              {/* Service Tax Checkbox / Toggle (Admin Only) */}
-              {user?.role !== 'employee' && !window.location.pathname.includes('/employee/') && (
-                <div
-                  className="form-check form-switch d-flex align-items-center gap-2 m-0 bg-white border border-secondary-subtle rounded-pill px-3 py-1.5 shadow-xs"
-                  style={{ minHeight: '32px' }}
-                  title="Enable or disable service tax"
-                >
-                  <input
-                    id="service-tax-toggle"
-                    className="form-check-input m-0 cursor-pointer"
-                    type="checkbox"
-                    role="switch"
-                    checked={serviceTaxEnabled}
-                    onChange={(e) => handleToggleServiceTax(e.target.checked)}
-                  />
-                  <label
-                    htmlFor="service-tax-toggle"
-                    className="form-check-label small fw-bold text-dark cursor-pointer user-select-none text-nowrap"
-                    style={{ fontSize: '12px' }}
-                  >
-                    Service Tax
-                  </label>
-                </div>
-              )}
               {user?.role !== 'employee' && !window.location.pathname.includes('/employee/') && restaurants.length > 1 && (
                 <select
                   value={branchFilter}
@@ -387,24 +365,25 @@ export const Orders = () => {
             </button>
           </div>
 
-          {/* Status Filter Dropdown */}
-          <select
-            value={activeTab}
-            onChange={(e) => handleTabClick(e.target.value)}
-            className="form-select form-select-sm rounded-pill fw-semibold px-3 py-1.5"
-            style={{ 
-              width: '150px', 
-              fontSize: '12.5px', 
-              backgroundColor: 'var(--surface-color)', 
-              borderColor: 'var(--border-color)', 
-              color: 'var(--text-primary)' 
-            }}
-            aria-label="Filter by order status"
-          >
-            {tabs.map((tab) => (
-              <option key={tab} value={tab}>{tab === 'All' ? 'All Statuses' : tab}</option>
-            ))}
-          </select>
+          {/* Order Status Filter Pills */}
+          <div className="p-1 rounded-pill d-inline-flex align-items-center flex-wrap gap-1" style={{ backgroundColor: 'var(--surface-muted, #F1F5F9)' }}>
+            {tabs.map((tab) => {
+              const isActive = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => handleTabClick(tab)}
+                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                    isActive ? 'bg-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+                  }`}
+                  style={{ fontSize: '12px' }}
+                >
+                  {tab}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* View Mode Switcher: Table vs Cards */}
@@ -546,12 +525,12 @@ export const Orders = () => {
                           <button
                             type="button"
                             onClick={() => setEBillOrder(adj)}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold"
+                            className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1.5"
                             style={{ fontSize: '11.5px' }}
-                            title="Show Bill"
+                            title="View E-Bill"
                           >
-                            <FiEye size={13} className="me-1" />
-                            Show Bill
+                            <FiEye size={13} />
+                            <span>Show Bill</span>
                           </button>
                         </div>
                       </td>
@@ -595,6 +574,8 @@ export const Orders = () => {
         />
       )}
 
+      <Toast show={toast.show} message={toast.message} type={toast.type} onClose={() => setToast(prev => ({ ...prev, show: false }))} />
+
       {/* E-Bill Modal */}
       {eBillOrder && (
         <EBillModal
@@ -614,11 +595,19 @@ export const Orders = () => {
               window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
               setEBillOrder(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
               setSelectedOrder(prev => (prev && String(prev.id) === String(targetId)) ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : prev);
-              window.alert(`Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`);
+              setToast({
+                show: true,
+                message: `Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`,
+                type: 'add'
+              });
             } catch (err) {
               console.error('Failed to complete order on Proceed to Bill:', err);
               const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
-              window.alert(msg);
+              setToast({
+                show: true,
+                message: msg,
+                type: 'remove'
+              });
               throw err;
             }
           }}

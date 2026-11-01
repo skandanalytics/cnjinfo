@@ -63,7 +63,7 @@ export const Users = () => {
     designation: 'Steward',
     department: 'Dining Floor',
     billAccess: 'counter_payment,print_bill',
-    branch: actorBranchId ? String(actorBranchId) : String(branches.find((b) => b.isMainBranch)?.id || ''),
+    branch: actorBranchId ? String(actorBranchId) : String(branches.find((b) => b.isMainBranch)?.id || branches[0]?.id || ''),
     status: 'ACTIVE',
   });
 
@@ -383,13 +383,13 @@ export const Users = () => {
               </div>
 
               {/* Branch Filter & Search Bar */}
-              <div className="d-flex align-items-center gap-2 flex-wrap">
+              <div className="d-flex align-items-center gap-2.5 flex-wrap">
                 {branches && branches.length > 0 && (
                   <select
                     id="employee-branch-filter"
                     aria-label="Filter staff by branch"
                     className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs bg-light text-dark"
-                    style={{ width: 'auto', minWidth: '160px', height: '38px', paddingLeft: '14px', paddingRight: '28px', fontSize: '13px', cursor: 'pointer' }}
+                    style={{ width: 'auto', minWidth: '180px', height: '38px', paddingLeft: '16px', paddingRight: '28px', fontSize: '13px', cursor: 'pointer' }}
                     value={selectedBranch}
                     onChange={(e) => setSelectedBranch(e.target.value)}
                   >
@@ -417,7 +417,7 @@ export const Users = () => {
                     const row = branchEmployees.find((person) => String(person.id) === String(item?.id));
                     if (row) handleViewEmployee(row);
                   }}
-                  style={{ width: '260px' }}
+                  style={{ width: '280px', height: '38px' }}
                 />
               </div>
             </div>
@@ -500,13 +500,13 @@ export const Users = () => {
                           </td>
 
                           <td className="py-3">
-                            <div className="d-flex flex-column gap-1">
-                              <div className="text-dark d-flex align-items-center gap-1.5" style={{ fontSize: '12px' }}>
-                                <FiMail size={12} className="text-secondary" />
-                                <span>{u.email}</span>
+                            <div className="d-flex flex-column gap-1.5">
+                              <div className="text-dark d-flex align-items-center gap-2" style={{ fontSize: '12px' }}>
+                                <FiMail size={13} className="text-secondary flex-shrink-0" />
+                                <span className="text-truncate">{u.email}</span>
                               </div>
-                              <div className="text-muted small d-flex align-items-center gap-1.5" style={{ fontSize: '11px' }}>
-                                <FiPhone size={11} className="text-secondary" />
+                              <div className="text-muted small d-flex align-items-center gap-2" style={{ fontSize: '11.5px' }}>
+                                <FiPhone size={13} className="text-secondary flex-shrink-0" />
                                 <span>{u.phone}</span>
                               </div>
                             </div>
@@ -697,8 +697,8 @@ export const Users = () => {
                           />
                           <button
                             type="button"
-                            className="btn btn-link position-absolute end-0 top-50 translate-middle-y text-secondary p-0 me-3 d-flex align-items-center justify-content-center"
-                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', zIndex: 5, width: '24px', height: '24px' }}
+                            className="password-toggle-btn position-absolute end-0 top-50 text-secondary p-0 me-3 d-flex align-items-center justify-content-center"
+                            style={{ border: 'none', background: 'transparent', cursor: 'pointer', zIndex: 5, width: '24px', height: '24px', transform: 'translateY(-50%)', margin: 0, padding: 0 }}
                             onClick={() => setShowPassword((prev) => !prev)}
                             aria-label={showPassword ? 'Hide password' : 'Show password'}
                             title={showPassword ? 'Hide password' : 'Show password'}

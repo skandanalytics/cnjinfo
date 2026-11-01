@@ -728,6 +728,23 @@ export const tableService = {
     return tableService.updateTableStatus(id, 'Available');
   },
 
+  cleanTable: async (id) => {
+    const { isStaffScreen, cleanTable, explain } = await import('./adminApi');
+    if (isStaffScreen()) {
+      try {
+        const res = await cleanTable(id);
+        try {
+          window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
+          localStorage.setItem('foodie_tables_sync_trigger', Date.now().toString());
+        } catch (e) { }
+        return res;
+      } catch (err) {
+        console.warn('Backend cleanTable fallback:', err);
+      }
+    }
+    return tableService.updateTableStatus(id, 'Available');
+  },
+
   deleteTable: async (id, tableNum = null) => {
     const { isStaffScreen, deleteTable, explain } = await import('./adminApi');
     if (isStaffScreen()) {

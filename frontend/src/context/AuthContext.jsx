@@ -63,11 +63,69 @@ export const AuthProvider = ({ children }) => {
           setAuthState({ user: null, isAuthenticated: false });
         }
       }
+      if (e.key === 'foodie_admin_logout_trigger') {
+        setAuthState({ user: null, isAuthenticated: false });
+      }
     };
 
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  // 60-Minute Admin Inactivity Auto-Logout
+  useEffect(() => {
+    if (!authState.isAuthenticated || authState.user?.role !== 'admin') {
+      return undefined;
+    }
+
+    const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
+    const LAST_ACTIVITY_KEY = 'foodie_admin_last_activity';
+
+    // Initialize last activity timestamp if absent
+    if (!localStorage.getItem(LAST_ACTIVITY_KEY)) {
+      localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+    }
+
+    let throttleTimer = null;
+    const recordActivity = () => {
+      if (throttleTimer) return;
+      throttleTimer = setTimeout(() => {
+        throttleTimer = null;
+      }, 1000); // Throttle writes to localStorage to at most once per second
+      localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+    };
+
+    const qualifyingEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+    qualifyingEvents.forEach((evt) => {
+      window.addEventListener(evt, recordActivity, { passive: true });
+    });
+
+    const checkInactivity = () => {
+      const last = Number(localStorage.getItem(LAST_ACTIVITY_KEY) || Date.now());
+      const elapsed = Date.now() - last;
+      if (elapsed >= INACTIVITY_TIMEOUT_MS) {
+        localStorage.removeItem(LAST_ACTIVITY_KEY);
+        try {
+          localStorage.setItem('foodie_admin_logout_trigger', String(Date.now()));
+        } catch (e) {}
+        logout({ scope: 'staff' });
+        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+          window.location.href = '/login?expired=1';
+        }
+      }
+    };
+
+    // Check periodically every 15 seconds
+    const intervalId = setInterval(checkInactivity, 15000);
+
+    return () => {
+      clearInterval(intervalId);
+      if (throttleTimer) clearTimeout(throttleTimer);
+      qualifyingEvents.forEach((evt) => {
+        window.removeEventListener(evt, recordActivity);
+      });
+    };
+  }, [authState.isAuthenticated, authState.user?.role]);
 
   useEffect(() => {
     if (!loading) return undefined;
@@ -146,6 +204,9 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
+    if (userObj.role === 'admin') {
+      localStorage.setItem('foodie_admin_last_activity', String(Date.now()));
+    }
     setAuthState({ user: userObj, isAuthenticated: true });
 
     try {
@@ -252,6 +313,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('foodie_staff_access');
       localStorage.removeItem('foodie_staff_refresh');
       localStorage.removeItem('foodie_staff_ordering');
+      localStorage.removeItem('foodie_admin_last_activity');
     }
 
     sessionStorage.removeItem('foodie_token');

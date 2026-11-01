@@ -387,9 +387,11 @@ class ProceedToBillView(APIView):
 
         # Free the table automatically when proceed-to-bill completes the session
         from .lifecycle import _release_if_idle
+        from django.db import transaction
         target_table = root.table or order.table
         if target_table:
-            _release_if_idle(target_table)
+            with transaction.atomic():
+                _release_if_idle(target_table)
 
         order.refresh_from_db()
 

@@ -1,15 +1,58 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
 import { FiShoppingBag, FiCheckCircle } from 'react-icons/fi';
-
+import { resolvePublicBranchId, availableTables } from '../../services/customerCheckout';
 
 export const OrderTypeModal = ({ isOpen, onSelectType, dineInAvailable = true }) => {
   const [selected, setSelected] = useState('DINE_IN');
+  const [openTables, setOpenTables] = useState([]);
+  const [selectedTable, setSelectedTable] = useState(null);
+  const [tablesLoading, setTablesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let mounted = true;
+    const fetchAvailable = async () => {
+      setTablesLoading(true);
+      try {
+        const branchId = await resolvePublicBranchId();
+        if (branchId) {
+          const list = await availableTables(branchId);
+          if (mounted) {
+            const avail = (list || []).filter(t => 
+              t.available === true || 
+              t.status === 'AVAILABLE' || 
+              t.status === 'Available' || 
+              t.is_available === true
+            );
+            setOpenTables(avail);
+            if (avail.length > 0) {
+              // Pre-select saved table if still valid, otherwise default to first available
+              const savedTableId = sessionStorage.getItem('foodie_selected_table') || localStorage.getItem('foodie_selected_table');
+              const foundSaved = avail.find(t => String(t.id) === String(savedTableId));
+              setSelectedTable(foundSaved || avail[0]);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('Could not load available tables in OrderTypeModal:', err);
+      } finally {
+        if (mounted) setTablesLoading(false);
+      }
+    };
+
+    fetchAvailable();
+    return () => { mounted = false; };
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleConfirm = () => {
-    onSelectType(selected);
+    if (selected === 'DINE_IN') {
+      onSelectType('DINE_IN', selectedTable);
+    } else {
+      onSelectType('TAKEAWAY', null);
+    }
   };
 
   return (
@@ -41,14 +84,14 @@ export const OrderTypeModal = ({ isOpen, onSelectType, dineInAvailable = true })
         <h4 className="fw-bold text-dark mb-1" style={{ fontSize: '20px' }}>
           Choose Dining Option
         </h4>
-        <p className="text-secondary small mb-4" style={{ fontSize: '13px', color: '#64748B' }}>
+        <p className="text-secondary small mb-3" style={{ fontSize: '13px', color: '#64748B' }}>
           How would you like to enjoy your food today?
         </p>
 
         {/* 1. Table Dine-in Card */}
         <div
           onClick={() => setSelected('DINE_IN')}
-          className="p-3 rounded-4 mb-3 d-flex align-items-center justify-content-between text-start cursor-pointer transition-all shadow-xs"
+          className="p-3 rounded-4 mb-2 d-flex align-items-center justify-content-between text-start cursor-pointer transition-all shadow-xs"
           style={{
             cursor: 'pointer',
             border: `2px solid ${selected === 'DINE_IN' ? '#F20D2D' : '#E2E8F0'}`,
@@ -84,6 +127,77 @@ export const OrderTypeModal = ({ isOpen, onSelectType, dineInAvailable = true })
             </div>
           )}
         </div>
+
+        {/* Available Table Selector (Shown when Table Dine-in is selected) */}
+        {selected === 'DINE_IN' && (
+          <div className="text-start mb-3 p-3 rounded-4 bg-light border border-light-subtle shadow-2xs">
+            <div className="d-flex align-items-center justify-content-between mb-2">
+              <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>
+                Select Your Dining Table
+              </span>
+              <span className="badge rounded-pill bg-success-subtle text-success fw-semibold" style={{ fontSize: '11px' }}>
+                {tablesLoading ? 'Checking tables...' : `${openTables.length} Available`}
+              </span>
+            </div>
+
+            {tablesLoading ? (
+              <div className="py-2 text-center text-muted small">Loading available tables...</div>
+            ) : openTables.length === 0 ? (
+              <div className="p-2.5 text-center text-danger small rounded-3 bg-white border border-danger-subtle">
+                No dining tables are currently available. Please select Takeaway or ask our staff.
+              </div>
+            ) : (
+              <div>
+                <select
+                  value={selectedTable?.id || ''}
+                  onChange={(e) => {
+                    const found = openTables.find(t => String(t.id) === String(e.target.value));
+                    setSelectedTable(found || null);
+                  }}
+                  className="form-select form-select-sm rounded-pill py-2 px-3 fw-semibold border shadow-xs text-dark"
+                  style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' }}
+                  aria-label="Choose dining table"
+                >
+                  {openTables.map(t => {
+                    const num = t.table_number || t.number || `T${t.id}`;
+                    const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                    const loc = t.location || t.area || 'Indoor';
+                    const cap = t.capacity || 4;
+                    return (
+                      <option key={t.id} value={t.id}>
+                        {cleanNum} — {loc} ({cap} Seats)
+                      </option>
+                    );
+                  })}
+                </select>
+
+                {/* Quick Selection Pills */}
+                <div className="d-flex align-items-center gap-1.5 flex-wrap mt-2.5">
+                  {openTables.slice(0, 8).map(t => {
+                    const num = t.table_number || t.number || `T${t.id}`;
+                    const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                    const isSelected = selectedTable && String(selectedTable.id) === String(t.id);
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        onClick={() => setSelectedTable(t)}
+                        className={`btn btn-sm rounded-pill px-2.5 py-1 fw-bold transition-all ${
+                          isSelected
+                            ? 'btn-danger text-white shadow-xs'
+                            : 'btn-outline-secondary bg-white text-secondary'
+                        }`}
+                        style={{ fontSize: '11.5px', minWidth: '48px' }}
+                      >
+                        {cleanNum}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 2. Takeaway Card */}
         <div
@@ -126,6 +240,7 @@ export const OrderTypeModal = ({ isOpen, onSelectType, dineInAvailable = true })
         <button
           type="button"
           onClick={handleConfirm}
+          disabled={selected === 'DINE_IN' && openTables.length === 0 && !tablesLoading}
           className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm"
           style={{
             height: '46px',

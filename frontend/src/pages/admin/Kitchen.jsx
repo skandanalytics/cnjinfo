@@ -9,6 +9,8 @@ import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
 import { FiUser, FiShoppingBag, FiClock, FiFileText, FiCheck, FiChevronRight } from 'react-icons/fi';
 import EBillModal from '../../components/orders/EBillModal';
+import Toast from '../../components/common/Toast';
+import { tableService } from '../../services/tableService';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const Kitchen = () => {
@@ -20,6 +22,77 @@ export const Kitchen = () => {
   const [eBillOrder, setEBillOrder] = useState(null);
   const [branches, setBranches] = useState([]);
   const [activeStageTab, setActiveStageTab] = useState('ALL');
+  const [tables, setTables] = useState([]);
+  const [clearingTableId, setClearingTableId] = useState(null);
+  const [clearedOrderIds, setClearedOrderIds] = useState(new Set());
+  const [toast, setToast] = useState({ show: false, message: '', type: 'add' });
+
+  useEffect(() => {
+    let mounted = true;
+    const loadTables = async () => {
+      try {
+        const data = await tableService.getTables();
+        if (mounted) setTables(Array.isArray(data) ? data : []);
+      } catch (err) {}
+    };
+    loadTables();
+    window.addEventListener('foodie_tables_updated', loadTables);
+    return () => {
+      mounted = false;
+      window.removeEventListener('foodie_tables_updated', loadTables);
+    };
+  }, []);
+
+  const handleCleanTable = async (ord) => {
+    const rawVal = ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? (ord.table?.number || ord.table?.table_number || ord.table?.id) : ord.table);
+    const canonNum = tableService.getCanonicalTableNumber(rawVal || '');
+    const ordTableId = ord.table_id || ord.tableId || (typeof ord.table === 'object' ? ord.table?.id : null);
+    
+    const foundTable = tables.find(t => {
+      if (ordTableId && String(t.id) === String(ordTableId)) return true;
+      const tCanon = tableService.getCanonicalTableNumber(t.number || t.table_number || t.id);
+      return tCanon && tCanon === canonNum;
+    });
+
+    const targetId = foundTable?.id || ordTableId;
+    if (!targetId) {
+      setToast({ show: true, message: `Could not identify table for this order.`, type: 'remove' });
+      return;
+    }
+
+    setClearingTableId(ord.id);
+    try {
+      await tableService.cleanTable(targetId);
+      setClearedOrderIds(prev => new Set(prev).add(ord.id).add(String(targetId)));
+      const updatedTables = await tableService.getTables().catch(() => []);
+      setTables(Array.isArray(updatedTables) ? updatedTables : []);
+      const label = foundTable?.table_number || foundTable?.number || canonNum || 'assigned';
+      setToast({ show: true, message: `Table ${label} cleared and marked Available!`, type: 'add' });
+    } catch (err) {
+      console.error('Failed to clean table:', err);
+      await tableService.updateTableStatus(targetId, 'Available').catch(() => {});
+      setClearedOrderIds(prev => new Set(prev).add(ord.id).add(String(targetId)));
+      setToast({ show: true, message: `Table marked Available.`, type: 'add' });
+    } finally {
+      setClearingTableId(null);
+    }
+  };
+
+  const isTableCleared = (ord) => {
+    if (clearedOrderIds.has(ord.id)) return true;
+    const rawVal = ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? (ord.table?.number || ord.table?.table_number || ord.table?.id) : ord.table);
+    const canonNum = tableService.getCanonicalTableNumber(rawVal || '');
+    const ordTableId = ord.table_id || ord.tableId || (typeof ord.table === 'object' ? ord.table?.id : null);
+    if (ordTableId && clearedOrderIds.has(String(ordTableId))) return true;
+
+    const foundTable = tables.find(t => {
+      if (ordTableId && String(t.id) === String(ordTableId)) return true;
+      const tCanon = tableService.getCanonicalTableNumber(t.number || t.table_number || t.id);
+      return tCanon && tCanon === canonNum;
+    });
+    if (!foundTable) return false;
+    return foundTable.status === 'Available' || foundTable.status === 'AVAILABLE' || foundTable.is_available === true;
+  };
   const headerRef = useRef(null);
   const [gridHeight, setGridHeight] = useState(null);
 
@@ -258,11 +331,11 @@ export const Kitchen = () => {
   };
 
   const formatTableBadge = (table) => {
-    if (!table) return 'Table: N/A';
+    if (!table) return 'N/A';
     const str = String(table).trim();
     if (str.toLowerCase() === 'takeaway') return 'Takeaway';
     if (/^table\s+/i.test(str)) return str;
-    return `Table: ${str}`;
+    return `${str}`;
   };
 
   const isTakeawayOrder = (ord) => {
@@ -911,16 +984,46 @@ export const Kitchen = () => {
                             </span>
                           </div>
 
-                          <div className="pt-2 mt-2 border-top" style={{ borderColor: '#F1F5F9' }}>
+                          <div className="d-flex align-items-center justify-content-between gap-2 pt-2 mt-2 border-top" style={{ borderColor: '#F1F5F9' }}>
                             <button
                               type="button"
                               onClick={() => setEBillOrder(ord)}
-                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-bold w-100 shadow-2xs"
+                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs"
                               style={{ border: '1px solid #16A34A', color: '#16A34A', fontSize: '12px' }}
                             >
-                              <FiFileText size={13} className="me-1.5" />
+                              <FiFileText size={13} className="me-1" />
                               View Bill
                             </button>
+
+                            {!isTakeaway && (
+                              <button
+                                type="button"
+                                onClick={() => handleCleanTable(ord)}
+                                disabled={clearingTableId === ord.id || isTableCleared(ord)}
+                                className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs transition-all ${
+                                  isTableCleared(ord)
+                                    ? 'bg-light border text-muted opacity-75'
+                                    : 'btn-success text-white'
+                                }`}
+                                style={{
+                                  backgroundColor: isTableCleared(ord) ? '#F1F5F9' : '#16A34A',
+                                  borderColor: isTableCleared(ord) ? '#CBD5E1' : '#16A34A',
+                                  color: isTableCleared(ord) ? '#64748B' : '#FFFFFF',
+                                  fontSize: '12px',
+                                  cursor: isTableCleared(ord) ? 'default' : 'pointer'
+                                }}
+                                title={isTableCleared(ord) ? "Table is already cleaned and available" : "Clear & mark table available"}
+                              >
+                                <FiCheck size={13} />
+                                <span>
+                                  {clearingTableId === ord.id
+                                    ? 'Clearing...'
+                                    : isTableCleared(ord)
+                                    ? 'Table Cleared'
+                                    : 'Table Cleaned'}
+                                </span>
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -937,6 +1040,13 @@ export const Kitchen = () => {
         isOpen={Boolean(eBillOrder)}
         order={eBillOrder}
         onClose={() => setEBillOrder(null)}
+      />
+
+      <Toast
+        isOpen={toast.show}
+        message={toast.message}
+        type={toast.type}
+        onClose={() => setToast({ ...toast, show: false })}
       />
     </AdminLayout>
   );

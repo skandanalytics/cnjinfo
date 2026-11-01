@@ -298,7 +298,7 @@ export const Offers = () => {
       await fetchData();
     } catch (e) {
       console.error("Failed to delete dish offer:", e);
-      alert("Failed to delete dish offer. Please try again.");
+      window.alert(e?.message || "Failed to delete dish offer. Please try again.");
       await fetchData();
     }
     setDeleteLoading(false);
@@ -511,22 +511,22 @@ export const Offers = () => {
                           <span className="text-muted fw-semibold">{dish.stock} Units</span>
                         </td>
                         <td className="text-end">
-                          <div className="d-flex align-items-center justify-content-end gap-2">
+                          <div className="d-inline-flex align-items-center justify-content-end gap-2">
                             <button
                               onClick={() => setEditingDish(dish)}
-                              className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center gap-1.5"
-                              style={{ fontSize: '11px' }}
+                              className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs"
+                              style={{ fontSize: '12px', height: '32px' }}
                               title="Edit Offer"
                             >
-                              <FiEdit2 size={12} /> Edit
+                              <FiEdit2 size={13} /> Edit
                             </button>
                             <button
                               onClick={() => setDeletingDishOffer(dish)}
-                              className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1.5"
-                              style={{ fontSize: '11px' }}
+                              className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs"
+                              style={{ fontSize: '12px', height: '32px' }}
                               title="Delete Dish Offer"
                             >
-                              <FiTrash2 size={12} /> Delete
+                              <FiTrash2 size={13} /> Delete
                             </button>
                           </div>
                         </td>
@@ -615,27 +615,27 @@ export const Offers = () => {
                           <Badge status={c.status} style={{ fontSize: '10px' }} />
                         </td>
                         <td className="text-end">
-                          <div className="d-flex align-items-center justify-content-end gap-2">
+                          <div className="d-inline-flex align-items-center justify-content-end gap-2">
                             <button
                               onClick={() => handleEditCouponClick(c)}
-                              className="btn btn-sm btn-outline-primary rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1"
+                              className="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs"
                               title="Edit Coupon"
-                              style={{ fontSize: '11px', opacity: 1 }}
+                              style={{ fontSize: '12px', height: '32px', opacity: 1 }}
                             >
                               <FiEdit2 size={13} /> Edit
                             </button>
                             <button
                               onClick={() => handleToggleStatus(c.id, c.code, c.status)}
-                              className={`btn btn-sm rounded-pill px-3 fw-bold ${c.status === 'Active' ? 'btn-outline-secondary' : 'btn-outline-success'}`}
-                              style={{ fontSize: '11px', opacity: 1 }}
+                              className={`btn btn-sm rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center shadow-xs ${c.status === 'Active' ? 'btn-outline-secondary' : 'btn-outline-success'}`}
+                              style={{ fontSize: '12px', height: '32px', opacity: 1 }}
                             >
                               {c.status === 'Active' ? 'Deactivate' : 'Activate'}
                             </button>
                             <button
                               onClick={() => handleDeleteCouponClick(c.id, c.code)}
-                              className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1"
+                              className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs"
                               title="Delete Coupon"
-                              style={{ fontSize: '11px', opacity: 1 }}
+                              style={{ fontSize: '12px', height: '32px', opacity: 1 }}
                             >
                               <FiTrash2 size={13} /> Delete
                             </button>

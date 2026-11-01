@@ -106,15 +106,33 @@ export const Home = () => {
     return !savedType && !qrParam;
   });
 
-  const handleSelectOrderType = (type) => {
-    if (type === 'DINE_IN' && !hasDineInTable()) {
-      navigate('/customer/welcome', { state: { chooseDining: true } });
-      return;
-    }
+  const handleSelectOrderType = (type, chosenTable) => {
     setShowOrderTypeModal(false);
     setOrderType(type);
-    if (type === 'TAKEAWAY') {
+    if (type === 'DINE_IN') {
+      if (chosenTable) {
+        const tableNum = chosenTable.table_number || chosenTable.number || chosenTable.id;
+        const cleanTableNum = String(tableNum).startsWith('T') ? String(tableNum) : `T${tableNum}`;
+        const tableId = chosenTable.id;
+        setTable({ 
+          tableNumber: cleanTableNum, 
+          tableId: tableId, 
+          id: tableId,
+          orderType: 'DINE_IN',
+          location: chosenTable.location,
+          capacity: chosenTable.capacity
+        });
+        sessionStorage.setItem('foodie_selected_table', String(tableId));
+        localStorage.setItem('foodie_selected_table', String(tableId));
+        sessionStorage.setItem('foodie_table_number', String(cleanTableNum));
+        localStorage.setItem('foodie_table_number', String(cleanTableNum));
+        sessionStorage.setItem('foodie_order_type', 'DINE_IN');
+        localStorage.setItem('foodie_order_type', 'DINE_IN');
+      }
+    } else if (type === 'TAKEAWAY') {
       setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: 'TAKEAWAY' });
+      sessionStorage.setItem('foodie_order_type', 'TAKEAWAY');
+      localStorage.setItem('foodie_order_type', 'TAKEAWAY');
     }
   };
 

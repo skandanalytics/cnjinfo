@@ -195,7 +195,7 @@ export const SearchBar = ({
         ref={inputRef}
         type="text"
         disabled={disabled}
-        className="form-control rounded-pill py-2.5 ps-5 pe-5 text-secondary border border-light-subtle shadow-sm"
+        className="form-control rounded-pill ps-5 pe-5 text-dark border border-light-subtle shadow-sm"
         placeholder={placeholder}
         value={value || ''}
         onChange={(event) => {
@@ -209,6 +209,7 @@ export const SearchBar = ({
         }}
         onKeyDown={handleKeyDown}
         style={{
+          height: style?.height || '40px',
           fontSize: '13px',
           backgroundColor: disabled ? '#f1f5f9' : '#ffffff',
           cursor: disabled ? 'not-allowed' : 'text',
