@@ -490,7 +490,6 @@ export const Tables = () => {
   return (
     <AdminLayout contentClassName="p-0">
       <div className="tables-page-container">
-<<<<<<< HEAD
         <PageHeader 
           title="Tables" 
           showBackButton
@@ -554,17 +553,6 @@ export const Tables = () => {
                 <span>{loc}</span>
               </button>
             ))}
-=======
-        {/* Page Header (Matches Reference Screenshot 1) */}
-        <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-4">
-          <div>
-            <h2 className="fw-bold mb-1 text-dark" style={{ fontSize: '26px', letterSpacing: '-0.5px' }}>
-              Manage Tables
-            </h2>
-            <p className="text-secondary small mb-0" style={{ fontSize: '13px' }}>
-              Manage dine-in tables, locations and availability.
-            </p>
->>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
           </div>
 
           <div className="d-flex align-items-center gap-2">

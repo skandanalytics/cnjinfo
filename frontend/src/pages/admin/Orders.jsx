@@ -453,7 +453,6 @@ export const Orders = () => {
                   const customerDisplay = order.customerName || order.customer_name || (order.customerPhone || order.customer_phone ? order.customerPhone || order.customer_phone : 'Walk-in');
 
                   // Status Badge Variant
-<<<<<<< HEAD
                   const st = String(order.status || order.backendStatus || '').toLowerCase().trim();
                   let stVariant = 'bg-secondary-subtle text-secondary';
                   let stLabel = order.status || 'Pending';
@@ -474,35 +473,6 @@ export const Orders = () => {
                     stLabel = 'Completed';
                   } else if (['cancelled', 'canceled', 'rejected'].includes(st)) {
                     stVariant = 'bg-danger-subtle text-danger border border-danger-subtle';
-=======
-                  const st = String(order.status || '').toLowerCase().trim();
-                  let stBg = '#FEF3C7';
-                  let stColor = '#B45309';
-                  let stLabel = order.status;
-                  if (['pending', 'placed', 'new'].includes(st)) {
-                    stBg = 'rgba(245, 158, 11, 0.12)';
-                    stColor = '#D97706';
-                    stLabel = 'New';
-                  } else if (['preparing', 'cooking', 'in_kitchen'].includes(st)) {
-                    stBg = 'rgba(37, 99, 235, 0.12)';
-                    stColor = '#2563EB';
-                    stLabel = 'In Kitchen';
-                  } else if (['ready', 'prepared'].includes(st)) {
-                    stBg = 'rgba(14, 165, 233, 0.12)';
-                    stColor = '#0284C7';
-                    stLabel = 'Ready';
-                  } else if (['serving', 'served'].includes(st)) {
-                    stBg = 'rgba(99, 102, 241, 0.12)';
-                    stColor = '#4F46E5';
-                    stLabel = 'Serving';
-                  } else if (['completed', 'delivered', 'done', 'settled'].includes(st)) {
-                    stBg = 'rgba(22, 163, 74, 0.12)';
-                    stColor = '#16A34A';
-                    stLabel = 'Completed';
-                  } else if (['cancelled', 'canceled', 'rejected'].includes(st)) {
-                    stBg = 'rgba(239, 68, 68, 0.12)';
-                    stColor = '#DC2626';
->>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
                     stLabel = 'Cancelled';
                   }
 
@@ -536,21 +506,12 @@ export const Orders = () => {
                         </span>
                       </td>
                       <td className="text-end pe-4 py-3">
-<<<<<<< HEAD
                         <div className="d-flex align-items-center justify-content-end" style={{ gap: '10px' }}>
                           <button
                             type="button"
                             onClick={() => setSelectedOrder(order)}
                             className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center"
                             style={{ fontSize: '12px', minWidth: '60px', height: '32px' }}
-=======
-                        <div className="d-flex align-items-center justify-content-end gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedOrder(order)}
-                            className="btn btn-sm text-white rounded-pill px-3 py-1 fw-bold shadow-xs border-0"
-                            style={{ fontSize: '11.5px', backgroundColor: 'var(--primary-color, #F20D2D)' }}
->>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
                           >
                             View Details
                           </button>

@@ -22,12 +22,7 @@ import Toast from '../../components/common/Toast';
 import { 
   FiSearch, FiX, FiPlus, FiMinus, FiTrash2, FiShoppingBag, 
   FiLayers, FiTag, FiCheck, FiDollarSign, FiClock, FiPercent,
-<<<<<<< HEAD
   FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw, FiChevronLeft
-=======
-  FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw,
-  FiGrid, FiList, FiShoppingCart, FiCreditCard, FiSave, FiChevronDown
->>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
 } from 'react-icons/fi';
 import { getShortTableNumber } from '../../components/tables/TableCard';
 
@@ -68,7 +63,6 @@ export const Pos = () => {
 
   // POS Order State
   const initialType = (searchParams.get('type') || '').toLowerCase() === 'takeaway' ? 'TAKEAWAY' : 'DINE_IN';
-<<<<<<< HEAD
   const [orderType, setOrderType] = useState(() => {
     try {
       const stored = sessionStorage.getItem('foodie_pos_cart');
@@ -133,14 +127,6 @@ export const Pos = () => {
     }
     return null;
   });
-=======
-  const [orderType, setOrderType] = useState(initialType);
-  const [selectedTable, setSelectedTable] = useState(null);
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerName, setCustomerName] = useState('');
-  const [cartItems, setCartItems] = useState([]);
-  const [appliedCoupon, setAppliedCoupon] = useState(null);
->>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
   const [couponCodeInput, setCouponCodeInput] = useState('');
   const [couponError, setCouponError] = useState('');
   const userDismissedCouponRef = useRef(false);
@@ -1399,7 +1385,6 @@ export const Pos = () => {
     <AdminLayout fullHeight={true} contentClassName="p-0 d-flex flex-column flex-grow-1 overflow-hidden">
       <div className="pos-main-container d-flex flex-column w-100 h-100 overflow-hidden" style={{ backgroundColor: '#F2F7FC' }}>
         
-<<<<<<< HEAD
         {/* Top POS Header Toolbar */}
         <header className="pos-topbar bg-white border-bottom px-4 py-3 d-flex align-items-center justify-content-between flex-wrap gap-3 flex-shrink-0">
           <div className="d-flex align-items-center gap-3">
@@ -1469,8 +1454,6 @@ export const Pos = () => {
           </div>
         </header>
 
-=======
->>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
         {/* Mobile Tab Switcher (Visible on screens < 992px) */}
         <div className="d-flex d-lg-none bg-white border-bottom px-3 py-2 gap-2 flex-shrink-0">
           <button

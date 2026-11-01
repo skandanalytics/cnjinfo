@@ -421,7 +421,6 @@ export const MenuEditor = () => {
               >
                 <FiPlus /> Add Category
               </Button>
-<<<<<<< HEAD
 
               {hasCategories && (
                 <>
@@ -438,8 +437,6 @@ export const MenuEditor = () => {
                   </Button>
                 </>
               )}
-=======
->>>>>>> 5590194c7aebccd5be11a5696defc87a7c814104
             </div>
           )
         }
