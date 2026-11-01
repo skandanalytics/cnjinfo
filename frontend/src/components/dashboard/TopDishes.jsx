@@ -41,12 +41,7 @@ export const TopDishes = ({ dishes = [] }) => {
         <div className="d-flex flex-column gap-3">
           {dishes.slice(0, 3).map((dish, index) => {
             const percentage = Math.min(100, Math.max(30, Math.round((dish.count / maxOrders) * 100)));
-            const defaultImages = [
-              'https://images.unsplash.com/photo-1601050690597-df0568f70950?w=120&auto=format&fit=crop&q=80',
-              'https://images.unsplash.com/photo-1668236543090-82eba5ee5976?w=120&auto=format&fit=crop&q=80',
-              'https://images.unsplash.com/photo-1563379091339-03b21ab4a4f8?w=120&auto=format&fit=crop&q=80'
-            ];
-            const imgSrc = dish.image ? getImageUrl(dish.image) : defaultImages[index % defaultImages.length];
+            const imgSrc = getImageUrl(dish.image);
             const isOrange = index >= 2;
 
             return (
@@ -64,7 +59,7 @@ export const TopDishes = ({ dishes = [] }) => {
                     className="w-100 h-100 rounded-3 shadow-xs"
                     style={{ objectFit: 'cover', borderRadius: '10px' }}
                     onError={(e) => {
-                      e.currentTarget.src = defaultImages[index % defaultImages.length];
+                      e.currentTarget.src = getImageUrl(null);
                     }}
                   />
                 </div>

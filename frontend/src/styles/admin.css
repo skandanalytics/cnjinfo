@@ -436,8 +436,10 @@
 .table-card-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
+  padding-top: 10px !important;
+  margin-top: auto !important;
 }
 
 .table-card-btn:hover:not(:disabled):not(.disabled) {

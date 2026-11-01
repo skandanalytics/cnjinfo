@@ -201,7 +201,6 @@ export const Dashboard = () => {
             value={summary?.availableTables ?? 0}
             icon={FiLayers}
             color="info"
-            pillText={`of 20 tables`}
             onClick={() => navigate('/admin/tables')}
           />
         </div>

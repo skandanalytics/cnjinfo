@@ -695,6 +695,8 @@ function mapCoupon(c) {
     validity: c.valid_to,
     description: c.description || '',
     autoApply: Boolean(c.auto_apply),
+    isFirstTimeAuto: Boolean(c.is_first_time_auto),
+    is_first_time_auto: Boolean(c.is_first_time_auto),
   };
 }
 
@@ -738,6 +740,7 @@ export async function createCoupon(couponData) {
       valid_to: to.toISOString(),
       is_active: true,
       auto_apply: Boolean(couponData.autoApply),
+      is_first_time_auto: Boolean(couponData.isFirstTimeAuto ?? couponData.is_first_time_auto),
     }),
   });
   publishCatalogChange();
@@ -762,6 +765,7 @@ export async function updateCoupon(id, couponData) {
     discount_value: disc,
     min_order_value: minOrd,
     auto_apply: Boolean(couponData.autoApply),
+    is_first_time_auto: Boolean(couponData.isFirstTimeAuto ?? couponData.is_first_time_auto),
   };
 
   if (couponData.validity) {

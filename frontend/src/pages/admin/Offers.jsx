@@ -36,6 +36,7 @@ export const Offers = () => {
   const [minOrder, setMinOrder] = useState('');
   const [validity, setValidity] = useState('');
   const [autoApply, setAutoApply] = useState(false);
+  const [isFirstTime, setIsFirstTime] = useState(false);
   const [couponError, setCouponError] = useState('');
   const now = new Date();
   const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
@@ -48,6 +49,7 @@ export const Offers = () => {
     setMinOrder('');
     setValidity('');
     setAutoApply(false);
+    setIsFirstTime(false);
     setCouponError('');
     setIsAddOpen(true);
   };
@@ -62,6 +64,7 @@ export const Offers = () => {
     const dateStr = rawVal ? String(rawVal).slice(0, 10) : '';
     setValidity(dateStr);
     setAutoApply(Boolean(c.autoApply));
+    setIsFirstTime(Boolean(c.isFirstTimeAuto ?? c.is_first_time_auto));
     setCouponError('');
     setIsAddOpen(true);
   };
@@ -189,6 +192,8 @@ export const Offers = () => {
         validity,
         status: 'Active',
         autoApply,
+        isFirstTimeAuto: isFirstTime,
+        is_first_time_auto: isFirstTime,
       };
 
       if (editingCouponTarget) {
@@ -763,6 +768,20 @@ export const Offers = () => {
             error={couponError && !couponError.includes('Minimum order value') && !couponError.includes('percentage') ? couponError : undefined}
           />
           {couponError && <div className="text-danger small fw-semibold mb-2">{couponError}</div>}
+          <div className="form-check form-switch mb-3">
+            <input
+              id="coupon-first-time"
+              className="form-check-input"
+              type="checkbox"
+              role="switch"
+              checked={isFirstTime}
+              onChange={(e) => setIsFirstTime(e.target.checked)}
+            />
+            <label className="form-check-label small fw-semibold" htmlFor="coupon-first-time">
+              Applicable to First-Time Customers
+            </label>
+          </div>
+
           <div className="form-check form-switch mb-3">
             <input
               id="coupon-auto-apply"

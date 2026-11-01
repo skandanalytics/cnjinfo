@@ -52,7 +52,7 @@ export const Sidebar = () => {
         </span>
         {!sidebarCollapsed && (
           <span className="fw-bold text-white fs-5 tracking-tight" style={{ letterSpacing: '-0.3px' }}>
-            {isEmployee ? 'Foodie Staff' : 'Foodie  Admin'}
+            {isEmployee ? 'Foodie Staff' : 'Foodie Admin'}
           </span>
         )}
       </NavLink>

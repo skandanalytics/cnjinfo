@@ -445,23 +445,26 @@ export const Orders = () => {
                   const isPaid = String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID';
 
                   // Status Badge Variant
-                  const st = String(order.status || '').toLowerCase().trim();
+                  const st = String(order.status || order.backendStatus || '').toLowerCase().trim();
                   let stVariant = 'bg-secondary-subtle text-secondary';
-                  let stLabel = order.status;
+                  let stLabel = order.status || 'Pending';
                   if (['pending', 'placed', 'new'].includes(st)) {
-                    stVariant = 'bg-warning-subtle text-warning-emphasis';
-                    stLabel = 'New';
+                    stVariant = 'bg-secondary-subtle text-secondary border';
+                    stLabel = 'Pending';
                   } else if (['preparing', 'cooking', 'in_kitchen'].includes(st)) {
-                    stVariant = 'bg-info-subtle text-info-emphasis';
+                    stVariant = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
                     stLabel = 'Preparing';
                   } else if (['ready', 'prepared'].includes(st)) {
-                    stVariant = 'bg-primary-subtle text-primary';
+                    stVariant = 'bg-info-subtle text-info-emphasis border border-info-subtle';
                     stLabel = 'Ready';
+                  } else if (['serving', 'served'].includes(st)) {
+                    stVariant = 'bg-primary-light text-danger border border-danger-subtle';
+                    stLabel = 'Serving';
                   } else if (['completed', 'delivered', 'done', 'settled'].includes(st)) {
-                    stVariant = 'bg-success-subtle text-success';
+                    stVariant = 'bg-success-subtle text-success border border-success-subtle';
                     stLabel = 'Completed';
                   } else if (['cancelled', 'canceled', 'rejected'].includes(st)) {
-                    stVariant = 'bg-danger-subtle text-danger';
+                    stVariant = 'bg-danger-subtle text-danger border border-danger-subtle';
                     stLabel = 'Cancelled';
                   }
 
@@ -490,23 +493,23 @@ export const Orders = () => {
                         </span>
                       </td>
                       <td className="text-end pe-4 py-3">
-                        <div className="d-flex align-items-center justify-content-end gap-1.5">
+                        <div className="d-flex align-items-center justify-content-end" style={{ gap: '10px' }}>
                           <button
                             type="button"
                             onClick={() => setSelectedOrder(order)}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
-                            style={{ fontSize: '11.5px' }}
+                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center"
+                            style={{ fontSize: '12px', minWidth: '60px', height: '32px' }}
                           >
                             View
                           </button>
                           <button
                             type="button"
                             onClick={() => setEBillOrder(adj)}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1.5"
-                            style={{ fontSize: '11.5px' }}
+                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center gap-2"
+                            style={{ fontSize: '12px', height: '32px' }}
                             title="View E-Bill"
                           >
-                            <FiEye size={13} />
+                            <FiEye size={13} className="flex-shrink-0" />
                             <span>Show Bill</span>
                           </button>
                         </div>

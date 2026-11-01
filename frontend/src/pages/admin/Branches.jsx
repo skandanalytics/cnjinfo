@@ -324,7 +324,7 @@ export const Branches = () => {
           <div className="row g-3">
             {/* Row 1: Branch Name * | Branch Code / Restaurant * */}
             <div className="col-12 col-md-6">
-              <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+              <label className="form-label text-dark fw-normal small mb-1" style={{ fontSize: '13px' }}>
                 Branch Name <span className="text-danger">*</span>
               </label>
               <input 
@@ -341,7 +341,7 @@ export const Branches = () => {
 
             {editingBranch ? (
               <div className="col-12 col-md-6">
-                <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+                <label className="form-label text-dark fw-normal small mb-1" style={{ fontSize: '13px' }}>
                   Branch Code (System Generated)
                 </label>
                 <input 
@@ -355,7 +355,7 @@ export const Branches = () => {
               </div>
             ) : (
               <div className="col-12 col-md-6">
-                <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+                <label className="form-label text-dark fw-normal small mb-1" style={{ fontSize: '13px' }}>
                   Restaurant <span className="text-danger">*</span>
                 </label>
                 <select 
@@ -371,7 +371,7 @@ export const Branches = () => {
 
             {/* Row 2: Location * | Status * */}
             <div className="col-12 col-md-6">
-              <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+              <label className="form-label text-dark fw-normal small mb-1" style={{ fontSize: '13px' }}>
                 Location <span className="text-danger">*</span>
               </label>
               <input 
@@ -387,7 +387,7 @@ export const Branches = () => {
             </div>
 
             <div className="col-12 col-md-6">
-              <label className="form-label text-dark fw-bold small mb-1" style={{ fontSize: '13px' }}>
+              <label className="form-label text-dark fw-normal small mb-1" style={{ fontSize: '13px' }}>
                 Status <span className="text-danger">*</span>
               </label>
               <select 
@@ -476,7 +476,7 @@ export const Branches = () => {
 
             <div className="col-12 col-md-6">
               <Input 
-                label="Opening Hours *"
+                label="Opening Hours"
                 name="openingHours"
                 placeholder="e.g. 10:00 AM - 11:30 PM"
                 value={formData.openingHours}
@@ -487,7 +487,7 @@ export const Branches = () => {
 
             <div className="col-12">
               <Input 
-                label="Cover Image URL *"
+                label="Cover Image URL"
                 name="image"
                 placeholder="https://images.unsplash.com/photo-..."
                 value={formData.image}

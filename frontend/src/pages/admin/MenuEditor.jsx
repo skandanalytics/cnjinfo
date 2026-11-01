@@ -404,8 +404,9 @@ export const MenuEditor = () => {
             <div className="d-flex align-items-center gap-2">
               <Button
                 onClick={() => { if (hasBranches) setIsAddCategoryOpen(true); }}
-                variant="outline"
+                variant="primary"
                 className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold"
+                style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', color: '#FFFFFF' }}
               >
                 <FiPlus /> Add Category
               </Button>
@@ -417,8 +418,9 @@ export const MenuEditor = () => {
                       setIsAddOpen(true);
                       setComboMode(false);
                     }}
-                    variant="outline"
+                    variant="primary"
                     className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold"
+                    style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', color: '#FFFFFF' }}
                   >
                     <FiPlus /> Add Dish
                   </Button>

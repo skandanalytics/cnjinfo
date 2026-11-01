@@ -491,21 +491,40 @@ export const Tables = () => {
           }
         />
 
-        {/* Panel 9 Filter Toolbar: Location dropdown & Status pills */}
-        <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-2">
-          <div className="d-flex align-items-center gap-2">
-            <select
-              value={selectedLocation}
-              onChange={(e) => setSelectedLocation(e.target.value)}
-              className="form-select form-select-sm rounded-pill border-light-subtle fw-semibold px-3 py-1.5"
-              style={{ minWidth: '150px', fontSize: '13px', backgroundColor: 'var(--surface-muted)' }}
-              aria-label="Filter tables by location"
+        {/* Panel 9 Filter Toolbar: Location display boxes & Status pills */}
+        <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-3">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
+            <span className="small fw-bold text-dark me-1" style={{ fontSize: '13px' }}>
+              Locations:
+            </span>
+            <button
+              type="button"
+              onClick={() => setSelectedLocation('ALL')}
+              className={`btn btn-sm rounded-3 px-3 py-1.5 fw-semibold transition-all d-flex align-items-center gap-1.5 ${
+                selectedLocation === 'ALL'
+                  ? 'btn-danger text-white shadow-xs'
+                  : 'bg-light text-dark border border-light-subtle shadow-2xs'
+              }`}
+              style={{ fontSize: '12.5px', cursor: 'pointer' }}
             >
-              <option value="ALL">All Locations</option>
-              {uniqueLocations.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
-              ))}
-            </select>
+              <span>All Locations</span>
+            </button>
+            {uniqueLocations.map(loc => (
+              <button
+                key={loc}
+                type="button"
+                onClick={() => setSelectedLocation(selectedLocation === loc ? 'ALL' : loc)}
+                className={`btn btn-sm rounded-3 px-3 py-1.5 fw-semibold transition-all d-flex align-items-center gap-1.5 ${
+                  selectedLocation === loc
+                    ? 'btn-danger text-white shadow-xs'
+                    : 'bg-light text-dark border border-light-subtle shadow-2xs'
+                }`}
+                style={{ fontSize: '12.5px', cursor: 'pointer' }}
+              >
+                <i className={`bi bi-geo-alt ${selectedLocation === loc ? 'text-white' : 'text-danger opacity-75'}`}></i>
+                <span>{loc}</span>
+              </button>
+            ))}
           </div>
 
           <div className="d-flex align-items-center gap-2">

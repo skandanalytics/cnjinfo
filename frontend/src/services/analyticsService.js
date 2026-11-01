@@ -84,10 +84,17 @@ export const analyticsService = {
   getDashboardBundle: async () => {
     const { isStaffScreen } = await import('./adminApi');
     const staff = isStaffScreen();
+    let staffFoods = [];
+    if (staff) {
+      try {
+        const { listFoods } = await import('./adminApi');
+        staffFoods = await listFoods().catch(() => []);
+      } catch (e) {}
+    }
     const [allOrdersRaw, allTablesRaw, foodRes, usersRes] = await Promise.all([
       orderService.getAllOrders(true).catch(() => []),
       tableService.getTables().catch(() => []),
-      staff ? Promise.resolve({ data: [] }) : api.get('/foods/').catch(() => ({ data: [] })),
+      staff ? Promise.resolve({ data: staffFoods }) : api.get('/foods/').catch(() => ({ data: [] })),
       staff ? Promise.resolve({ data: [] }) : api.get('/users/users/').catch(() => ({ data: [] }))
     ]);
 
@@ -157,7 +164,8 @@ export const analyticsService = {
       yearlyRevenue: Math.round(yearlyRevenue),
       pendingOrders,
       activeOrders,
-      availableTables
+      availableTables,
+      totalTables: (allTables || []).length
     };
 
     // Helper to extract numeric millisecond timestamp from order
@@ -293,29 +301,33 @@ export const analyticsService = {
 
     const topDishes = topDishKeys.map(key => {
       const foodId = parseInt(key, 10);
-      const foodObj = (allFood || []).find(f => Number(f.id || f.food_id) === foodId) || (allFood || []).find(f => f.name === key);
+      const foodObj = (allFood || []).find(f => Number(f.id || f.food_id) === foodId) 
+        || (allFood || []).find(f => String(f.name || '').trim().toLowerCase() === String(key).trim().toLowerCase());
       const name = foodObj ? foodObj.name : (dishNames[key] || `Item ${key}`);
 
-      let foodImg = dishImages[key] || null;
-      if (!foodImg && foodObj) {
-        if (Array.isArray(foodObj.images) && foodObj.images.length > 0) {
+      let foodImg = null;
+      if (foodObj) {
+        if (foodObj.image && typeof foodObj.image === 'string') {
+          foodImg = foodObj.image;
+        } else if (foodObj.primary_image && typeof foodObj.primary_image === 'string') {
+          foodImg = foodObj.primary_image;
+        } else if (Array.isArray(foodObj.images) && foodObj.images.length > 0) {
           const p = foodObj.images.find(i => typeof i === 'object' && i.is_primary) || foodObj.images[0];
-          foodImg = typeof p === 'string' ? p : (p?.image_url || p?.image || p?.image_path);
+          foodImg = typeof p === 'string' ? p : (p?.image_url || p?.image || p?.image_path || p?.url);
         } else {
-          foodImg = foodObj.image_url || foodObj.image || foodObj.img || null;
+          foodImg = foodObj.image_url || foodObj.img || null;
         }
       }
 
-      let image = foodImg;
-      if (!image || (typeof image === 'string' && !image.startsWith('http') && !image.startsWith('/'))) {
-        image = 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=100&auto=format&fit=crop&q=80';
+      if (!foodImg && dishImages[key]) {
+        foodImg = dishImages[key];
       }
 
       return {
         id: isNaN(foodId) ? key : foodId,
         name: name,
         count: dishCounts[key],
-        image
+        image: foodImg || ''
       };
     });
 

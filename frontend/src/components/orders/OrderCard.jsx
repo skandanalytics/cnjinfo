@@ -63,20 +63,21 @@ export const OrderCard = ({
         <div className="col-12 col-md-4 text-start text-md-end">
           <div className="text-secondary small">Total Amount</div>
           <h4 className="fw-bold text-danger mt-1 mb-3">{formatCurrency(order.total)}</h4>
-          <div className="d-flex align-items-center justify-content-start justify-content-md-end gap-2 flex-wrap">
+          <div className="d-flex align-items-center justify-content-start justify-content-md-end flex-wrap" style={{ gap: '10px' }}>
             <button 
               type="button"
               onClick={(e) => { e.stopPropagation(); if(onViewEBill) onViewEBill(order); }}
-              className="btn btn-outline-danger btn-sm rounded-pill px-3 fw-bold d-flex align-items-center gap-1"
+              className="btn btn-outline-danger btn-sm rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center gap-2"
+              style={{ fontSize: '12px', height: '32px' }}
               title="View E-Bill"
             >
-              <FiEye size={13} />
+              <FiEye size={13} className="flex-shrink-0" />
               <span>Show Bill</span>
             </button>
             <button 
               onClick={() => onViewDetails(order)} 
-              className="btn btn-danger btn-sm rounded-pill px-3.5 fw-bold text-white shadow-xs"
-              style={{ backgroundColor: 'var(--primary-color)', borderColor: 'var(--primary-color)' }}
+              className="btn btn-danger btn-sm rounded-pill px-3.5 py-1.5 fw-bold text-white shadow-xs d-inline-flex align-items-center justify-content-center"
+              style={{ backgroundColor: 'var(--primary-color)', borderColor: 'var(--primary-color)', fontSize: '12px', minWidth: '60px', height: '32px' }}
             >
               View Details
             </button>

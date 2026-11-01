@@ -99,8 +99,9 @@ export const Menus = () => {
                       setComboMode(false);
                       setIsAddDishOpen(true);
                     }} 
-                    variant="outline-primary" 
-                    className="d-flex align-items-center gap-2 py-2 px-3 fw-bold border-danger text-danger bg-white"
+                    variant="primary" 
+                    className="d-flex align-items-center gap-2 py-2 px-3 fw-bold shadow-sm rounded-pill"
+                    style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', color: '#FFFFFF' }}
                   >
                     <FiPlus /> Add Dish
                   </Button>

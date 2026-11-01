@@ -22,7 +22,7 @@ import Toast from '../../components/common/Toast';
 import { 
   FiSearch, FiX, FiPlus, FiMinus, FiTrash2, FiShoppingBag, 
   FiLayers, FiTag, FiCheck, FiDollarSign, FiClock, FiPercent,
-  FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw
+  FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw, FiChevronLeft
 } from 'react-icons/fi';
 import { getShortTableNumber } from '../../components/tables/TableCard';
 
@@ -59,10 +59,46 @@ export const Pos = () => {
 
   // POS Order State
   const initialType = (searchParams.get('type') || '').toLowerCase() === 'takeaway' ? 'TAKEAWAY' : 'DINE_IN';
-  const [orderType, setOrderType] = useState(initialType);
-  const [selectedTable, setSelectedTable] = useState(null);
-  const [customerPhone, setCustomerPhone] = useState('');
-  const [customerName, setCustomerName] = useState('');
+  const [orderType, setOrderType] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.orderType) return parsed.orderType;
+      }
+    } catch (e) {}
+    return initialType;
+  });
+  const [selectedTable, setSelectedTable] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.table) return parsed.table;
+      }
+    } catch (e) {}
+    return null;
+  });
+  const [customerPhone, setCustomerPhone] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.customerPhone) return parsed.customerPhone;
+      }
+    } catch (e) {}
+    return '';
+  });
+  const [customerName, setCustomerName] = useState(() => {
+    try {
+      const stored = sessionStorage.getItem('foodie_pos_cart');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed?.customerName) return parsed.customerName;
+      }
+    } catch (e) {}
+    return '';
+  });
   const [cartItems, setCartItems] = useState(() => {
     try {
       const stored = sessionStorage.getItem('foodie_pos_cart');
@@ -129,6 +165,7 @@ export const Pos = () => {
           orderType,
           coupon: appliedCoupon,
           tableId: selectedTable?.id || null,
+          table: selectedTable || null,
           customerPhone,
           customerName,
           branchId: selectedBranchId,
@@ -426,6 +463,18 @@ export const Pos = () => {
         ? tableList.filter(t => !t.branch || Number(t.branch) === Number(branchId))
         : [];
       setTables(filteredTables);
+
+      // Restore saved table from sessionStorage if available
+      try {
+        const stored = sessionStorage.getItem('foodie_pos_cart');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (parsed?.tableId) {
+            const matched = filteredTables.find(t => String(t.id) === String(parsed.tableId));
+            if (matched) setSelectedTable(matched);
+          }
+        }
+      } catch (e) {}
       const rawDishes = Array.isArray(dishList) ? dishList : [];
       const seenDishIds = new Set();
       const dedupedDishes = [];
@@ -1296,9 +1345,25 @@ export const Pos = () => {
         {/* Top POS Header Toolbar */}
         <header className="pos-topbar bg-white border-bottom px-4 py-3 d-flex align-items-center justify-content-between flex-wrap gap-3 flex-shrink-0">
           <div className="d-flex align-items-center gap-3">
-            <h5 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+            <button 
+              type="button"
+              onClick={() => {
+                if (window.history.length > 1) {
+                  navigate(-1);
+                } else {
+                  navigate('/admin/dashboard');
+                }
+              }} 
+              className="btn btn-light rounded-circle p-0 border d-inline-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs"
+              style={{ width: '36px', height: '36px' }}
+              title="Back"
+              aria-label="Go back"
+            >
+              <FiChevronLeft size={20} />
+            </button>
+            <h3 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2" style={{ fontSize: '1.75rem', letterSpacing: '-0.3px' }}>
               <span>POS / Take Order</span>
-            </h5>
+            </h3>
             
             {/* Branch Selector (if multiple branches exist) */}
             {branches.length > 1 && isAdmin && (
@@ -1323,7 +1388,7 @@ export const Pos = () => {
           {/* Search Input */}
           <div className="d-flex align-items-center gap-2" style={{ width: '320px', maxWidth: '100%' }}>
             <div className="position-relative w-100">
-              <FiSearch className="position-absolute text-muted" style={{ left: '16px', top: '12px' }} />
+              <FiSearch className="position-absolute" style={{ left: '16px', top: '12px', color: 'var(--primary-color, #C8102E)' }} />
               <input
                 type="text"
                 className="form-control rounded-pill ps-5 pe-4 py-2 border-light-subtle shadow-xs"

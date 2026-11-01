@@ -315,15 +315,55 @@ export const Users = () => {
       <PageHeader
         title="Employee Directory & Staff"
         showBackButton
+        backUrl="/admin/dashboard"
         actions={
           employees.length > 0 && hasBranches ? (
-            <button
-              className="btn btn-danger btn-sm rounded-pill px-3 py-2 fw-bold d-flex align-items-center gap-1.5 shadow-sm"
-              onClick={handleOpenAddModal}
-            >
-              <FiPlus size={16} />
-              <span>Add New Employee</span>
-            </button>
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              <SearchBar
+                placeholder="Search staff, ID, role..."
+                value={search}
+                onChange={setSearch}
+                records={branchEmployees.map((person) => ({
+                  id: person.id,
+                  label: person.name,
+                  title: person.name,
+                  subtitle: [person.employeeId, person.designation || person.role].filter(Boolean).join(' · '),
+                  searchText: [person.name, person.employeeId, person.role, person.designation, person.department, person.phone].filter(Boolean).join(' '),
+                }))}
+                onSelectSuggestion={(item) => {
+                  const row = branchEmployees.find((person) => String(person.id) === String(item?.id));
+                  if (row) handleViewEmployee(row);
+                }}
+                style={{ width: '280px', height: '38px' }}
+              />
+
+              {branches && branches.length > 0 && (
+                <select
+                  id="employee-branch-filter"
+                  aria-label="Filter staff by branch"
+                  className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs bg-light text-dark"
+                  style={{ width: 'auto', minWidth: '180px', height: '38px', paddingLeft: '16px', paddingRight: '28px', fontSize: '13px', cursor: 'pointer' }}
+                  value={selectedBranch}
+                  onChange={(e) => setSelectedBranch(e.target.value)}
+                >
+                  <option value="ALL">All Branches</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.name} {b.city ? `(${b.city})` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+
+              <button
+                className="btn btn-danger btn-sm rounded-pill px-3.5 py-2 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm text-nowrap"
+                style={{ height: '38px', fontSize: '13px', backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', color: '#FFFFFF' }}
+                onClick={handleOpenAddModal}
+              >
+                <FiPlus size={16} />
+                <span>Add Employee</span>
+              </button>
+            </div>
           ) : null
         }
       />
@@ -377,45 +417,6 @@ export const Users = () => {
                     {tab.label}
                   </button>
                 ))}
-              </div>
-
-              {/* Branch Filter & Search Bar */}
-              <div className="d-flex align-items-center gap-2.5 flex-wrap">
-                {branches && branches.length > 0 && (
-                  <select
-                    id="employee-branch-filter"
-                    aria-label="Filter staff by branch"
-                    className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs bg-light text-dark"
-                    style={{ width: 'auto', minWidth: '180px', height: '38px', paddingLeft: '16px', paddingRight: '28px', fontSize: '13px', cursor: 'pointer' }}
-                    value={selectedBranch}
-                    onChange={(e) => setSelectedBranch(e.target.value)}
-                  >
-                    <option value="ALL">All Branches</option>
-                    {branches.map((b) => (
-                      <option key={b.id} value={String(b.id)}>
-                        {b.name} {b.city ? `(${b.city})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <SearchBar
-                  placeholder="Search staff, ID, role..."
-                  value={search}
-                  onChange={setSearch}
-                  records={branchEmployees.map((person) => ({
-                    id: person.id,
-                    label: person.name,
-                    title: person.name,
-                    subtitle: [person.employeeId, person.designation || person.role].filter(Boolean).join(' · '),
-                    searchText: [person.name, person.employeeId, person.role, person.designation, person.department, person.phone].filter(Boolean).join(' '),
-                  }))}
-                  onSelectSuggestion={(item) => {
-                    const row = branchEmployees.find((person) => String(person.id) === String(item?.id));
-                    if (row) handleViewEmployee(row);
-                  }}
-                  style={{ width: '280px', height: '38px' }}
-                />
               </div>
             </div>
 

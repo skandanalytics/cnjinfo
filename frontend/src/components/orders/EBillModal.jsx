@@ -181,35 +181,6 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
                 <FiDownload /> Download Bill
               </Button>
             )}
-            {isFinalized ? (
-              <Button
-                variant="secondary"
-                disabled={true}
-                className="rounded-pill px-4 py-2 fw-semibold d-flex align-items-center gap-2"
-                style={{ opacity: 0.7, cursor: 'not-allowed', backgroundColor: '#6c757d', borderColor: '#6c757d', color: '#fff' }}
-              >
-                <span>Bill Processed</span>
-              </Button>
-            ) : completingOrder ? (
-              <Button
-                variant="primary"
-                disabled={true}
-                loading={true}
-                className="rounded-pill px-4 py-2 fw-bold d-flex align-items-center gap-2 shadow-sm"
-                style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)' }}
-              >
-                <span>Processing...</span>
-              </Button>
-            ) : (
-              <Button
-                variant="primary"
-                onClick={handleProceedToBill}
-                className="rounded-pill px-4 py-2 fw-bold d-flex align-items-center gap-2 shadow-sm"
-                style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)' }}
-              >
-                <span>Proceed to Bill</span>
-              </Button>
-            )}
           </div>
         </div>
       }
