@@ -496,7 +496,7 @@ export const Orders = () => {
                         {formatCurrency(adj.total || adj.total_amount)}
                       </td>
                       <td className="py-3">
-                        <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: stBg, color: stColor }}>
+                        <span className={`badge rounded-pill fw-semibold px-2.5 py-1 ${stVariant}`} style={{ fontSize: '11px' }}>
                           ● {stLabel}
                         </span>
                       </td>

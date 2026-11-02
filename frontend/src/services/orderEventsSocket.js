@@ -1,3 +1,4 @@
+import { notifyOrderCreated } from './notificationService';
 import { getStaffAccess, refreshStaffSession } from './staffClient';
 import { getWsUrl } from '../config/apiConfig';
 
@@ -81,6 +82,14 @@ function dispatchLivePayload(data) {
   if (data.order_id || data.resource === 'order') {
     window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: data }));
     window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: data }));
+    if (data.action === 'created' || data.status === 'PENDING' || data.status === 'CONFIRMED' || data.status === 'PLACED') {
+      notifyOrderCreated({
+        id: data.order_id,
+        order_number: data.order_number,
+        table: data.table,
+        total_amount: data.total_amount
+      });
+    }
   }
   const resource = data.resource;
   if (resource === 'menu' || resource === 'category' || resource === 'inventory') {

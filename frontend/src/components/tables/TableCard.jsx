@@ -87,25 +87,7 @@ export const TableCard = ({
           </button>
         ) : <div />}
 
-        <span 
-          className="badge rounded-pill fw-bold px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-2xs"
-          style={{
-            fontSize: '11px',
-            backgroundColor: isOccupied ? '#FEE2E2' : '#DCFCE7',
-            color: isOccupied ? '#DC2626' : '#16A34A',
-            border: isOccupied ? '1px solid #FECACA' : '1px solid #BBF7D0'
-          }}
-        >
-          <span 
-            className="rounded-circle d-inline-block"
-            style={{ 
-              width: '6px', 
-              height: '6px', 
-              backgroundColor: isOccupied ? '#DC2626' : '#16A34A' 
-            }}
-          />
-          <span>{currentStatus}</span>
-        </span>
+        <span className="badge rounded-pill fw-bold p-1 d-inline-flex align-items-center justify-content-center shadow-2xs" style={{ width: "22px", height: "22px", backgroundColor: isOccupied ? "#FEE2E2" : "#DCFCE7", border: isOccupied ? "1px solid #FECACA" : "1px solid #BBF7D0" }} title={currentStatus}><span className="rounded-circle d-inline-block" style={{ width: "8px", height: "8px", backgroundColor: isOccupied ? "#DC2626" : "#16A34A" }} /></span>
       </div>
 
       {/* Middle Row: Table Illustration on Left, Info on Right */}
@@ -130,16 +112,16 @@ export const TableCard = ({
         </div>
       </div>
 
-      {/* Footer Action Buttons (3 Buttons: Edit, View Order, QR Code) */}
-      <div className="d-flex align-items-center justify-content-between gap-1.5 pt-3 mt-2 border-top" style={{ borderColor: isOccupied ? '#FEE2E2' : '#E2F3E9' }}>
+      {/* Footer Action Buttons (3 Buttons: Edit, View Order, QR Code) with generous gap & padding */}
+      <div className="d-flex align-items-center justify-content-between gap-2 pt-3 mt-2 px-1 border-top" style={{ borderColor: isOccupied ? '#FEE2E2' : '#E2F3E9' }}>
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
             if (onEdit) onEdit(table);
           }}
-          className="btn btn-sm bg-white rounded-pill px-2 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
-          style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
+          className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
+          style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '32px' }}
           title="Edit Table"
         >
           <FiEdit2 size={12} className="text-muted" />
@@ -158,8 +140,8 @@ export const TableCard = ({
               onTrackOrder(table);
             }
           }}
-          className="btn btn-sm bg-white rounded-pill px-2 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
-          style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
+          className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
+          style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '32px' }}
           title={isOccupied ? "View active order" : "Take table order"}
         >
           <FiEye size={12} className="text-muted" />
@@ -173,8 +155,8 @@ export const TableCard = ({
               e.stopPropagation();
               onViewQR(table);
             }}
-            className="btn btn-sm bg-white rounded-pill px-2 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1 flex-grow-1 shadow-2xs border text-secondary"
-            style={{ fontSize: '11px', borderColor: '#CBD5E1' }}
+            className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
+            style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '32px' }}
             title="View Table QR Code"
           >
             <i className="bi bi-qr-code text-muted" style={{ fontSize: '11px' }} />
@@ -187,3 +169,4 @@ export const TableCard = ({
 };
 
 export default TableCard;
+

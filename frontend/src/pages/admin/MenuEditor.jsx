@@ -524,21 +524,7 @@ export const MenuEditor = () => {
               <option value="out_of_stock">Out of Stock</option>
             </select>
 
-            {/* Add Menu Button */}
-            {isAdmin && hasBranches && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsAddOpen(true);
-                  setComboMode(false);
-                }}
-                className="btn btn-danger rounded-pill px-4 fw-bold d-flex align-items-center gap-2 shadow-sm border-0"
-                style={{ height: '42px', backgroundColor: 'var(--primary-color, #F20D2D)' }}
-              >
-                <FiPlus size={16} />
-                <span>+ Add Menu</span>
-              </button>
-            )}
+{/* + Add Menu button removed as per requirements */}
           </div>
         </div>
       </div>

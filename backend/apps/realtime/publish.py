@@ -36,14 +36,25 @@ def publish_branch_event(branch_id, type_name, extra=None, extra_groups=None):
 
 
 def publish_order_event(order):
+    table_label = ""
+    try:
+        if getattr(order, "table", None):
+            table_label = getattr(order.table, "table_number", str(order.table))
+        elif str(getattr(order, "order_type", "")).upper() == "TAKEAWAY":
+            table_label = "Takeaway"
+    except Exception:
+        table_label = "N/A"
+    total_val = float(getattr(order, "total_amount", 0) or 0)
     extra = {
         "order_id": order.id,
         "order_number": order.order_number,
+        "table": table_label,
+        "total_amount": total_val,
         "status": order.status,
         "payment_status": order.payment_status,
         "placed_by_id": order.placed_by_id,
         "resource": "order",
-        "action": "updated",
+        "action": "created" if str(getattr(order, "status", "")).upper() in ["PENDING", "CONFIRMED", "PLACED", "NEW"] else "updated",
     }
     extra_groups = []
     if order.customer_id:

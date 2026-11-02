@@ -4,6 +4,7 @@ import AdminLayout from '../../components/layout/AdminLayout';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Modal from '../../components/common/Modal';
+import ConfirmModal from '../../components/common/ConfirmModal';
 import Badge from '../../components/common/Badge';
 import formatCurrency from '../../utils/formatCurrency';
 import { useAuth } from '../../hooks/useAuth';
@@ -14,6 +15,7 @@ import { couponService } from '../../services/couponService';
 import { branchService } from '../../services/branchService';
 import { currentBranchId, createAssistedOrder, getPricingQuote, staffJson } from '../../services/adminApi';
 import { orderService } from '../../services/orderService';
+import { notifyOrderCreated } from '../../services/notificationService';
 import { normalizeFoodType } from '../../utils/filters';
 import EBillModal from '../../components/orders/EBillModal';
 import OrderDetailsModal from '../../components/orders/OrderDetailsModal';
@@ -22,7 +24,8 @@ import Toast from '../../components/common/Toast';
 import { 
   FiSearch, FiX, FiPlus, FiMinus, FiTrash2, FiShoppingBag, 
   FiLayers, FiTag, FiCheck, FiDollarSign, FiClock, FiPercent,
-  FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw, FiChevronLeft
+  FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw, FiChevronLeft,
+  FiCreditCard, FiGrid, FiList, FiSave, FiShoppingCart
 } from 'react-icons/fi';
 import { getShortTableNumber } from '../../components/tables/TableCard';
 
@@ -210,7 +213,8 @@ export const Pos = () => {
   }, []);
 
   // Modals
-  const [customizingItem, setCustomizingItem] = useState(null); // { dish, cartIndex, selectedOptions: [], specialInstructions: '' }
+  const [customizingItem, setCustomizingItem] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false); // { dish, cartIndex, selectedOptions: [], specialInstructions: '' }
   const [showTablePicker, setShowTablePicker] = useState(false);
   const [tableFilter, setTableFilter] = useState('ALL');
   const [tableSearchQuery, setTableSearchQuery] = useState('');
@@ -458,7 +462,7 @@ export const Pos = () => {
       }
 
       const [dishList, catList, couponList] = await Promise.all([
-        productService.getProducts(true).catch(() => []),
+        productService.getProducts(true, branchId).catch(() => []),
         menuService.getMenus().catch(() => []),
         couponService.getCoupons().catch(() => [])
       ]);
@@ -1322,8 +1326,14 @@ export const Pos = () => {
         setSearchParams({}, { replace: true });
       }
 
-      // Live sync trigger
-      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: order.id } }));
+      // Live sync trigger & notification
+      notifyOrderCreated({
+        id: order.id,
+        order_number: order.order_number || order.orderNumber,
+        table: selectedTable?.number || selectedTable?.table_number || (orderType === 'TAKEAWAY' ? 'Takeaway' : 'N/A'),
+        total_amount: billSummary.grandTotal
+      });
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: order.id, order } }));
       window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: order.id } }));
       window.dispatchEvent(new CustomEvent('foodie_inventory_updated', { detail: { orderId: order.id } }));
     } catch (err) {
@@ -1334,14 +1344,20 @@ export const Pos = () => {
   };
 
   const handleResetOrder = () => {
-    if (cartItems.length > 0 && !window.confirm('Are you sure you want to clear this order?')) {
+    if (cartItems.length > 0) {
+      setShowClearConfirm(true);
       return;
     }
+    executeClearOrder();
+  };
+
+  const executeClearOrder = () => {
     setCartItems([]);
     setAppliedCoupon(null);
     setParentOrder(null);
     setOrderError('');
     setCouponError('');
+    setShowClearConfirm(false);
   };
 
   const canSubmitOrder = !submittingOrder && cartItems.length > 0 && (orderType === 'TAKEAWAY' || Boolean(selectedTable));
@@ -1385,74 +1401,7 @@ export const Pos = () => {
     <AdminLayout fullHeight={true} contentClassName="p-0 d-flex flex-column flex-grow-1 overflow-hidden">
       <div className="pos-main-container d-flex flex-column w-100 h-100 overflow-hidden" style={{ backgroundColor: '#F2F7FC' }}>
         
-        {/* Top POS Header Toolbar */}
-        <header className="pos-topbar bg-white border-bottom px-4 py-3 d-flex align-items-center justify-content-between flex-wrap gap-3 flex-shrink-0">
-          <div className="d-flex align-items-center gap-3">
-            <button 
-              type="button"
-              onClick={() => {
-                if (window.history.length > 1) {
-                  navigate(-1);
-                } else {
-                  navigate('/admin/dashboard');
-                }
-              }} 
-              className="btn btn-light rounded-circle p-0 border d-inline-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs"
-              style={{ width: '36px', height: '36px' }}
-              title="Back"
-              aria-label="Go back"
-            >
-              <FiChevronLeft size={20} />
-            </button>
-            <h3 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2" style={{ fontSize: '1.75rem', letterSpacing: '-0.3px' }}>
-              <span>POS / Take Order</span>
-            </h3>
-            
-            {/* Branch Selector (if multiple branches exist) */}
-            {branches.length > 1 && isAdmin && (
-              <div className="d-flex align-items-center gap-2 ps-3 border-start">
-                <span className="small text-muted fw-semibold">Branch:</span>
-                <select 
-                  className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs"
-                  style={{ width: 'auto', minWidth: '150px', paddingTop: '4px', paddingBottom: '4px', paddingLeft: '12px' }}
-                  value={selectedBranchId || ''}
-                  onChange={(e) => setSelectedBranchId(Number(e.target.value))}
-                >
-                  {branches.map(b => (
-                    <option key={b.id} value={b.id}>
-                      {b.name} {b.city ? `(${b.city})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
 
-          {/* Search Input */}
-          <div className="d-flex align-items-center gap-2" style={{ width: '320px', maxWidth: '100%' }}>
-            <div className="position-relative w-100">
-              <FiSearch className="position-absolute" style={{ left: '16px', top: '12px', color: 'var(--primary-color, #C8102E)' }} />
-              <input
-                type="text"
-                className="form-control rounded-pill ps-5 pe-4 py-2 border-light-subtle shadow-xs"
-                style={{ height: '38px', fontSize: '13px' }}
-                placeholder="Search dishes by name (e.g. pizza, pasta)..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <button
-                  type="button"
-                  className="btn btn-link position-absolute p-0 text-muted border-0"
-                  style={{ right: '14px', top: '9px' }}
-                  onClick={() => setSearchQuery('')}
-                >
-                  <FiX size={16} />
-                </button>
-              )}
-            </div>
-          </div>
-        </header>
 
         {/* Mobile Tab Switcher (Visible on screens < 992px) */}
         <div className="d-flex d-lg-none bg-white border-bottom px-3 py-2 gap-2 flex-shrink-0">
@@ -1484,7 +1433,7 @@ export const Pos = () => {
         </div>
 
         {/* Main Two-Column POS Workspace */}
-        <div className="pos-workspace-wrapper d-flex flex-grow-1 min-h-0 overflow-hidden p-3 p-xl-4 gap-3 gap-xl-4">
+        <div className="pos-workspace-wrapper d-flex flex-grow-1 min-h-0 overflow-hidden p-2.5 p-xl-3 gap-3 gap-xl-3">
           
           {/* LEFT COLUMN: Food Selection Workspace (~65%) */}
           <div 
@@ -1960,7 +1909,7 @@ export const Pos = () => {
                                   −
                                 </button>
                                 <span className="fw-bold small px-1.5" style={{ fontSize: '13px', color: '#0F172A' }}>
-                                  {cartQty > 0 ? cartQty : 1}
+                                  {cartQty}
                                 </span>
                                 <button
                                   type="button"
@@ -2029,8 +1978,8 @@ export const Pos = () => {
                 borderRadius: '18px',
                 border: '1px solid #E2E8F0',
                 backgroundColor: '#FFFFFF',
-                padding: '20px',
-                gap: '16px'
+                padding: '16px',
+                gap: '12px'
               }}
             >
               
@@ -2084,35 +2033,33 @@ export const Pos = () => {
                     {orderType === 'DINE_IN' ? 'Select Table *' : 'Service Counter'}
                   </label>
                   {orderType === 'DINE_IN' ? (
-                    <div className="position-relative">
+                    <div 
+                      className="position-relative cursor-pointer"
+                      onClick={() => setShowTablePicker(true)}
+                    >
                       <FiLayers className="position-absolute text-muted" style={{ left: '11px', top: '12px', fontSize: '14px' }} />
-                      <select
-                        className="form-select form-select-sm shadow-xs fw-semibold"
+                      <div
+                        className="form-control form-control-sm shadow-xs fw-semibold d-flex align-items-center justify-content-between text-truncate bg-white cursor-pointer"
                         style={{
                           height: '38px',
                           borderRadius: '10px',
                           paddingLeft: '32px',
+                          paddingRight: '12px',
                           fontSize: '12.5px',
-                          borderColor: '#E2E8F0'
+                          borderColor: '#E2E8F0',
+                          cursor: 'pointer'
                         }}
-                        value={selectedTable?.id || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const found = tables.find(t => String(t.id) === String(val));
-                          setSelectedTable(found || null);
-                          setOrderError('');
-                        }}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowTablePicker(true); }}
                       >
-                        <option value="">Choose Table...</option>
-                        {tables.map(tbl => {
-                          const num = getShortTableNumber(tbl.number || tbl.table_number || tbl.id);
-                          return (
-                            <option key={tbl.id} value={tbl.id}>
-                              {num} ({tbl.capacity || 4} Seats) {tbl.status === 'Occupied' ? '• Occupied' : ''}
-                            </option>
-                          );
-                        })}
-                      </select>
+                        <span className={selectedTable ? "text-dark fw-bold" : "text-muted fw-normal"}>
+                          {selectedTable 
+                            ? `${getShortTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id)} (${selectedTable.capacity || 4} Seats)` 
+                            : "Select Table for Dine-In..."}
+                        </span>
+                        <span className="text-secondary small" style={{ fontSize: '10px' }}>▼</span>
+                      </div>
                     </div>
                   ) : (
                     <div 
@@ -2172,25 +2119,43 @@ export const Pos = () => {
 
               {/* 3. Apply Coupon Bar */}
               <div 
-                className="d-flex align-items-center justify-content-between gap-2 p-2 shadow-xs"
+                className="d-flex flex-column gap-2 p-2.5 shadow-xs"
                 style={{
                   backgroundColor: '#FFF5F5',
                   border: '1px dashed #FECDD3',
                   borderRadius: '12px'
                 }}
               >
-                <div className="d-flex align-items-center gap-2 ps-1">
-                  <FiTag style={{ color: '#F20D2D', fontSize: '16px' }} />
-                  <span className="fw-semibold text-dark" style={{ fontSize: '13px' }}>
-                    Apply Coupon
-                  </span>
+                <div className="d-flex align-items-center justify-content-between">
+                  <div className="d-flex align-items-center gap-2 ps-1">
+                    <FiTag style={{ color: '#F20D2D', fontSize: '16px' }} />
+                    <span className="fw-semibold text-dark" style={{ fontSize: '13px' }}>
+                      Apply Coupon
+                    </span>
+                  </div>
+
+                  {/* View Coupons Button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowCouponModal(true)}
+                    className="btn btn-sm p-0 text-danger fw-bold text-decoration-none d-inline-flex align-items-center gap-1"
+                    style={{ fontSize: '12px' }}
+                  >
+                    <span>View Coupons ({coupons.length})</span>
+                    <span style={{ fontSize: '10px' }}>›</span>
+                  </button>
                 </div>
 
                 {appliedCoupon ? (
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="badge bg-danger text-white rounded-pill px-2.5 py-1" style={{ fontSize: '11px' }}>
-                      {appliedCoupon.code} (-{formatCurrency(billSummary.couponDiscount)})
-                    </span>
+                  <div className="d-flex align-items-center justify-content-between bg-white px-2.5 py-1.5 rounded-3 border border-danger-subtle">
+                    <div className="d-flex align-items-center gap-2">
+                      <span className="badge bg-danger text-white rounded-pill px-2.5 py-1" style={{ fontSize: '11px' }}>
+                        {appliedCoupon.code}
+                      </span>
+                      <span className="small fw-bold text-success" style={{ fontSize: '12px' }}>
+                        -{formatCurrency(billSummary.couponDiscount)} OFF
+                      </span>
+                    </div>
                     <button 
                       type="button" 
                       onClick={handleRemoveCoupon} 
@@ -2201,19 +2166,19 @@ export const Pos = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="d-flex align-items-center gap-1.5 flex-grow-1 justify-content-end" style={{ maxWidth: '240px' }}>
+                  <div className="d-flex align-items-center gap-1.5 w-100">
                     <input
                       type="text"
                       className="form-control form-control-sm border-light-subtle shadow-xs"
-                      style={{ height: '34px', borderRadius: '8px', fontSize: '12px', paddingLeft: '8px' }}
-                      placeholder="Enter coupon code"
+                      style={{ height: '34px', borderRadius: '8px', fontSize: '12px', paddingLeft: '10px' }}
+                      placeholder="Enter promo coupon code"
                       value={couponCodeInput}
                       onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
                     />
                     <button
                       type="button"
                       onClick={() => handleApplyCoupon(couponCodeInput)}
-                      className="btn btn-sm fw-semibold shadow-xs"
+                      className="btn btn-sm fw-semibold shadow-xs text-nowrap"
                       style={{
                         height: '34px',
                         border: '1.5px solid #F20D2D',
@@ -2236,10 +2201,10 @@ export const Pos = () => {
                 </div>
               )}
 
-              {/* 4. Order Items Section */}
-              <div className="d-flex flex-column flex-grow-1 min-h-0">
-                <div className="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle">
-                  <span className="fw-bold text-dark" style={{ fontSize: '15px' }}>
+              {/* 4. Order Items Section (Independently scrollable) */}
+              <div className="d-flex flex-column flex-grow-1 min-h-0 overflow-hidden" style={{ minHeight: '110px' }}>
+                <div className="d-flex align-items-center justify-content-between mb-2 pb-1 border-bottom border-light-subtle flex-shrink-0">
+                  <span className="fw-bold text-dark" style={{ fontSize: '14.5px' }}>
                     Order Items ({cartItems.length})
                   </span>
                   {cartItems.length > 0 && (
@@ -2247,7 +2212,7 @@ export const Pos = () => {
                       type="button"
                       onClick={handleResetOrder}
                       className="btn btn-link p-0 text-danger small text-decoration-none fw-semibold d-flex align-items-center gap-1"
-                      style={{ fontSize: '12.5px' }}
+                      style={{ fontSize: '12px' }}
                     >
                       <FiTrash2 size={13} />
                       <span>Clear All</span>
@@ -2256,21 +2221,21 @@ export const Pos = () => {
                 </div>
 
                 {/* Items Scrollable List */}
-                <div className="flex-grow-1 min-h-0 overflow-y-auto pe-1 d-flex flex-column gap-2" style={{ maxHeight: '240px' }}>
+                <div className="flex-grow-1 min-h-0 overflow-y-auto pe-1 d-flex flex-column gap-2" style={{ overscrollBehavior: 'contain' }}>
                   {cartItems.length === 0 ? (
-                    <div className="p-4 text-center rounded-3 bg-light text-muted border border-dashed my-auto">
-                      <FiShoppingBag size={28} className="mb-2 text-secondary opacity-50" />
-                      <p className="small mb-0 fw-bold text-dark" style={{ fontSize: '13px' }}>No dishes in order ticket.</p>
-                      <p className="text-secondary small mb-0 mt-0.5" style={{ fontSize: '11.5px' }}>Select dishes from the menu to start order.</p>
+                    <div className="p-3 text-center rounded-3 bg-light text-muted border border-dashed my-auto">
+                      <FiShoppingBag size={26} className="mb-1 text-secondary opacity-50" />
+                      <p className="small mb-0 fw-bold text-dark" style={{ fontSize: '12.5px' }}>No dishes in order ticket.</p>
+                      <p className="text-secondary small mb-0 mt-0.5" style={{ fontSize: '11px' }}>Select dishes from the menu to start order.</p>
                       {hasSavedCart && (
-                        <div className="mt-2.5">
+                        <div className="mt-2">
                           <button
                             type="button"
                             onClick={handleContinueSavedCart}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center gap-1.5 shadow-xs"
-                            style={{ fontSize: '12px' }}
+                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center gap-1.5 shadow-xs"
+                            style={{ fontSize: '11.5px' }}
                           >
-                            <FiRefreshCw size={13} />
+                            <FiRefreshCw size={12} />
                             <span>Continue Saved Order</span>
                           </button>
                         </div>
@@ -2286,12 +2251,12 @@ export const Pos = () => {
                       return (
                         <div 
                           key={`${item.dish.id}-${idx}`}
-                          className="d-flex align-items-center justify-content-between p-2 rounded-3 border border-light-subtle bg-white shadow-xs gap-2"
+                          className="d-flex align-items-center justify-content-between p-2 rounded-3 border border-light-subtle bg-white shadow-xs gap-2 flex-shrink-0"
                         >
                           {/* Thumbnail */}
                           <div 
                             className="rounded-3 overflow-hidden flex-shrink-0 bg-light d-flex align-items-center justify-content-center"
-                            style={{ width: '44px', height: '44px' }}
+                            style={{ width: '42px', height: '42px' }}
                           >
                             {item.dish.image ? (
                               <img src={item.dish.image} alt={item.dish.name} className="w-100 h-100 object-fit-cover" />
@@ -2302,54 +2267,63 @@ export const Pos = () => {
 
                           {/* Info */}
                           <div className="flex-grow-1 min-w-0">
-                            <div className="fw-bold text-dark text-truncate" style={{ fontSize: '13px' }}>
+                            <div className="fw-bold text-dark text-truncate" style={{ fontSize: '12.5px' }}>
                               {item.dish.name}
                             </div>
-                            <div className="text-secondary small" style={{ fontSize: '11.5px', color: '#64748B' }}>
+                            <div className="text-secondary small" style={{ fontSize: '11px', color: '#64748B' }}>
                               {formatCurrency(itemUnitPrice)}
                             </div>
                           </div>
 
-                          {/* Stepper */}
-                          <div 
-                            className="d-flex align-items-center justify-content-between bg-white border px-1.5 shadow-xs flex-shrink-0"
-                            style={{ height: '28px', borderRadius: '14px', borderColor: '#E2E8F0', minWidth: '70px' }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => handleUpdateQuantity(idx, -1)}
-                              className="btn btn-link p-0 text-danger border-0 fw-bold"
-                              style={{ textDecoration: 'none', fontSize: '14px' }}
+                          {/* Controls Row: Stepper, Price & Delete with proper spacing */}
+                          <div className="d-flex align-items-center gap-2.5 flex-shrink-0">
+                            {/* Stepper */}
+                            <div 
+                              className="d-flex align-items-center justify-content-between bg-white border px-1 shadow-xs flex-shrink-0"
+                              style={{ height: '28px', borderRadius: '14px', borderColor: '#CBD5E1', minWidth: '74px' }}
                             >
-                              −
-                            </button>
-                            <span className="fw-bold small px-1" style={{ fontSize: '12px' }}>
-                              {item.quantity}
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateQuantity(idx, -1)}
+                                className="btn btn-link p-0 text-danger border-0 fw-bold d-flex align-items-center justify-content-center"
+                                style={{ width: '22px', height: '22px', textDecoration: 'none', fontSize: '15px', lineHeight: 1 }}
+                                title="Decrease quantity"
+                              >
+                                −
+                              </button>
+                              <span className="fw-bold small px-1 text-center" style={{ fontSize: '12px', minWidth: '18px' }}>
+                                {item.quantity}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateQuantity(idx, 1)}
+                                className="btn btn-link p-0 text-danger border-0 fw-bold d-flex align-items-center justify-content-center"
+                                style={{ width: '22px', height: '22px', textDecoration: 'none', fontSize: '15px', lineHeight: 1 }}
+                                title="Increase quantity"
+                              >
+                                +
+                              </button>
+                            </div>
+
+                            {/* Line Total with proper clearance */}
+                            <span 
+                              className="fw-bold text-dark text-nowrap text-end" 
+                              style={{ fontSize: '13.5px', minWidth: '60px' }}
+                            >
+                              {formatCurrency(lineTotal)}
                             </span>
+
+                            {/* Remove Trash Button */}
                             <button
                               type="button"
-                              onClick={() => handleUpdateQuantity(idx, 1)}
-                              className="btn btn-link p-0 text-danger border-0 fw-bold"
-                              style={{ textDecoration: 'none', fontSize: '14px' }}
+                              onClick={() => handleRemoveItem(idx)}
+                              className="btn btn-link p-1 text-danger border-0 flex-shrink-0 d-flex align-items-center justify-content-center"
+                              style={{ width: '26px', height: '26px' }}
+                              title="Remove item"
                             >
-                              +
+                              <FiTrash2 size={15} style={{ color: '#EF4444' }} />
                             </button>
                           </div>
-
-                          {/* Line Total */}
-                          <span className="fw-bold text-dark text-nowrap flex-shrink-0" style={{ fontSize: '13.5px' }}>
-                            {formatCurrency(lineTotal)}
-                          </span>
-
-                          {/* Remove Trash Button */}
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItem(idx)}
-                            className="btn btn-link p-0 text-danger border-0 flex-shrink-0"
-                            title="Remove item"
-                          >
-                            <FiTrash2 size={15} style={{ color: '#EF4444' }} />
-                          </button>
                         </div>
                       );
                     })
@@ -2357,115 +2331,134 @@ export const Pos = () => {
                 </div>
               </div>
 
-              {/* 5. Bill Summary & Grand Total */}
-              <div className="d-flex flex-column gap-1.5 pt-2 border-top border-light-subtle">
-                <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12.5px' }}>
+              {/* 5. Sticky Footer: Bill Summary & Action Buttons */}
+              <div 
+                className="pos-order-footer d-flex flex-column gap-2 pt-2 border-top border-light-subtle flex-shrink-0"
+                style={{
+                  backgroundColor: '#FFFFFF',
+                  zIndex: 5,
+                  marginTop: 'auto'
+                }}
+              >
+                <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12px' }}>
                   <span>Subtotal</span>
                   <span className="fw-semibold text-dark">{formatCurrency(billSummary.itemsSubtotal + billSummary.addOnsTotal)}</span>
                 </div>
 
                 {(billSummary.dishDiscountsTotal > 0 || billSummary.couponDiscount > 0) && (
-                  <div className="d-flex align-items-center justify-content-between" style={{ fontSize: '12.5px', color: '#10B981' }}>
+                  <div className="d-flex align-items-center justify-content-between" style={{ fontSize: '12px', color: '#10B981' }}>
                     <span>Discount</span>
                     <span className="fw-semibold">-{formatCurrency(billSummary.dishDiscountsTotal + billSummary.couponDiscount)}</span>
                   </div>
                 )}
 
                 {orderType === 'TAKEAWAY' && billSummary.packingCharge > 0 && (
-                  <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12.5px' }}>
+                  <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12px' }}>
                     <span>Takeaway Packing Charge</span>
                     <span className="fw-semibold text-dark">+{formatCurrency(billSummary.packingCharge)}</span>
                   </div>
                 )}
 
-                <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12.5px' }}>
+                <div className="d-flex align-items-center justify-content-between text-secondary" style={{ fontSize: '12px' }}>
                   <span>GST (5%)</span>
                   <span className="fw-semibold text-dark">{formatCurrency(billSummary.gstAmount)}</span>
                 </div>
 
                 {/* Grand Total Banner */}
                 <div 
-                  className="d-flex align-items-center justify-content-between px-3 py-2.5 mt-1 shadow-xs"
+                  className="d-flex align-items-center justify-content-between px-3 py-2 mt-0.5 shadow-xs"
                   style={{
                     backgroundColor: '#FEECEE',
                     borderRadius: '12px',
                   }}
                 >
-                  <span className="fw-bold text-dark" style={{ fontSize: '15px' }}>
+                  <span className="fw-bold text-dark" style={{ fontSize: '14px' }}>
                     Grand Total
                   </span>
-                  <span className="fw-bold" style={{ fontSize: '22px', color: '#F20D2D', letterSpacing: '-0.3px' }}>
+                  <span className="fw-bold" style={{ fontSize: '20px', color: '#F20D2D', letterSpacing: '-0.3px' }}>
                     {formatCurrency(billSummary.grandTotal)}
                   </span>
                 </div>
-              </div>
 
-              {/* Error Message if any */}
-              {orderError && (
-                <div className="alert alert-danger p-2 rounded-3 small mb-0 d-flex align-items-center gap-2" style={{ fontSize: '12px' }}>
-                  <FiAlertCircle className="flex-shrink-0" />
-                  <span>{orderError}</span>
+                {/* Error Message if any */}
+                {orderError && (
+                  <div className="alert alert-danger p-2 rounded-3 small mb-0 d-flex align-items-center gap-2" style={{ fontSize: '11.5px' }}>
+                    <FiAlertCircle className="flex-shrink-0" />
+                    <span>{orderError}</span>
+                  </div>
+                )}
+
+                {/* 6. Action Buttons Row: Save Order & Proceed to Payment */}
+                <div className="d-flex align-items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    disabled={!canSubmitOrder || submittingOrder}
+                    onClick={() => handleSubmitOrder(false)}
+                    className="btn flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-xs transition-all"
+                    style={{
+                      height: '44px',
+                      borderRadius: '12px',
+                      fontSize: '13px',
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#F20D2D',
+                      borderWidth: '1.5px',
+                      borderStyle: 'solid',
+                      color: '#F20D2D',
+                      opacity: !canSubmitOrder ? 0.5 : 1
+                    }}
+                    title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
+                  >
+                    {submittingOrder ? (
+                      <span>Placing...</span>
+                    ) : (
+                      <>
+                        <FiSave size={16} />
+                        <span>Save Order</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={!canSubmitOrder || submittingOrder}
+                    onClick={() => handleSubmitOrder(true)}
+                    className="btn flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
+                    style={{
+                      height: '44px',
+                      borderRadius: '12px',
+                      fontSize: '13px',
+                      backgroundColor: '#F20D2D',
+                      borderColor: '#F20D2D',
+                      borderWidth: '1.5px',
+                      borderStyle: 'solid',
+                      flex: '1.2',
+                      boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)',
+                      opacity: !canSubmitOrder ? 0.5 : 1
+                    }}
+                    title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
+                  >
+                    <FiCreditCard size={17} />
+                    <span>Proceed to Payment</span>
+                  </button>
                 </div>
-              )}
-
-              {/* 6. Action Buttons Row: Save Order & Proceed to Payment */}
-              <div className="d-flex align-items-center gap-2 pt-1">
-                <button
-                  type="button"
-                  disabled={!canSubmitOrder || submittingOrder}
-                  onClick={() => handleSubmitOrder(false)}
-                  className="btn flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-xs transition-all"
-                  style={{
-                    height: '46px',
-                    borderRadius: '12px',
-                    fontSize: '13.5px',
-                    backgroundColor: '#FFFFFF',
-                    borderColor: '#F20D2D',
-                    borderWidth: '1.5px',
-                    borderStyle: 'solid',
-                    color: '#F20D2D',
-                    opacity: !canSubmitOrder ? 0.5 : 1
-                  }}
-                  title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
-                >
-                  {submittingOrder ? (
-                    <span>Placing...</span>
-                  ) : (
-                    <>
-                      <FiSave size={16} />
-                      <span>Save Order</span>
-                    </>
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  disabled={!canSubmitOrder || submittingOrder}
-                  onClick={() => handleSubmitOrder(true)}
-                  className="btn flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
-                  style={{
-                    height: '46px',
-                    borderRadius: '12px',
-                    fontSize: '13.5px',
-                    backgroundColor: '#F20D2D',
-                    borderColor: '#F20D2D',
-                    borderWidth: '1.5px',
-                    borderStyle: 'solid',
-                    flex: '1.2',
-                    boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)',
-                    opacity: !canSubmitOrder ? 0.5 : 1
-                  }}
-                  title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
-                >
-                  <FiCreditCard size={17} />
-                  <span>Proceed to Payment</span>
-                </button>
               </div>
 
             </div>
           </div>
 
         </div>
+
+        {/* Clear Order Confirmation Modal */}
+        <ConfirmModal
+          isOpen={showClearConfirm}
+          title="Clear Entire Order Ticket?"
+          message="Are you sure you want to remove all items from the current order ticket? This action cannot be undone."
+          confirmText="Yes, Clear Order"
+          cancelText="Cancel"
+          type="danger"
+          onClose={() => setShowClearConfirm(false)}
+          onConfirm={executeClearOrder}
+        />
 
         {/* Customization Modal */}
         {customizingItem && (
@@ -2741,52 +2734,62 @@ export const Pos = () => {
                         {filteredTableList.map((table) => {
                           const isSelected = selectedTable && String(selectedTable.id) === String(table.id);
                           const shortName = getShortTableNumber(table.number || table.table_number || table.id);
-                          const tableNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
                           const isOccupied = table.status === 'Occupied' || Boolean(table.is_occupied) || table.status === 'Reserved' || table.is_active === false;
                           const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
+                          const statusText = isOccupied ? (table.status === 'Reserved' ? 'Reserved' : 'Occupied') : 'Available';
 
                           return (
                             <div key={table.id} className="col">
                               <div
                                 onClick={() => {
-                                  if (isOccupied) {
-
-                                    return;
-                                  }
+                                  if (isOccupied) return;
                                   handleSelectTable(table);
                                 }}
-                                className={`p-2.5 rounded-3 border text-center transition-all ${
+                                className={`p-3 rounded-4 border text-start transition-all d-flex flex-column justify-content-between ${
                                   isOccupied 
-? 'border-secondary-subtle bg-light opacity-50'
+                                    ? 'border-danger-subtle bg-light opacity-65'
                                     : isSelected 
                                     ? 'border-danger bg-danger-subtle shadow-xs cursor-pointer' 
                                     : 'border-light-subtle bg-white hover-shadow cursor-pointer'
                                 }`}
-style={{ cursor: isOccupied ? 'not-allowed' : 'pointer', minHeight: '80px' }}
-                                title={isOccupied ? `${shortName} is ${table.status}` : `Select ${shortName}`}
+                                style={{ 
+                                  cursor: isOccupied ? 'not-allowed' : 'pointer', 
+                                  minHeight: '96px',
+                                  backgroundColor: isOccupied ? '#FFF5F5' : '#FFFFFF',
+                                  borderColor: isOccupied ? '#FECDD3' : '#E2E8F0'
+                                }}
+                                title={isOccupied ? `${shortName} is ${statusText} (Cannot be selected)` : `Select ${shortName}`}
                               >
-                                <div className="d-flex align-items-center justify-content-between mb-1">
-                                  <span className="fw-bold fs-6 text-dark">
-                                    {shortName}
-                                  </span>
-                                  <span
-                                    className="rounded-circle d-inline-block flex-shrink-0"
-                                    style={{
-                                      width: '9px',
-                                      height: '9px',
-                                      backgroundColor: isOccupied ? '#ef4444' : '#22c55e'
-                                    }}
-                                    title={isOccupied ? 'Occupied' : 'Available'}
-                                  />
-                                </div>
-                                <div className="small text-muted text-start" style={{ fontSize: '11px' }}>
-                                  {table.capacity || 4} Diners
-                                </div>
-                                {table.location && (
-                                  <div className="small text-secondary text-start text-truncate" style={{ fontSize: '10px' }}>
-                                    {table.location}
+                                <div>
+                                  <div className="d-flex align-items-center justify-content-between mb-1.5">
+                                    <span className="fw-bold fs-6 text-dark">
+                                      {shortName}
+                                    </span>
+                                    <span className="badge rounded-pill px-2 py-0.5 fw-semibold d-inline-flex align-items-center gap-1" style={{
+                                      backgroundColor: isOccupied ? '#FEE2E2' : '#DCFCE7',
+                                      color: isOccupied ? '#DC2626' : '#16A34A',
+                                      fontSize: '10px'
+                                    }}>
+                                      <span
+                                        className="rounded-circle d-inline-block flex-shrink-0"
+                                        style={{
+                                          width: '6px',
+                                          height: '6px',
+                                          backgroundColor: isOccupied ? '#DC2626' : '#16A34A'
+                                        }}
+                                      />
+                                      <span>{statusText}</span>
+                                    </span>
                                   </div>
-                                )}
+                                  <div className="small text-muted d-flex align-items-center gap-1" style={{ fontSize: '11.5px' }}>
+                                    <span>👥</span>
+                                    <span>{table.capacity || 4} Seats</span>
+                                    {table.location && (
+                                      <span className="text-secondary ms-1">· {table.location}</span>
+                                    )}
+                                  </div>
+                                </div>
+
                                 {isOccupied && activeOrderId && (
                                   <button
                                     type="button"
@@ -2795,9 +2798,9 @@ style={{ cursor: isOccupied ? 'not-allowed' : 'pointer', minHeight: '80px' }}
                                       handleTrackExistingOrder(activeOrderId, table);
                                     }}
                                     className="btn btn-xs btn-outline-danger rounded-pill mt-2 w-100 fw-semibold"
-                                    style={{ fontSize: '10.5px', padding: '2px 6px' }}
+                                    style={{ fontSize: '10px', padding: '2px 6px' }}
                                   >
-                                    Track Existing Order
+                                    View Active Order
                                   </button>
                                 )}
                               </div>

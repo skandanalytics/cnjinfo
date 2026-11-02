@@ -30,10 +30,16 @@ export const AppProvider = ({ children }) => {
       }
     };
 
+    const handleLocalUpdate = () => {
+      fetchNotifications(true);
+    };
+
     window.addEventListener('storage', handleStorage);
+    window.addEventListener('foodie_notifications_updated', handleLocalUpdate);
 
     return () => {
       window.removeEventListener('storage', handleStorage);
+      window.removeEventListener('foodie_notifications_updated', handleLocalUpdate);
     };
   }, []);
 

@@ -86,26 +86,12 @@ export const DishCard = ({
           }}
         />
 
-        {/* Top-Left: Orders Count Pill (Matches Reference Image 2) */}
-        {!isOutOfStock && (
-          <div className="position-absolute top-0 start-0 m-2.5" style={{ zIndex: 2 }}>
-            <span 
-              className="badge rounded-pill fw-bold px-2.5 py-1 shadow-sm d-inline-flex align-items-center"
-              style={{ 
-                fontSize: '11px',
-                backgroundColor: isHotItem ? '#EF4444' : '#F59E0B',
-                color: '#FFFFFF'
-              }}
-            >
-              {orderCount} Orders
-            </span>
-          </div>
-        )}
+{/* Order count badge removed as per requirement */}
 
         {/* Top-Right: Veg / Non-Veg Indicator Icon */}
         <div 
-          className="position-absolute top-0 end-0 m-2.5 bg-white p-1 rounded-2 shadow-xs d-flex align-items-center justify-content-center" 
-          style={{ zIndex: 2, width: '22px', height: '22px', border: '1px solid #E2E8F0' }}
+          className="position-absolute bg-white p-1 rounded-2 shadow-xs d-flex align-items-center justify-content-center" 
+          style={{ zIndex: 2, top: '10px', right: '10px', width: '22px', height: '22px', border: '1px solid #E2E8F0' }}
           title={foodType}
         >
           {foodType.includes('non') ? (
@@ -180,12 +166,12 @@ export const DishCard = ({
           )}
 
           {isAdmin && (
-            <div className="d-flex align-items-center gap-2 ms-auto">
+            <div className="d-flex align-items-center gap-2.5 ms-auto pe-1 pb-1">
               <button
                 type="button"
                 onClick={onEdit}
                 className="btn bg-white rounded-circle shadow-2xs d-flex align-items-center justify-content-center p-0 text-secondary transition-all"
-                style={{ width: '36px', height: '36px', border: '1px solid #CBD5E1' }}
+                style={{ width: '36px', height: '36px', border: '1px solid #CBD5E1', margin: '2px' }}
                 title="Edit Dish"
               >
                 <FiEdit2 size={15} style={{ color: '#475569' }} />
@@ -195,7 +181,7 @@ export const DishCard = ({
                 type="button"
                 onClick={onDelete}
                 className="btn bg-white rounded-circle shadow-2xs d-flex align-items-center justify-content-center p-0 text-danger transition-all"
-                style={{ width: '36px', height: '36px', border: '1px solid #FCA5A5' }}
+                style={{ width: '36px', height: '36px', border: '1px solid #FCA5A5', margin: '2px' }}
                 title="Delete Dish"
               >
                 <FiTrash2 size={15} style={{ color: '#EF4444' }} />

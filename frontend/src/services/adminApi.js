@@ -415,9 +415,10 @@ async function stockMap() {
   return new Map(rows.map((row) => [row.food, row]));
 }
 
-export async function listFoods() {
+export async function listFoods(branchId = null) {
+  const query = branchId ? ('&branch=' + encodeURIComponent(branchId)) : '';
   const [foods, stocks] = await Promise.all([
-    staffJson('/foods/?is_active=true'),
+    staffJson('/foods/?is_active=true' + query),
     stockMap(),
   ]);
   return listOf(foods).map((food) => mapFood(food, stocks));
@@ -1163,3 +1164,5 @@ export async function getPricingQuote(payload) {
 export async function fetchBillPreview(orderId) {
   return await staffJson(`/billing/preview/${orderId}/`);
 }
+
+

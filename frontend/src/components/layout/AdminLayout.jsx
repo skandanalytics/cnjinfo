@@ -2,7 +2,7 @@ import React, { useContext, useState, useEffect, useRef } from 'react';
 import Sidebar from './Sidebar';
 import { AppContext } from '../../context/AppContext';
 import { useAuth } from '../../hooks/useAuth';
-import { FiAlignLeft, FiBell, FiChevronDown, FiLogOut, FiShoppingBag, FiX, FiSearch, FiMessageSquare } from 'react-icons/fi';
+import { FiAlignLeft, FiBell, FiChevronDown, FiLogOut, FiShoppingBag, FiX, FiSearch } from 'react-icons/fi';
 import { useNavigate } from 'react-router-dom';
 import { orderService } from '../../services/orderService';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
@@ -116,21 +116,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
               <FiAlignLeft size={22} />
             </button>
 
-            {/* Header Search Input */}
-            <div className="d-none d-md-flex align-items-center position-relative" style={{ width: '320px' }}>
-              <FiSearch size={16} className="position-absolute start-0 ms-3 text-secondary" style={{ pointerEvents: 'none', zIndex: 1 }} />
-              <input 
-                type="text" 
-                placeholder="Search anything..." 
-                className="form-control rounded-pill ps-5 pe-3 border-0"
-                style={{ 
-                  backgroundColor: '#F1F5F9',
-                  fontSize: '13px',
-                  height: '38px',
-                  color: 'var(--text-primary)'
-                }}
-              />
-            </div>
+{/* Global search removed as per requirements */}
           </div>
 
           <div className="d-flex align-items-center gap-2 gap-md-3">
@@ -255,29 +241,6 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
             </div>
             )}
 
-            {/* Messages / Chat Button */}
-            <div className="position-relative">
-              <button
-                type="button"
-                className="btn p-2 rounded-circle border-0 position-relative d-flex align-items-center justify-content-center"
-                style={{
-                  width: '38px',
-                  height: '38px',
-                  backgroundColor: '#F1F5F9',
-                  color: 'var(--text-secondary)'
-                }}
-                title="Messages"
-              >
-                <FiMessageSquare size={18} />
-                <span 
-                  className="position-absolute top-0 start-100 translate-middle badge rounded-circle bg-danger p-1"
-                  style={{ transform: 'translate(-30%, 30%) !important' }}
-                >
-                  <span className="visually-hidden">unread messages</span>
-                </span>
-              </button>
-            </div>
-
             {/* User Profile Pill & Dropdown */}
             <div className="position-relative">
               <div 
@@ -342,7 +305,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
         </header>
 
         {/* Page Content */}
-        <main className={`p-4 flex-grow-1 ${fullHeight ? 'admin-main-content-fullheight' : ''} ${contentClassName}`}>
+        <main className={`p-3 flex-grow-1 ${fullHeight ? 'admin-main-content-fullheight' : ''} ${contentClassName}`}>
           {children}
         </main>
       </div>

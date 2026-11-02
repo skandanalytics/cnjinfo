@@ -511,40 +511,8 @@ export const Kitchen = () => {
           <div className="alert alert-warning small py-2 mb-3" role="alert">{actionError}</div>
         )}
 
-        {/* Sub-bar: Active / Completed tabs & Live updates indicator */}
-        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-          <div className="d-flex align-items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setActiveStageTab('ALL')}
-              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold shadow-2xs transition-all ${
-                activeStageTab !== 'COMPLETED' ? 'text-white' : 'btn-outline-secondary bg-white text-secondary'
-              }`}
-              style={{ 
-                fontSize: '12px',
-                backgroundColor: activeStageTab !== 'COMPLETED' ? '#F20D2D' : undefined,
-                borderColor: activeStageTab !== 'COMPLETED' ? '#F20D2D' : '#CBD5E1'
-              }}
-            >
-              Active ({pendingOrders.length + preparingOrders.length + readyOrders.length})
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setActiveStageTab('COMPLETED')}
-              className={`btn btn-sm rounded-pill px-3.5 py-1.5 fw-bold shadow-2xs transition-all ${
-                activeStageTab === 'COMPLETED' ? 'text-white' : 'btn-outline-secondary bg-white text-secondary'
-              }`}
-              style={{ 
-                fontSize: '12px',
-                backgroundColor: activeStageTab === 'COMPLETED' ? '#F20D2D' : undefined,
-                borderColor: activeStageTab === 'COMPLETED' ? '#F20D2D' : '#CBD5E1'
-              }}
-            >
-              Completed ({completedOrders.length})
-            </button>
-          </div>
-
+        {/* Live updates indicator */}
+        <div className="d-flex align-items-center justify-content-end flex-wrap gap-2 mb-3">
           <div className="d-flex align-items-center gap-2">
             <span className="badge rounded-pill fw-bold px-2.5 py-1 d-inline-flex align-items-center gap-1" style={{ backgroundColor: '#DCFCE7', color: '#16A34A', fontSize: '11px', border: '1px solid #BBF7D0' }}>
               <span className="rounded-circle" style={{ width: '6px', height: '6px', backgroundColor: '#16A34A' }}></span>

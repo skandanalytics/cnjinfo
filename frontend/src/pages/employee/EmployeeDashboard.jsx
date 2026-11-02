@@ -259,9 +259,7 @@ export const EmployeeDashboard = () => {
         </div>
       </div>
 
-      <div className="alert alert-light border rounded-4 small text-start mb-4">
-        Take an order from Tables. This screen shows the orders you placed, plus kitchen status, counter payment, and the bill preview.
-      </div>
+{/* Informational banner removed as per requirements */}
       {actionError && (
         <div className="alert alert-danger rounded-4 small text-start" role="alert">{actionError}</div>
       )}

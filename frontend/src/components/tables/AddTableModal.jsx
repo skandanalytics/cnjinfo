@@ -1,10 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Modal from '../common/Modal';
-import Input from '../common/Input';
-import Select from '../common/Select';
-import Button from '../common/Button';
 import { FiMapPin, FiUsers } from 'react-icons/fi';
 import { TABLE_LOCATIONS, TABLE_LOCATION_VALUES } from '../../constants/tableLocations';
+import { getNextAvailableTableNumber } from '../../utils/tableUtils';
 
 export const AddTableModal = ({
   isOpen,
@@ -21,20 +19,28 @@ export const AddTableModal = ({
 
   const areas = TABLE_LOCATIONS;
 
-  const statuses = [
-    { value: 'Available', label: 'Available' },
-    { value: 'Reserved', label: 'Reserved' }
-  ];
-
   const formatTableNumber = (rawDigits) => {
     const clean = String(rawDigits || '').replace(/\D/g, '').slice(0, 3);
     if (!clean) return '';
     const n = parseInt(clean, 10);
+    if (n === 0) return '';
     if (clean.length === 1) {
       return `T0${clean}`;
     }
     return `T${clean}`;
   };
+
+  useEffect(() => {
+    if (isOpen) {
+      const suggested = getNextAvailableTableNumber(existingTables);
+      const digits = suggested.replace(/\D/g, '');
+      setNumberDigits(digits);
+      setCapacity('4');
+      setArea('Indoor Main');
+      setStatus('Available');
+      setErrorMsg('');
+    }
+  }, [isOpen, existingTables]);
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -43,19 +49,19 @@ export const AddTableModal = ({
 
     const cleanDigits = String(numberDigits || '').replace(/\D/g, '').slice(0, 3);
     if (!cleanDigits) {
-      setErrorMsg('Please enter a valid table number (e.g. 01, 02, 100).');
+      setErrorMsg('Please enter a valid table number (e.g. 01, 08, 10, 100).');
       return;
     }
 
-    if (cleanDigits.length > 3) {
-      setErrorMsg('Table number cannot exceed 3 digits.');
+    const targetDigitsNum = parseInt(cleanDigits, 10);
+    if (targetDigitsNum === 0) {
+      setErrorMsg('Table number cannot be T00. Please enter a valid number (e.g. 01, 08, 10).');
       return;
     }
 
     const formattedNum = formatTableNumber(cleanDigits);
-    const targetDigitsNum = parseInt(cleanDigits, 10);
 
-    // Check for duplicate table number against real table list
+    // Check for duplicate table number against real table list in this branch
     const isDuplicate = (existingTables || []).some(t => {
       const raw = String(t.number || t.table_number || t.name || '').trim().toUpperCase();
       const cleanRaw = raw.replace(/^TABLE[\s-_]*/i, '').trim();
@@ -73,7 +79,7 @@ export const AddTableModal = ({
     });
 
     if (isDuplicate) {
-      setErrorMsg(`Table "${formattedNum}" already exists. Duplicate table numbers are not allowed.`);
+      setErrorMsg(`Table "${formattedNum}" already exists in this branch. Duplicate table numbers are not allowed.`);
       return;
     }
 
@@ -175,6 +181,11 @@ export const AddTableModal = ({
     </div>
   );
 
+  const displayInputValue = () => {
+    if (!numberDigits) return '';
+    return formatTableNumber(numberDigits) || `T${numberDigits}`;
+  };
+
   return (
     <Modal isOpen={isOpen} title="Add New Dining Table" onClose={onClose} footerActions={footerActions}>
       <form onSubmit={handleSubmit}>
@@ -191,8 +202,8 @@ export const AddTableModal = ({
               type="text"
               className="form-control rounded-3 py-2 fw-semibold text-dark"
               style={{ fontSize: '13.5px', borderColor: '#CBD5E1' }}
-              placeholder="T11" 
-              value={formatTableNumber(numberDigits) || (numberDigits ? `T${numberDigits}` : '')}
+              placeholder="T08" 
+              value={displayInputValue()}
               onChange={(e) => {
                 const val = e.target.value.replace(/\D/g, '').slice(0, 3);
                 setNumberDigits(val);
@@ -207,13 +218,13 @@ export const AddTableModal = ({
               Seating Capacity <span className="text-danger">*</span>
             </label>
             <div className="position-relative">
-              <FiUsers className="position-absolute text-muted" style={{ left: '12px', top: '12px' }} size={15} />
+              <FiUsers className="position-absolute text-muted" style={{ left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 2 }} size={16} />
               <input 
                 type="number"
                 min={1}
                 max={15}
-                className="form-control rounded-3 py-2 ps-4 fw-semibold text-dark"
-                style={{ fontSize: '13.5px', borderColor: '#CBD5E1' }}
+                className="form-control rounded-3 py-2 fw-semibold text-dark"
+                style={{ fontSize: '13.5px', borderColor: '#CBD5E1', paddingLeft: '38px' }}
                 placeholder="4"
                 value={capacity} 
                 onChange={(e) => {
@@ -231,10 +242,10 @@ export const AddTableModal = ({
             Area / Location <span className="text-danger">*</span>
           </label>
           <div className="position-relative">
-            <FiMapPin className="position-absolute text-muted" style={{ left: '12px', top: '12px' }} size={15} />
+            <FiMapPin className="position-absolute text-muted" style={{ left: '12px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 2 }} size={16} />
             <select 
-              className="form-select rounded-3 py-2 ps-4 fw-semibold text-dark"
-              style={{ fontSize: '13.5px', borderColor: '#CBD5E1' }}
+              className="form-select rounded-3 py-2 fw-semibold text-dark"
+              style={{ fontSize: '13.5px', borderColor: '#CBD5E1', paddingLeft: '38px' }}
               value={area}
               onChange={(e) => setArea(e.target.value)}
               required

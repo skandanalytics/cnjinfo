@@ -38,4 +38,32 @@ export const formatCompactTableLabel = (raw) => {
 };
 
 export const formatTableNumber = formatCompactTableLabel;
+
+/**
+ * Calculates the next available table number for a branch.
+ * Finds the smallest positive integer n >= 1 that is not currently used by any active table in existingTables.
+ * E.g., if T01..T07 and T09 exist, returns 'T08'.
+ * If T08 is deleted (no longer in existingTables), suggests 'T08'.
+ * Formats 1-9 as 'T01'-'T09', and >= 10 as 'T10', 'T11', 'T100', etc. Never returns 'T00'.
+ */
+export const getNextAvailableTableNumber = (existingTables = []) => {
+  const usedNumbers = new Set();
+  (existingTables || []).forEach((t) => {
+    if (!t) return;
+    const raw = String(t.number || t.table_number || t.name || '').trim();
+    const clean = raw.replace(/^TABLE[\s-_]*/i, '').trim();
+    const match = clean.match(/^T0*(\d+)$/i) || clean.match(/^(\d+)$/);
+    if (match) {
+      const n = parseInt(match[1], 10);
+      if (n > 0) usedNumbers.add(n);
+    }
+  });
+
+  let next = 1;
+  while (usedNumbers.has(next)) {
+    next += 1;
+  }
+  return next < 10 ? `T0${next}` : `T${next}`;
+};
+
 export default formatCompactTableLabel;

@@ -1,3 +1,4 @@
+import { notifyOrderCreated } from './notificationService';
 import api from './api';
 import { extractApiErrorMessage } from '../utils/errorUtils';
 import {
@@ -125,10 +126,11 @@ export async function placeOrder(orderType, paymentMethod) {
       localStorage.removeItem('foodie_parent_order_id');
     }
     try {
-      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: res.data.id } }));
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: res.data.id, order: res.data } }));
       window.dispatchEvent(new CustomEvent('foodie_inventory_updated', { detail: { orderId: res.data.id } }));
       window.dispatchEvent(new CustomEvent('foodie_products_updated', { detail: { orderId: res.data.id } }));
       window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: res.data.id } }));
+      notifyOrderCreated(res.data);
       localStorage.setItem('foodie_data_sync', String(Date.now()));
     } catch { /* same-tab listeners still received the custom events */ }
     return res.data;

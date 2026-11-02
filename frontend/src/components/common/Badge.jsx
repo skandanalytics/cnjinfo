@@ -75,12 +75,13 @@ export const Badge = ({
 
   return (
     <span 
-      className={`d-inline-flex align-items-center gap-1.5 rounded-pill px-2.5 py-1 fw-bold ${className}`}
+      className={`d-inline-flex align-items-center rounded-pill px-2.5 py-1 fw-bold ${className}`}
       style={{
         backgroundColor: style.bg,
         color: style.text,
         border: `1px solid ${style.border}`,
         fontSize: '11.5px',
+        gap: '6px',
         lineHeight: 1,
         letterSpacing: '0.1px',
       }}

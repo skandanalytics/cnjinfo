@@ -455,9 +455,9 @@ async function resolveCustomerBranchId() {
 }
 
 export const productService = {
-  getProducts: async (forceRefresh = false) => {
+  getProducts: async (forceRefresh = false, branchIdOverride = null) => {
     const { isStaffScreen, listFoods } = await import('./adminApi');
-    if (isStaffScreen()) return listFoods();
+    if (isStaffScreen()) return listFoods(branchIdOverride);
     const branchId = await resolveCustomerBranchId();
     const now = Date.now();
     if (!forceRefresh && cachedMappedProducts && String(cachedMappedProductsBranchId) === String(branchId) && (now - cachedMappedProductsTime < PRODUCTS_CACHE_TTL)) {

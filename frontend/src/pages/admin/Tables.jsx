@@ -555,32 +555,6 @@ export const Tables = () => {
             ))}
           </div>
 
-          <div className="d-flex align-items-center gap-2">
-            <button 
-              type="button"
-              onClick={handleTakeawayOrder} 
-              disabled={!hasDishes}
-              title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable.'}
-              className="btn btn-outline-danger d-inline-flex align-items-center gap-2 py-2 px-3.5 fw-bold bg-white rounded-pill shadow-xs"
-              style={{ fontSize: '13px', borderColor: '#F20D2D', color: '#F20D2D' }}
-            >
-              <FiShoppingCart /> Takeaway Order
-            </button>
-            {isAdmin && hasBranches && (
-              <button 
-                type="button"
-                onClick={() => setIsAddOpen(true)} 
-                className="btn btn-danger d-inline-flex align-items-center gap-2 py-2 px-4 rounded-pill fw-bold text-white shadow-sm"
-                style={{ 
-                  fontSize: '13px', 
-                  backgroundColor: '#F20D2D', 
-                  borderColor: '#F20D2D'
-                }}
-              >
-                <FiPlus size={16} /> Add Table
-              </button>
-            )}
-          </div>
         </div>
 
         {/* 2 KPI Stat Cards & Filter Toolbar (Matches Reference Screenshot 1) */}
@@ -610,10 +584,7 @@ export const Tables = () => {
               <div className="flex-grow-1 text-start">
                 <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Available Tables</div>
                 <div className="fw-bold text-dark fs-3 mb-0.5">{availableCount}</div>
-                <span className="badge rounded-pill px-2.5 py-0.5 fw-bold d-inline-flex align-items-center gap-1" style={{ fontSize: '11px', backgroundColor: '#DCFCE7', color: '#16A34A' }}>
-                  <span className="rounded-circle" style={{ width: '6px', height: '6px', backgroundColor: '#16A34A' }}></span>
-                  Available
-                </span>
+                <span className="badge rounded-pill fw-bold p-1 d-inline-flex align-items-center justify-content-center" style={{ width: "20px", height: "20px", backgroundColor: "#DCFCE7" }} title="Available"><span className="rounded-circle" style={{ width: "6px", height: "6px", backgroundColor: "#16A34A" }}></span></span>
               </div>
             </div>
           </div>
@@ -643,10 +614,7 @@ export const Tables = () => {
               <div className="flex-grow-1 text-start">
                 <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Occupied Tables</div>
                 <div className="fw-bold text-dark fs-3 mb-0.5">{occupiedCount}</div>
-                <span className="badge rounded-pill px-2.5 py-0.5 fw-bold d-inline-flex align-items-center gap-1" style={{ fontSize: '11px', backgroundColor: '#FEE2E2', color: '#DC2626' }}>
-                  <span className="rounded-circle" style={{ width: '6px', height: '6px', backgroundColor: '#DC2626' }}></span>
-                  Occupied
-                </span>
+                <span className="badge rounded-pill fw-bold p-1 d-inline-flex align-items-center justify-content-center" style={{ width: "20px", height: "20px", backgroundColor: "#FEE2E2" }} title="Occupied"><span className="rounded-circle" style={{ width: "6px", height: "6px", backgroundColor: "#DC2626" }}></span></span>
               </div>
             </div>
           </div>
@@ -670,13 +638,13 @@ export const Tables = () => {
                   </select>
                 </div>
 
-                <div className="d-flex flex-column text-start flex-grow-1" style={{ minWidth: '120px' }}>
+                <div className="d-flex flex-column text-start flex-grow-1" style={{ minWidth: '135px' }}>
                   <label className="text-muted small fw-semibold mb-1" style={{ fontSize: '11px' }}>Status</label>
                   <select
                     value={selectedStatusFilter}
                     onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                    className="form-select form-select-sm rounded-pill fw-semibold border bg-light px-3 py-1.5 text-dark"
-                    style={{ fontSize: '12.5px', borderColor: '#CBD5E1' }}
+                    className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-1.5 text-dark shadow-2xs"
+                    style={{ fontSize: '12.5px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
                   >
                     <option value="ALL">All Status</option>
                     <option value="available">Available</option>
@@ -876,3 +844,5 @@ export const Tables = () => {
   );
 };
 export default Tables;
+
+

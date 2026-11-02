@@ -48,9 +48,22 @@ const saveLocalNotification = (notification) => {
       LOCAL_NOTIF_KEY,
       JSON.stringify(updated.slice(0, 50))
     );
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('foodie_notifications_updated', { detail: notification }));
+    }
   } catch (error) {
     console.warn('Unable to save local notification:', error);
   }
+};
+
+export const notifyOrderCreated = (order) => {
+  if (!order || !order.id) return;
+  const num = order.orderNumber || order.order_number || order.display_order_number || order.id;
+  const tableRaw = order.tableNumber || order.table_number || order.table || (order.orderType === 'TAKEAWAY' || order.order_type === 'TAKEAWAY' ? 'Takeaway' : 'N/A');
+  const tableStr = typeof tableRaw === 'object' ? (tableRaw.number || tableRaw.label || 'N/A') : String(tableRaw || 'N/A');
+  const total = order.totalAmount || order.total_amount || order.grandTotal || order.total || 0;
+  const msg = `New Order #${num}! Table: ${tableStr}, Total: ₹${total}`;
+  notificationService.createNotification(msg).catch(() => {});
 };
 
 const getClearedNotifIds = () => {
