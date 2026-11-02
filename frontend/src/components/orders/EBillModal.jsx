@@ -35,6 +35,38 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
   const [downloadingPdf, setDownloadingPdf] = useState(false);
   const [completingOrder, setCompletingOrder] = useState(false);
   const [finalizedSuccess, setFinalizedSuccess] = useState(false);
+  const [previewData, setPreviewData] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    if (!isOpen || !order) {
+      setPreviewData(null);
+      return;
+    }
+    const orderId = order.backendOrderId || order.id || order.order_id;
+    if (!orderId) return;
+
+    (async () => {
+      try {
+        const { isStaffScreen } = await import('../../services/staffClient');
+        if (isStaffScreen()) {
+          const { fetchBillPreview } = await import('../../services/adminApi');
+          const preview = await fetchBillPreview(orderId);
+          if (isMounted && preview) setPreviewData(preview);
+        } else {
+          const { fetchCustomerBillPreview } = await import('../../services/customerCheckout');
+          const rootId = order.parent_order_id || (typeof order.parent_order === 'object' ? order.parent_order?.id : order.parent_order) || orderId;
+          const preview = await fetchCustomerBillPreview(rootId);
+          if (isMounted && preview) setPreviewData(preview);
+        }
+      } catch (err) {
+        // Silently fall back to provided order data
+        console.warn('EBillModal could not fetch authoritative bill preview:', err);
+      }
+    })();
+
+    return () => { isMounted = false; };
+  }, [order?.id, order?.backendOrderId, isOpen]);
 
   useEffect(() => {
     setFinalizedSuccess(false);
@@ -76,26 +108,48 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
     setDownloadingPdf(false);
   };
 
-  const isTakeaway = order.order_type === 'TAKEAWAY'
-    || order.orderType === 'Takeaway'
-    || String(order.table || '').toLowerCase() === 'takeaway';
-  const subtotal = Number(order.subtotal ?? order.items_subtotal ?? 0);
-  const dishDiscount = Number(order.dish_discount_total || 0);
-  const couponDiscount = Number(order.coupon_discount_total || 0);
-  const addonTotal = Number(order.customization_total ?? 0);
-  const packingCharge = Number(order.takeaway_charge ?? order.packingCharge ?? 0);
-  const tax = Number(order.gst_amount ?? order.tax ?? 0);
-  const serviceCharge = Number(order.service_charge_amount ?? order.serviceCharge ?? 0);
-  const roundOff = Number(order.round_off ?? order.roundOff ?? 0);
-  const grandTotal = Number(order.total ?? order.total_amount ?? 0);
-  const restaurantName = order.branchName || order.branch_name || 'Foodie';
-  const addressParts = [order.branchAddress, order.branchCity].filter(Boolean);
-  const orderNo = formatOrderDisplayNumber(order, order.id || '');
-  const invoiceNo = (isFinalized && orderNo) ? `INV-${orderNo}` : (order.invoice_number || '');
-  const when = [order.date, order.time].filter(Boolean).join(' · ')
-    || (order.created_at ? new Date(order.created_at).toLocaleString('en-IN') : '');
-  const customerName = order.customerName || order.customer_name || '';
-  const customerPhone = order.customerPhone || order.customer_phone || '';
+  const activeSource = previewData ? {
+    ...order,
+    ...previewData,
+    items: previewData.items || order.items,
+    combined_items: previewData.items || order.combined_items,
+    subtotal: previewData.items_subtotal || order.subtotal || order.items_subtotal,
+    dish_discount_total: previewData.dish_discount_total || order.dish_discount_total,
+    coupon_discount_total: previewData.coupon_discount_total || order.coupon_discount_total,
+    customization_total: previewData.customization_total || order.customization_total,
+    takeaway_charge: previewData.takeaway_charge || order.takeaway_charge,
+    gst_amount: previewData.gst_amount || order.gst_amount,
+    service_charge_amount: previewData.service_charge_amount || order.service_charge_amount,
+    round_off: previewData.round_off || order.round_off,
+    total: previewData.total_amount || order.total || order.total_amount,
+    total_amount: previewData.total_amount || order.total_amount || order.total,
+    has_continuations: previewData.has_continuations ?? order.has_continuations,
+    display_order_number: previewData.display_order_number || order.display_order_number || order.orderNumber,
+  } : order;
+
+  const isTakeaway = activeSource.order_type === 'TAKEAWAY'
+    || activeSource.orderType === 'Takeaway'
+    || String(activeSource.table || '').toLowerCase() === 'takeaway';
+  const subtotal = Number(activeSource.subtotal ?? activeSource.items_subtotal ?? 0);
+  const dishDiscount = Number(activeSource.dish_discount_total || 0);
+  const couponDiscount = Number(activeSource.coupon_discount_total || 0);
+  const addonTotal = Number(activeSource.customization_total ?? 0);
+  const packingCharge = Number(activeSource.takeaway_charge ?? activeSource.packingCharge ?? 0);
+  const tax = Number(activeSource.gst_amount ?? activeSource.tax ?? 0);
+  const serviceCharge = Number(activeSource.service_charge_amount ?? activeSource.serviceCharge ?? 0);
+  const roundOff = Number(activeSource.round_off ?? activeSource.roundOff ?? 0);
+  const grandTotal = Number(activeSource.total ?? activeSource.total_amount ?? 0);
+  const restaurantName = activeSource.branchName || activeSource.branch_name || (typeof activeSource.branch === 'object' ? activeSource.branch?.name : '') || 'Foodie';
+  const addressParts = [
+    activeSource.branchAddress || (typeof activeSource.branch === 'object' ? activeSource.branch?.address : ''),
+    activeSource.branchCity || (typeof activeSource.branch === 'object' ? activeSource.branch?.city : '')
+  ].filter(Boolean);
+  const orderNo = formatOrderDisplayNumber(activeSource, activeSource.id || '');
+  const invoiceNo = (isFinalized && orderNo) ? `INV-${orderNo}` : (activeSource.invoice_number || '');
+  const when = [activeSource.date, activeSource.time].filter(Boolean).join(' · ')
+    || (activeSource.placed_at || (activeSource.created_at ? new Date(activeSource.created_at).toLocaleString('en-IN') : ''));
+  const customerName = activeSource.customerName || activeSource.customer_name || '';
+  const customerPhone = activeSource.customerPhone || activeSource.customer_phone || '';
 
   const handleProceedToBill = async () => {
     if (completingOrder || isFinalized) return;
@@ -228,7 +282,7 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
           </div>
         )}
 
-        {Boolean(order.has_continuations || (order.combined_items && order.combined_items.length > (order.items?.length || 0)) || order.combined_items?.some(it => it.order_display_number && String(it.order_display_number) !== String(orderNo))) && (
+        {Boolean(activeSource.has_continuations || (activeSource.combined_items && activeSource.combined_items.length > (activeSource.items?.length || 0)) || activeSource.combined_items?.some(it => it.order_display_number && String(it.order_display_number) !== String(orderNo))) && (
           <div className="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2 small rounded-3" style={{ fontSize: '12px' }}>
             <i className="bi bi-info-circle-fill text-primary" />
             <span><strong>Combined Dine-In Bill</strong> — includes initial order and all additional dish orders for this table.</span>
@@ -245,7 +299,7 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
             </tr>
           </thead>
           <tbody>
-            {((order.combined_items && order.combined_items.length > 0) ? order.combined_items : (order.items || [])).map((item, index) => (
+            {((activeSource.combined_items && activeSource.combined_items.length > 0) ? activeSource.combined_items : (activeSource.items || [])).map((item, index) => (
               <tr key={item.id || index}>
                 <td>
                   <div className="fw-semibold">

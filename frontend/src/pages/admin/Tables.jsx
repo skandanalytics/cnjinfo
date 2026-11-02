@@ -494,17 +494,18 @@ export const Tables = () => {
           title="Tables" 
           showBackButton
           actions={
-            <div className="d-flex align-items-center gap-2">
-              <Button 
-                onClick={handleTakeawayOrder} 
-                variant="outline" 
-                disabled={!hasDishes}
-                title={hasDishes ? 'Start a takeaway order' : 'Takeaway ordering is unavailable because no dishes are currently available.'}
-                className="d-flex align-items-center gap-2 py-2 px-3 fw-bold bg-white text-danger border-danger shadow-xs rounded-pill"
-                style={{ fontSize: '13px' }}
-              >
-                <FiShoppingCart /> Takeaway Order
-              </Button>
+            <div className="d-flex align-items-center gap-2.5 flex-wrap">
+              <div className="position-relative" style={{ minWidth: '220px', maxWidth: '300px' }}>
+                <FiSearch className="position-absolute text-muted" style={{ left: '12px', top: '10px' }} size={14} />
+                <input
+                  type="text"
+                  placeholder="Search table (e.g., T01)..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="form-control form-control-sm rounded-pill ps-4 py-1.5 border bg-white text-dark shadow-2xs"
+                  style={{ fontSize: '12.5px', borderColor: '#CBD5E1' }}
+                />
+              </div>
               {isAdmin && hasBranches && (
                 <Button 
                   onClick={() => setIsAddOpen(true)} 
@@ -619,53 +620,6 @@ export const Tables = () => {
             </div>
           </div>
 
-          {/* Filter Toolbar on Right: Location, Status, Search */}
-          <div className="col-12 col-lg-6">
-            <div className="card h-100 p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center flex-wrap gap-2.5" style={{ borderColor: '#E2E8F0' }}>
-              <div className="d-flex align-items-center gap-2 flex-grow-1">
-                <div className="d-flex flex-column text-start flex-grow-1" style={{ minWidth: '130px' }}>
-                  <label className="text-muted small fw-semibold mb-1" style={{ fontSize: '11px' }}>Location</label>
-                  <select
-                    value={selectedLocation}
-                    onChange={(e) => setSelectedLocation(e.target.value)}
-                    className="form-select form-select-sm rounded-pill fw-semibold border bg-light px-3 py-1.5 text-dark"
-                    style={{ fontSize: '12.5px', borderColor: '#CBD5E1' }}
-                  >
-                    <option value="ALL">All Locations</option>
-                    {uniqueLocations.map(loc => (
-                      <option key={loc} value={loc}>{loc}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="d-flex flex-column text-start flex-grow-1" style={{ minWidth: '135px' }}>
-                  <label className="text-muted small fw-semibold mb-1" style={{ fontSize: '11px' }}>Status</label>
-                  <select
-                    value={selectedStatusFilter}
-                    onChange={(e) => setSelectedStatusFilter(e.target.value)}
-                    className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-1.5 text-dark shadow-2xs"
-                    style={{ fontSize: '12.5px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
-                  >
-                    <option value="ALL">All Status</option>
-                    <option value="available">Available</option>
-                    <option value="occupied">Occupied</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="position-relative flex-grow-1 mt-auto" style={{ minWidth: '180px' }}>
-                <FiSearch className="position-absolute text-muted" style={{ left: '12px', top: '10px' }} size={14} />
-                <input
-                  type="text"
-                  placeholder="Search table (e.g., T01)..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="form-control form-control-sm rounded-pill ps-4 py-1.5 border bg-light text-dark"
-                  style={{ fontSize: '12.5px', borderColor: '#CBD5E1' }}
-                />
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Grid */}

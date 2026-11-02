@@ -524,57 +524,6 @@ export const Kitchen = () => {
           </div>
         </div>
 
-        {/* 4 Top KPI Stat Cards (Matches Reference Screenshot 3) */}
-        <div className="row g-3 mb-4">
-          <div className="col-6 col-md-3">
-            <div className="card p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3" style={{ borderColor: '#E2E8F0' }}>
-              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '48px', height: '48px', backgroundColor: '#FEECEE', color: '#EF4444' }}>
-                <i className="bi bi-receipt fs-4"></i>
-              </div>
-              <div className="text-start">
-                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>New Tickets</div>
-                <div className="fw-bold text-dark fs-3 mb-0">{pendingOrders.length}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-6 col-md-3">
-            <div className="card p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3" style={{ borderColor: '#E2E8F0' }}>
-              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '48px', height: '48px', backgroundColor: '#FEF3C7', color: '#F59E0B' }}>
-                <i className="bi bi-fire fs-4"></i>
-              </div>
-              <div className="text-start">
-                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Preparing</div>
-                <div className="fw-bold text-dark fs-3 mb-0">{preparingOrders.length}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-6 col-md-3">
-            <div className="card p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3" style={{ borderColor: '#E2E8F0' }}>
-              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '48px', height: '48px', backgroundColor: '#E0F2FE', color: '#0284C7' }}>
-                <i className="bi bi-box-seam fs-4"></i>
-              </div>
-              <div className="text-start">
-                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Ready / Serving</div>
-                <div className="fw-bold text-dark fs-3 mb-0">{readyOrders.length}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="col-6 col-md-3">
-            <div className="card p-3 rounded-4 shadow-xs border bg-white d-flex flex-row align-items-center gap-3" style={{ borderColor: '#E2E8F0' }}>
-              <div className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style={{ width: '48px', height: '48px', backgroundColor: '#DCFCE7', color: '#16A34A' }}>
-                <i className="bi bi-check-circle fs-4"></i>
-              </div>
-              <div className="text-start">
-                <div className="text-secondary small fw-medium" style={{ fontSize: '12px' }}>Completed (Today)</div>
-                <div className="fw-bold text-dark fs-3 mb-0">{completedOrders.length}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
         {/* 4 Kanban Columns with Solid Color Headers (Matches Reference Screenshot 3) */}
         {loading ? (
           <Loader />

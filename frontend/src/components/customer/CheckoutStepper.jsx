@@ -5,7 +5,7 @@ export const CheckoutStepper = ({ currentStep, activeStep = 1 }) => {
   const effectiveStep = currentStep || activeStep || 1;
   const steps = [
     { number: 1, title: 'Cart' },
-    { number: 2, title: 'Customer Details' },
+    { number: 2, title: 'Dining Option' },
     { number: 3, title: 'Payment' },
     { number: 4, title: 'Confirmation' }
   ];

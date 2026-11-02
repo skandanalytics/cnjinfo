@@ -379,89 +379,9 @@ export const Checkout = () => {
 
         <div className="row g-4">
           <div className="col-12 col-lg-8">
-            {Boolean(sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')) && (
-              <div className="alert alert-info py-2.5 px-3 mb-3 d-flex align-items-center justify-content-between gap-2 small rounded-3 border-0 shadow-xs" style={{ fontSize: '13px' }}>
-                <div className="d-flex align-items-center gap-2">
-                  <i className="bi bi-info-circle-fill text-primary flex-shrink-0 fs-6" />
-                  <div>
-                    <strong>Continuing Order #{sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')}</strong>
-                    {cartView?.table ? ` · Table ${formatCompactTableLabel(cartView.table.table_number)}` : ''}.
-                    <span className="text-secondary d-block mt-0.5" style={{ fontSize: '12px' }}>
-                      Extra dishes will be sent to the kitchen and combined into your final table bill.
-                    </span>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary py-1 px-2.5 text-nowrap rounded-2 ms-2"
-                  style={{ fontSize: '11px' }}
-                  onClick={() => {
-                    sessionStorage.removeItem('foodie_parent_order_id');
-                    localStorage.removeItem('foodie_parent_order_id');
-                    setBusy((prev) => !prev);
-                  }}
-                >
-                  Start New Order
-                </button>
-              </div>
-            )}
                         {/* Customer Details & Dining Service Card (Matches Reference 6) */}
             <div className="card border-0 shadow-sm p-4 bg-white text-start mb-4" style={{ borderRadius: '18px', border: '1px solid #E2E8F0' }}>
-              <h5 className="fw-bold text-dark mb-3" style={{ fontSize: '18px' }}>Customer Details</h5>
-              
-              <div className="row g-3 mb-4">
-                <div className="col-12 col-md-6">
-                  <label className="form-label small fw-bold text-dark mb-1">Full Name *</label>
-                  <input
-                    type="text"
-                    className="form-control rounded-3 shadow-xs"
-                    style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
-                    value={customerName}
-                    onChange={(e) => {
-                      setCustomerName(e.target.value);
-                      sessionStorage.setItem('customer_name', e.target.value);
-                      localStorage.setItem('customer_name', e.target.value);
-                    }}
-                    placeholder="Ravi Kumar"
-                    required
-                  />
-                </div>
-
-                <div className="col-12 col-md-6">
-                  <label className="form-label small fw-bold text-dark mb-1">Mobile Number *</label>
-                  <input
-                    type="tel"
-                    className="form-control rounded-3 shadow-xs"
-                    style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
-                    value={customerPhone}
-                    onChange={(e) => {
-                      setCustomerPhone(e.target.value);
-                      sessionStorage.setItem('customer_mobile', e.target.value);
-                      localStorage.setItem('customer_mobile', e.target.value);
-                    }}
-                    placeholder="+91 98765 43210"
-                    required
-                  />
-                </div>
-
-                <div className="col-12">
-                  <label className="form-label small fw-bold text-dark mb-1">Email (Optional)</label>
-                  <input
-                    type="email"
-                    className="form-control rounded-3 shadow-xs"
-                    style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
-                    value={customerEmail}
-                    onChange={(e) => {
-                      setCustomerEmail(e.target.value);
-                      sessionStorage.setItem('customer_email', e.target.value);
-                      localStorage.setItem('customer_email', e.target.value);
-                    }}
-                    placeholder="ravi@gmail.com"
-                  />
-                </div>
-              </div>
-
-              <h6 className="fw-bold text-dark mb-2.5" style={{ fontSize: '15px' }}>Dining Option</h6>
+              <h5 className="fw-bold text-dark mb-3" style={{ fontSize: '18px' }}>Dining Option</h5>
               <div className="row g-3 mb-3">
                 <div className="col-6">
                   <div
@@ -520,47 +440,43 @@ export const Checkout = () => {
 
               {orderType === DINE_IN && (
                 <div className="mb-3">
-                  <label className="form-label small fw-bold text-dark mb-1">Select Table *</label>
+                  <label className="form-label small fw-bold text-dark mb-1">
+                    {(hasScannedTable() || cartView?.table || getSelectedTableId()) ? 'Dining Table' : 'Select Table *'}
+                  </label>
                   <div className="d-flex align-items-center gap-2">
-                    <select
-                      className="form-select rounded-3 shadow-xs fw-semibold flex-grow-1"
-                      style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
-                      value={cartView?.table?.id || getSelectedTableId() || ''}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        const found = tableChoices.find(t => String(t.id) === String(val));
-                        if (found) chooseType(DINE_IN, found);
-                      }}
-                    >
-                      <option value="">Choose Table...</option>
-                      {tableChoices.map((tbl) => (
-                        <option key={tbl.id} value={tbl.id}>
-                          {formatCompactTableLabel(tbl.table_number)} ({tbl.capacity || 4} Seats)
-                        </option>
-                      ))}
-                    </select>
+                    {(hasScannedTable() || cartView?.table || getSelectedTableId()) ? (
+                      <div
+                        className="form-control rounded-3 shadow-xs fw-semibold flex-grow-1 d-flex align-items-center bg-light text-dark"
+                        style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
+                      >
+                        {formatCompactTableLabel(cartView?.table?.table_number || getSavedTableNumber() || String(getSelectedTableId()))}
+                      </div>
+                    ) : (
+                      <select
+                        className="form-select rounded-3 shadow-xs fw-semibold flex-grow-1"
+                        style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
+                        value={cartView?.table?.id || getSelectedTableId() || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const found = tableChoices.find(t => String(t.id) === String(val));
+                          if (found) chooseType(DINE_IN, found);
+                        }}
+                      >
+                        <option value="">Choose Table...</option>
+                        {tableChoices.map((tbl) => (
+                          <option key={tbl.id} value={tbl.id}>
+                            {formatCompactTableLabel(tbl.table_number)} ({tbl.capacity || 4} Seats)
+                          </option>
+                        ))}
+                      </select>
+                    )}
                     <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-2 fw-bold" style={{ fontSize: '11px' }}>
-                      Available
+                      Confirmed
                     </span>
                   </div>
                 </div>
               )}
 
-              {/* Special Instructions (Optional) */}
-              <div className="mb-1">
-                <label className="form-label small fw-bold text-dark mb-1">Special Instructions (Optional)</label>
-                <input
-                  type="text"
-                  className="form-control rounded-3 shadow-xs"
-                  style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
-                  value={specialInstructions}
-                  onChange={(e) => {
-                    setSpecialInstructions(e.target.value);
-                    sessionStorage.setItem('foodie_order_instructions', e.target.value);
-                  }}
-                  placeholder="Extra chutney, less spicy."
-                />
-              </div>
 
               {notice && (
                 <div className="alert alert-warning small py-2 mt-3 mb-0" role="status" data-testid="no-tables-banner">

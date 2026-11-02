@@ -26,6 +26,20 @@ import {
 import { branchService } from '../../services/branchService';
 import { useAuth } from '../../hooks/useAuth';
 
+// Helper: Generate 15-minute interval options in 12-hour format (e.g. "10:00 AM")
+const TIME_OPTIONS = (() => {
+  const times = [];
+  for (let h = 0; h < 24; h++) {
+    for (let m = 0; m < 60; m += 15) {
+      const period = h < 12 ? 'AM' : 'PM';
+      const displayH = h % 12 === 0 ? 12 : h % 12;
+      const displayM = m < 10 ? '0' + m : m;
+      times.push(`${displayH < 10 ? '0' + displayH : displayH}:${displayM} ${period}`);
+    }
+  }
+  return times;
+})();
+
 export const Branches = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
@@ -56,6 +70,8 @@ export const Branches = () => {
     email: '',
     managerName: '',
     openingHours: '',
+    openTime: '10:00 AM',
+    closeTime: '11:00 PM',
     tablesCount: 0,
     status: 'Active',
     isMainBranch: false,
@@ -97,6 +113,8 @@ export const Branches = () => {
       email: '',
       managerName: '',
       openingHours: '',
+      openTime: '10:00 AM',
+      closeTime: '11:00 PM',
       tablesCount: 0,
       status: 'Active',
       isMainBranch: branches.length === 0,
@@ -126,6 +144,14 @@ export const Branches = () => {
       email: branch.email || '',
       managerName: branch.managerName || '',
       openingHours: branch.openingHours || '',
+      openTime: (() => {
+        const parts = (branch.openingHours || '').split(' - ');
+        return parts[0]?.trim() || '10:00 AM';
+      })(),
+      closeTime: (() => {
+        const parts = (branch.openingHours || '').split(' - ');
+        return parts[1]?.trim() || '11:00 PM';
+      })(),
       tablesCount: (branch.tablesCount > 0 ? branch.tablesCount : (branch.liveTables ?? 0)),
       status: branch.status || 'Active',
       isMainBranch: Boolean(branch.isMainBranch),
@@ -169,13 +195,15 @@ export const Branches = () => {
       setErrorMessage('Branch manager name cannot contain numbers.');
       return;
     }
-    if (!formData.openingHours?.trim()) {
-      setErrorMessage('Opening hours are mandatory.');
+    const computedHours = (formData.openTime && formData.closeTime)
+      ? `${formData.openTime} - ${formData.closeTime}`
+      : (formData.openingHours || '').trim();
+    if (!computedHours) {
+      setErrorMessage('Opening and closing times are mandatory.');
       return;
     }
-    const cleanHours = formData.openingHours.replace(/\s/g, '').replace(/-/g, '').toLowerCase();
-    if (['00:00', '00:0000:00', '0:00', '00:00-00:00', '0:00-0:00'].includes(cleanHours)) {
-      setErrorMessage('Please enter valid opening hours (e.g. 10:00 AM - 11:30 PM).');
+    if (formData.openTime && formData.closeTime && formData.openTime === formData.closeTime) {
+      setErrorMessage('Opening time and closing time cannot be identical.');
       return;
     }
     if (!formData.image?.trim()) {
@@ -187,10 +215,14 @@ export const Branches = () => {
     setErrorMessage('');
 
     try {
+      const payload = {
+        ...formData,
+        openingHours: computedHours
+      };
       if (editingBranch) {
-        await branchService.updateBranch(editingBranch.id, formData);
+        await branchService.updateBranch(editingBranch.id, payload);
       } else {
-        const created = await branchService.createBranch(formData);
+        const created = await branchService.createBranch(payload);
         if (created) {
           setCreatedSuccessBranch(created);
         }
@@ -473,15 +505,44 @@ export const Branches = () => {
               />
             </div>
 
-            <div className="col-12 col-md-6">
-              <Input 
-                label="Opening Hours"
-                name="openingHours"
-                placeholder="e.g. 10:00 AM - 11:30 PM"
-                value={formData.openingHours}
-                onChange={handleFormChange}
-                required
-              />
+            <div className="col-12 col-md-3">
+              <div className="mb-3">
+                <label className="form-label small fw-bold text-dark mb-1 text-nowrap">
+                  Opening Time&nbsp;<span className="text-danger">*</span>
+                </label>
+                <select
+                  name="openTime"
+                  value={formData.openTime}
+                  onChange={handleFormChange}
+                  className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs"
+                  style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
+                  required
+                >
+                  {TIME_OPTIONS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="col-12 col-md-3">
+              <div className="mb-3">
+                <label className="form-label small fw-bold text-dark mb-1 text-nowrap">
+                  Closing Time&nbsp;<span className="text-danger">*</span>
+                </label>
+                <select
+                  name="closeTime"
+                  value={formData.closeTime}
+                  onChange={handleFormChange}
+                  className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs"
+                  style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
+                  required
+                >
+                  {TIME_OPTIONS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             <div className="col-12">

@@ -1559,9 +1559,6 @@ export const Pos = () => {
                       cursor: 'pointer'
                     }}
                   >
-                    <span className="d-flex align-items-center">
-                      {getCategoryIcon(cat)}
-                    </span>
                     <span>
                       {isAll ? 'All Dishes' : cat} ({count})
                     </span>
@@ -1658,45 +1655,6 @@ export const Pos = () => {
                 </select>
               </div>
 
-              {/* Grid / List View Toggle */}
-              <div className="d-flex align-items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setPosViewMode('grid')}
-                  className="btn btn-sm d-flex align-items-center justify-content-center p-0 shadow-xs transition-all"
-                  style={{
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: '10px',
-                    backgroundColor: posViewMode === 'grid' ? '#F20D2D' : '#FFFFFF',
-                    borderColor: posViewMode === 'grid' ? '#F20D2D' : '#E2E8F0',
-                    color: posViewMode === 'grid' ? '#FFFFFF' : '#64748B',
-                    borderWidth: '1px',
-                    borderStyle: 'solid'
-                  }}
-                  title="Grid View"
-                >
-                  <FiGrid size={17} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPosViewMode('list')}
-                  className="btn btn-sm d-flex align-items-center justify-content-center p-0 shadow-xs transition-all"
-                  style={{
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: '10px',
-                    backgroundColor: posViewMode === 'list' ? '#F20D2D' : '#FFFFFF',
-                    borderColor: posViewMode === 'list' ? '#F20D2D' : '#E2E8F0',
-                    color: posViewMode === 'list' ? '#FFFFFF' : '#64748B',
-                    borderWidth: '1px',
-                    borderStyle: 'solid'
-                  }}
-                  title="List View"
-                >
-                  <FiList size={17} />
-                </button>
-              </div>
             </div>
 
             {/* 4. Food Cards Responsive 4-Column Grid */}
@@ -1888,73 +1846,87 @@ export const Pos = () => {
 
                             {/* Stepper / Add Row */}
                             <div className="d-flex align-items-center justify-content-between mt-3 pt-2 border-top border-light-subtle">
-                              {/* Quantity Stepper */}
-                              <div 
-                                className="d-flex align-items-center justify-content-between bg-white border px-2 shadow-xs"
-                                style={{
-                                  height: '32px',
-                                  borderRadius: '16px',
-                                  borderColor: '#E2E8F0',
-                                  minWidth: '86px'
-                                }}
-                              >
-                                <button
-                                  type="button"
-                                  className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
-                                  style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '16px', lineHeight: 1 }}
-                                  onClick={() => handleDecrementDish(dish)}
-                                  disabled={cartQty === 0}
-                                  title="Decrease quantity"
-                                >
-                                  −
-                                </button>
-                                <span className="fw-bold small px-1.5" style={{ fontSize: '13px', color: '#0F172A' }}>
-                                  {cartQty}
-                                </span>
-                                <button
-                                  type="button"
-                                  className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
-                                  style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '16px', lineHeight: 1 }}
-                                  onClick={() => handleIncrementDish(dish)}
-                                  title="Increase quantity"
-                                >
-                                  +
-                                </button>
-                              </div>
+                              {cartQty > 0 ? (
+                                <div className="d-flex align-items-center justify-content-between w-100 gap-2">
+                                  {/* Quantity Stepper */}
+                                  <div 
+                                    className="d-flex align-items-center justify-content-between bg-white border px-2 shadow-xs"
+                                    style={{
+                                      height: '32px',
+                                      borderRadius: '16px',
+                                      borderColor: '#E2E8F0',
+                                      minWidth: '86px'
+                                    }}
+                                  >
+                                    <button
+                                      type="button"
+                                      className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
+                                      style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '16px', lineHeight: 1 }}
+                                      onClick={() => handleDecrementDish(dish)}
+                                      title="Decrease quantity"
+                                    >
+                                      −
+                                    </button>
+                                    <span className="fw-bold small px-1.5" style={{ fontSize: '13px', color: '#0F172A' }}>
+                                      {cartQty}
+                                    </span>
+                                    <button
+                                      type="button"
+                                      className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
+                                      style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '16px', lineHeight: 1 }}
+                                      onClick={() => handleIncrementDish(dish)}
+                                      title="Increase quantity"
+                                    >
+                                      +
+                                    </button>
+                                  </div>
 
-                              {/* Circular Red Add Button */}
-                              <div className="d-flex align-items-center gap-1.5">
-                                {hasToppings && (
+                                  {hasToppings && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenCustomize(dish)}
+                                      className="btn btn-sm btn-outline-secondary px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill"
+                                      style={{ height: '32px', fontSize: '11.5px' }}
+                                      title="Special instructions & customizations"
+                                    >
+                                      ⚙ Customize
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="d-flex align-items-center justify-content-end w-100 gap-2">
+                                  {hasToppings && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleOpenCustomize(dish)}
+                                      className="btn btn-sm btn-outline-secondary px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill"
+                                      style={{ height: '32px', fontSize: '11.5px' }}
+                                      title="Special instructions & customizations"
+                                      disabled={isOutOfStock}
+                                    >
+                                      ⚙ Customize
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
-                                    onClick={() => handleOpenCustomize(dish)}
-                                    className="btn btn-sm btn-outline-secondary p-0 d-flex align-items-center justify-content-center"
-                                    style={{ width: '28px', height: '28px', borderRadius: '50%', fontSize: '11px' }}
-                                    title="Special instructions & customizations"
+                                    onClick={() => handleAddDish(dish)}
+                                    className="btn btn-sm px-3 py-1 d-inline-flex align-items-center gap-1 rounded-pill shadow-xs transition-all fw-semibold"
+                                    style={{
+                                      height: '32px',
+                                      backgroundColor: '#F20D2D',
+                                      borderColor: '#F20D2D',
+                                      color: '#FFFFFF',
+                                      cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                                      opacity: isOutOfStock ? 0.4 : 1,
+                                      fontSize: '12px'
+                                    }}
+                                    disabled={isOutOfStock}
+                                    title={isOutOfStock ? "Out of Stock" : `Add ${dish.name} to order`}
                                   >
-                                    ⚙
+                                    <FiPlus size={14} /> Add
                                   </button>
-                                )}
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddDish(dish)}
-                                  className="btn btn-sm p-0 d-flex align-items-center justify-content-center shadow-xs transition-all"
-                                  style={{
-                                    width: '32px',
-                                    height: '32px',
-                                    borderRadius: '50%',
-                                    backgroundColor: '#F20D2D',
-                                    borderColor: '#F20D2D',
-                                    color: '#FFFFFF',
-                                    cursor: isOutOfStock ? 'not-allowed' : 'pointer',
-                                    opacity: isOutOfStock ? 0.4 : 1
-                                  }}
-                                  disabled={isOutOfStock}
-                                  title={isOutOfStock ? "Out of Stock" : `Add ${dish.name} to order`}
-                                >
-                                  <FiPlus size={16} />
-                                </button>
-                              </div>
+                                </div>
+                              )}
                             </div>
                           </div>
                         </div>
@@ -2413,7 +2385,7 @@ export const Pos = () => {
                     ) : (
                       <>
                         <FiSave size={16} />
-                        <span>Save Order</span>
+                        <span>{orderType === 'TAKEAWAY' ? 'Confirm Order' : 'Save Order'}</span>
                       </>
                     )}
                   </button>
@@ -2781,11 +2753,15 @@ export const Pos = () => {
                                       <span>{statusText}</span>
                                     </span>
                                   </div>
-                                  <div className="small text-muted d-flex align-items-center gap-1" style={{ fontSize: '11.5px' }}>
-                                    <span>👥</span>
-                                    <span>{table.capacity || 4} Seats</span>
+                                  <div className="small text-muted" style={{ fontSize: '11.5px' }}>
+                                    <div className="d-flex align-items-center gap-1">
+                                      <span>👥</span>
+                                      <span className="fw-medium text-dark">{table.capacity || 4} Seats</span>
+                                    </div>
                                     {table.location && (
-                                      <span className="text-secondary ms-1">· {table.location}</span>
+                                      <div className="text-secondary ps-3 text-truncate" style={{ fontSize: '11px' }}>
+                                        {table.location}
+                                      </div>
                                     )}
                                   </div>
                                 </div>

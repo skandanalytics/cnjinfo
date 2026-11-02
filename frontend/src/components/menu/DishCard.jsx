@@ -132,7 +132,7 @@ export const DishCard = ({
         </div>
 
         {/* Pricing & Stock Row */}
-        <div className="d-flex align-items-center justify-content-between mt-auto">
+        <div className="d-flex align-items-center justify-content-between mt-auto mb-2">
           <div className="d-flex align-items-baseline gap-2">
             <span className="fw-bold" style={{ fontSize: '18px', color: '#F20D2D' }}>
               {formatCurrency(finalPrice)}
@@ -153,7 +153,7 @@ export const DishCard = ({
         </div>
 
         {/* Card Footer: Restock Toggle & Circular Edit / Delete Buttons */}
-        <div className="d-flex align-items-center justify-content-between pt-2.5 mt-2.5 border-top" style={{ borderColor: '#F1F5F9' }}>
+        <div className="d-flex align-items-center justify-content-between pt-2.5 mt-1 border-top" style={{ borderColor: '#F1F5F9' }}>
           {isAdmin && onRestock && (
             <button
               type="button"

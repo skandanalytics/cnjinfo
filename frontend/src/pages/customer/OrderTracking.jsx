@@ -249,7 +249,8 @@ export const OrderTracking = () => {
   return (
     <CustomerLayout>
       <main className="pt-3 pb-5 mx-auto" style={{ maxWidth: '960px' }}>
-        <div className="d-flex align-items-center justify-content-between mb-4">
+        <div className="d-flex align-items-center gap-3 mb-4">
+          <BackButton to="/customer/home" />
           <div>
             <h3 className="fw-bold text-dark mb-1">Track Order</h3>
             <p className="text-secondary small mb-0">
@@ -257,7 +258,6 @@ export const OrderTracking = () => {
               {(order.time || order.created_at) && ` · Placed on ${order.time || order.created_at}`}
             </p>
           </div>
-          <BackButton to="/customer/home" />
         </div>
 
         {/* Horizontal Status Timeline Card (Screenshot 10) */}
@@ -469,60 +469,76 @@ export const OrderTracking = () => {
                   <span>View E-Bill</span>
                 </button>
 
-                {order.orderType !== 'Takeaway' && String(order.table).toLowerCase() !== 'takeaway' && String(order.status || '').toUpperCase() !== 'CANCELLED' && String(order.status || '').toUpperCase() !== 'COMPLETED' && currentStatus !== 'Completed' && (
-                  <button
-                    type="button"
-                    onClick={async () => {
-                      const rootId = order.parent_order_id || order.parent_order || order.id || orderId;
-                      sessionStorage.setItem('foodie_parent_order_id', String(rootId));
-                      localStorage.setItem('foodie_parent_order_id', String(rootId));
-                      let tid = order.table_id || (typeof order.table === 'object' ? order.table?.id : (Number(order.table) || null)) || order.tableId;
-                      const tNum = order.table_number || order.tableNumber || (typeof order.table === 'object' ? order.table?.table_number || order.table?.label : order.table);
+                {/* Unpaid Order Actions: Proceed to Bill and Order Again */}
+                {!isPaid && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const targetId = order.id || orderId;
+                        navigate(`/customer/payment?order=${targetId}`);
+                      }}
+                      className="btn btn-danger w-100 py-2.5 fw-bold rounded-pill shadow-xs d-flex align-items-center justify-content-center gap-2 text-white"
+                      style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D', fontSize: '13px' }}
+                    >
+                      <span>Proceed to Bill</span>
+                    </button>
 
-                      if (!tid && tNum) {
-                        try {
-                          const { resolvePublicBranchId, availableTables } = await import('../../services/customerCheckout');
-                          const branchId = order.branch || order.branch_id || await resolvePublicBranchId();
-                          if (branchId) {
-                            const tables = await availableTables(branchId);
-                            const cleanTarget = String(tNum).toUpperCase().trim();
-                            const matched = tables.find(t =>
-                              String(t.table_number).toUpperCase().trim() === cleanTarget ||
-                              String(t.table_number).toUpperCase().trim() === cleanTarget.replace(/^TABLE\s*/i, '') ||
-                              `T${String(t.table_number).replace(/\D/g, '').padStart(2, '0')}` === cleanTarget
-                            );
-                            if (matched) tid = matched.id;
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const rootId = order.parent_order_id || (typeof order.parent_order === 'object' ? order.parent_order?.id : order.parent_order) || order.id || orderId;
+                        sessionStorage.setItem('foodie_parent_order_id', String(rootId));
+                        localStorage.setItem('foodie_parent_order_id', String(rootId));
+                        let tid = order.table_id || (typeof order.table === 'object' ? order.table?.id : (Number(order.table) || null)) || order.tableId;
+                        const tNum = order.table_number || order.tableNumber || (typeof order.table === 'object' ? order.table?.table_number || order.table?.label : order.table);
+
+                        if (!tid && tNum) {
+                          try {
+                            const { resolvePublicBranchId, availableTables } = await import('../../services/customerCheckout');
+                            const branchId = order.branch || order.branch_id || await resolvePublicBranchId();
+                            if (branchId) {
+                              const tables = await availableTables(branchId);
+                              const cleanTarget = String(tNum).toUpperCase().trim();
+                              const matched = tables.find(t =>
+                                String(t.table_number).toUpperCase().trim() === cleanTarget ||
+                                String(t.table_number).toUpperCase().trim() === cleanTarget.replace(/^TABLE\s*/i, '') ||
+                                `T${String(t.table_number).replace(/\D/g, '').padStart(2, '0')}` === cleanTarget
+                              );
+                              if (matched) tid = matched.id;
+                            }
+                          } catch (e) {
+                            console.warn('Could not resolve table id by number:', e);
                           }
-                        } catch (e) {
-                          console.warn('Could not resolve table id by number:', e);
                         }
-                      }
 
-                      if (tid) {
-                        sessionStorage.setItem('foodie_selected_table', String(tid));
-                        localStorage.setItem('foodie_selected_table', String(tid));
-                      }
-                      sessionStorage.setItem('foodie_order_type', 'DINE_IN');
-                      localStorage.setItem('foodie_order_type', 'DINE_IN');
+                        if (tid) {
+                          sessionStorage.setItem('foodie_selected_table', String(tid));
+                          localStorage.setItem('foodie_selected_table', String(tid));
+                        }
+                        const ordType = (order.orderType || order.order_type || 'DINE_IN').toUpperCase();
+                        sessionStorage.setItem('foodie_order_type', ordType);
+                        localStorage.setItem('foodie_order_type', ordType);
 
-                      const phone = order.customer_phone || order.customerPhone || order.phone;
-                      if (phone) {
-                        sessionStorage.setItem('customer_mobile', String(phone));
-                        localStorage.setItem('customer_mobile', String(phone));
-                      }
-                      const name = order.customer_name || order.customerName;
-                      if (name && typeof name === 'string') {
-                        sessionStorage.setItem('customer_name', String(name));
-                        localStorage.setItem('customer_name', String(name));
-                      }
+                        const phone = order.customer_phone || order.customerPhone || order.phone;
+                        if (phone) {
+                          sessionStorage.setItem('customer_mobile', String(phone));
+                          localStorage.setItem('customer_mobile', String(phone));
+                        }
+                        const name = order.customer_name || order.customerName;
+                        if (name && typeof name === 'string') {
+                          sessionStorage.setItem('customer_name', String(name));
+                          localStorage.setItem('customer_name', String(name));
+                        }
 
-                      navigate('/customer/home');
-                    }}
-                    className="btn btn-outline-danger w-100 py-2.5 fw-bold rounded-pill"
-                    style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
-                  >
-                    <span>Order Again / Add Dishes</span>
-                  </button>
+                        navigate('/customer/home');
+                      }}
+                      className="btn btn-outline-danger w-100 py-2.5 fw-bold rounded-pill d-flex align-items-center justify-content-center gap-2"
+                      style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
+                    >
+                      <span>Order Again</span>
+                    </button>
+                  </>
                 )}
               </div>
             </div>

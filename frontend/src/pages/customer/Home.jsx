@@ -140,11 +140,19 @@ export const Home = () => {
 
   const handleToggleCategory = (cat) => {
     setCurrentPage(1);
-    if (cat === 'All' || (selectedCategories.length === 1 && selectedCategories[0] === cat)) {
+    if (cat === 'All') {
       setSelectedCategories(['All']);
-    } else {
-      setSelectedCategories([cat]);
+      return;
     }
+    setSelectedCategories((prev) => {
+      const active = prev.filter((c) => c !== 'All');
+      if (active.includes(cat)) {
+        const next = active.filter((c) => c !== cat);
+        return next.length === 0 ? ['All'] : next;
+      } else {
+        return [...active, cat];
+      }
+    });
   };
 
   const primarySelectedCategory = selectedCategories.length === 1 ? selectedCategories[0] : (isAllSelected ? 'All' : null);
@@ -461,11 +469,17 @@ export const Home = () => {
 
   const handleFoodTypeToggle = (type) => {
     setCurrentPage(1);
-    if (type === 'all' || (selectedFoodTypes.length === 1 && selectedFoodTypes[0] === type)) {
+    if (type === 'all') {
       setSelectedFoodTypes([]);
-    } else {
-      setSelectedFoodTypes([type]);
+      return;
     }
+    setSelectedFoodTypes((prev) => {
+      if (prev.includes(type)) {
+        return prev.filter((t) => t !== type);
+      } else {
+        return [...prev, type];
+      }
+    });
   };
 
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
@@ -736,17 +750,7 @@ export const Home = () => {
             <p className="text-secondary small mb-2.5" style={{ fontSize: '12px' }}>
               Fresh ingredients, tasty dishes, great moments.
             </p>
-            {/* Search for dishes pill inside hero */}
-            <div className="position-relative" style={{ maxWidth: '340px' }}>
-              <input 
-                type="text"
-                placeholder="Search for dishes..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }}
-                className="form-control rounded-pill ps-3.5 py-1.5 border shadow-xs"
-                style={{ fontSize: '12.5px', backgroundColor: '#FFFFFF', borderColor: '#CBD5E1' }}
-              />
-            </div>
+
           </div>
 
           <div className="d-none d-md-flex align-items-center gap-2.5 mt-2 mt-md-0 position-relative" style={{ zIndex: 1 }}>
@@ -836,53 +840,46 @@ export const Home = () => {
                       <button
                         type="button"
                         onClick={() => navigate(`/customer/order-tracking/${ord.id}`, { state: { order: ord } })}
-                        className="btn btn-sm btn-danger rounded-pill px-3.5 py-1.5 fw-bold shadow-sm"
+                        className="btn btn-sm btn-danger rounded-pill px-3 py-1.5 fw-bold shadow-sm"
                         style={{ fontSize: '12px' }}
                       >
                         Track Order →
                       </button>
 
-                      {isCompleted ? (
-                        <button
-                          type="button"
-                          onClick={() => handleViewBill(ord)}
-                          className="btn btn-sm btn-danger rounded-pill px-3.5 py-1.5 fw-bold shadow-sm d-flex align-items-center gap-1.5"
-                          style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '12px' }}
-                        >
-                          <i className="bi bi-receipt me-1"></i>
-                          <span>View Bill</span>
-                        </button>
-                      ) : (
+                      <button
+                        type="button"
+                        onClick={() => handleViewBill(ord)}
+                        className={`btn btn-sm ${isCompleted ? 'btn-danger' : 'btn-outline-light'} rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 shadow-sm`}
+                        style={{
+                          fontSize: '12px',
+                          ...(isCompleted ? { backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)' } : {})
+                        }}
+                      >
+                        <i className="bi bi-receipt me-1"></i>
+                        <span>View Bill</span>
+                      </button>
+
+                      {!isPaid && (
                         <>
                           <button
                             type="button"
-                            onClick={() => handleProceedToBill(ord)}
-                            disabled={isProcessingThisBill}
-                            className="btn btn-sm btn-danger rounded-pill px-3.5 py-1.5 fw-bold shadow-sm"
-                            style={{ backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)', fontSize: '12px' }}
-                          >
-                            {isProcessingThisBill ? 'Processing...' : 'Proceed to Bill'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleViewBill(ord)}
-                            className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
+                            onClick={() => handleContinueOrder(ord)}
+                            className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
                             style={{ fontSize: '12px' }}
                           >
-                            <i className="bi bi-receipt me-1"></i>
-                            <span>View Bill</span>
+                            <i className="bi bi-plus-circle me-1"></i>
+                            <span>Order Again</span>
                           </button>
-                          {ord.orderType !== 'Takeaway' && String(ord.table).toLowerCase() !== 'takeaway' && String(ord.status || '').toUpperCase() !== 'CANCELLED' && !isPaid && (
-                            <button
-                              type="button"
-                              onClick={() => handleContinueOrder(ord)}
-                              className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
-                              style={{ fontSize: '12px' }}
-                            >
-                              <i className="bi bi-plus-circle me-1"></i>
-                              <span>Continue Order</span>
-                            </button>
-                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/customer/payment?order=${ord.id}`)}
+                            className="btn btn-sm btn-success rounded-pill px-3.5 py-1.5 fw-bold shadow-sm d-flex align-items-center gap-1.5"
+                            style={{ fontSize: '12px' }}
+                          >
+                            <i className="bi bi-credit-card me-1"></i>
+                            <span>Proceed to Bill</span>
+                          </button>
                         </>
                       )}
                     </div>
@@ -893,34 +890,6 @@ export const Home = () => {
           </div>
         )}
 
-        {/* Continuing Order Alert Pill for Customer */}
-        {Boolean(sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')) && (
-          <div className="alert alert-danger rounded-4 py-2.5 px-3.5 mb-3.5 d-flex align-items-center justify-content-between gap-2 shadow-xs border-0 bg-danger text-white">
-            <div className="d-flex align-items-center gap-2">
-              <i className="bi bi-arrow-repeat fs-5" />
-              <div>
-                <strong className="d-block" style={{ fontSize: '13px' }}>
-                  Continuing Order #{sessionStorage.getItem('foodie_parent_order_id') || localStorage.getItem('foodie_parent_order_id')}
-                </strong>
-                <span className="opacity-90" style={{ fontSize: '11.5px' }}>
-                  Any new dishes you add to your cart will be appended to your active dining table order ticket.
-                </span>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => {
-                sessionStorage.removeItem('foodie_parent_order_id');
-                localStorage.removeItem('foodie_parent_order_id');
-                window.location.reload();
-              }}
-              className="btn btn-xs btn-outline-light rounded-pill px-3 py-1 fw-bold flex-shrink-0"
-              style={{ fontSize: '11px' }}
-            >
-              Start New Order Instead
-            </button>
-          </div>
-        )}
 
         {/* Sticky Frozen Filter Header Container */}
         <div
@@ -934,30 +903,6 @@ export const Home = () => {
             backgroundColor: 'rgba(255, 255, 255, 0.98)'
           }}
         >
-          {/* Section: Search Dishes */}
-          <div className="mb-3 w-100">
-            <SearchBar
-              placeholder={(!products || products.length === 0) ? "No dishes available to search" : "Search dishes (e.g. idli, pizza, burger)..."}
-              value={search}
-              onChange={(val) => { setSearch(val); setCurrentPage(1); }}
-              disabled={!products || products.length === 0}
-              records={(products || []).map((dish) => ({
-                id: dish.id,
-                label: dish.name,
-                name: dish.name,
-                title: dish.name,
-                category: dish.category_name || (typeof dish.category === 'object' ? dish.category?.name : dish.category) || '',
-                subtitle: dish.category_name || (typeof dish.category === 'object' ? dish.category?.name : dish.category) || '',
-                image: dish.image,
-                price: dish.sellingPrice ?? dish.price,
-                raw: dish,
-              }))}
-              onSelectSuggestion={(item) => {
-                if (item?.id) navigate(`/customer/food/${item.id}${window.location.search || ''}`);
-              }}
-              className="w-100"
-            />
-          </div>
 
           {/* Section: Browse Categories & Sorting */}
           <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
@@ -1050,13 +995,13 @@ export const Home = () => {
                   id="customer-food-filter-veg"
                   onClick={() => handleFoodTypeToggle('veg')}
                   className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
-                    selectedFoodTypes.length === 1 && selectedFoodTypes[0] === 'veg'
+                    selectedFoodTypes.includes('veg')
                       ? 'btn-success text-white shadow-xs'
                       : 'btn-outline-success bg-white text-success'
                   }`}
                   style={{ fontSize: '12px' }}
                 >
-                  <span className="veg-badge" style={{ width: '12px', height: '12px' }}></span>
+                  <span className="veg-badge me-2" style={{ width: '12px', height: '12px' }}></span>
                   <span>Veg</span>
                 </button>
               )}
@@ -1067,13 +1012,13 @@ export const Home = () => {
                   id="customer-food-filter-non-veg"
                   onClick={() => handleFoodTypeToggle('non-veg')}
                   className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
-                    selectedFoodTypes.length === 1 && selectedFoodTypes[0] === 'non-veg'
+                    selectedFoodTypes.includes('non-veg')
                       ? 'btn-danger text-white shadow-xs'
                       : 'btn-outline-danger bg-white text-danger'
                   }`}
                   style={{ fontSize: '12px' }}
                 >
-                  <span className="non-veg-badge" style={{ width: '12px', height: '12px' }}></span>
+                  <span className="non-veg-badge me-2" style={{ width: '12px', height: '12px' }}></span>
                   <span>Non-Veg</span>
                 </button>
               )}
@@ -1084,13 +1029,13 @@ export const Home = () => {
                   id="customer-food-filter-vegan"
                   onClick={() => handleFoodTypeToggle('vegan')}
                   className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
-                    selectedFoodTypes.length === 1 && selectedFoodTypes[0] === 'vegan'
+                    selectedFoodTypes.includes('vegan')
                       ? 'btn-success text-white shadow-xs'
                       : 'btn-outline-success bg-white text-success'
                   }`}
                   style={{ fontSize: '12px' }}
                 >
-                  <span className="vegan-badge" style={{ width: '12px', height: '12px' }}></span>
+                  <span className="vegan-badge me-2" style={{ width: '12px', height: '12px' }}></span>
                   <span>Vegan</span>
                 </button>
               )}

@@ -40,9 +40,15 @@ export const CustomerLogin = () => {
             const avail = (list || []).filter(t => t.available === true || t.status === 'AVAILABLE' || t.status === 'Available');
             setOpenTables(avail);
             if (avail.length > 0) {
-              const savedTableId = sessionStorage.getItem('foodie_selected_table');
+              const savedTableId = sessionStorage.getItem('foodie_selected_table') || localStorage.getItem('foodie_selected_table');
               const found = avail.find(t => String(t.id) === String(savedTableId));
-              setSelectedTable(found || avail[0]);
+              if (found) {
+                // Customer has scanned/selected this specific table: show only this scanned table
+                setOpenTables([found]);
+                setSelectedTable(found);
+              } else {
+                setSelectedTable(avail[0]);
+              }
             }
           }
         }
@@ -201,6 +207,9 @@ export const CustomerLogin = () => {
         } catch (e) { }
       }
 
+      // Isolate customer session: clear any previous order continuation from old sessions
+      sessionStorage.removeItem('foodie_parent_order_id');
+      localStorage.removeItem('foodie_parent_order_id');
       setShowDiningOption(true);
     } catch (err) {
       if (err.retryAfter > 0) {
@@ -331,7 +340,7 @@ export const CustomerLogin = () => {
               <div className="text-start mb-3 p-3 rounded-4 bg-light border border-light-subtle shadow-2xs">
                 <div className="d-flex align-items-center justify-content-between mb-2">
                   <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>
-                    Select Your Dining Table
+                    {openTables.length === 1 ? 'Your Table' : 'Select Your Dining Table'}
                   </span>
                   <span className="badge rounded-pill bg-success-subtle text-success fw-semibold" style={{ fontSize: '11px' }}>
                     {tablesLoading ? 'Checking...' : `${openTables.length} Available`}
