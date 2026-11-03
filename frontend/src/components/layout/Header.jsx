@@ -46,6 +46,21 @@ export const Header = () => {
   const [branchName, setBranchName] = useState(() => {
     return sessionStorage.getItem('foodie_branch_name') || localStorage.getItem('foodie_branch_name') || 'Tumakuru Main';
   });
+  const isQrLocked = typeof window !== 'undefined' && (sessionStorage.getItem('foodie_branch_source') === 'qr' || localStorage.getItem('foodie_branch_source') === 'qr');
+
+  useEffect(() => {
+    const syncBranchName = () => {
+      const name = sessionStorage.getItem('foodie_branch_name') || localStorage.getItem('foodie_branch_name');
+      if (name) setBranchName(name);
+    };
+    syncBranchName();
+    window.addEventListener('foodie_branch_changed', syncBranchName);
+    window.addEventListener('storage', syncBranchName);
+    return () => {
+      window.removeEventListener('foodie_branch_changed', syncBranchName);
+      window.removeEventListener('storage', syncBranchName);
+    };
+  }, []);
 
   useEffect(() => {
     branchService.getBranches().then(res => {
@@ -120,12 +135,13 @@ export const Header = () => {
           <div className="position-relative d-none d-sm-block">
             <button
               type="button"
-              onClick={() => setShowBranchDropdown(!showBranchDropdown)}
+              onClick={() => { if (!isQrLocked) setShowBranchDropdown(!showBranchDropdown); }}
               className="btn btn-sm btn-light border bg-white rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1.5 shadow-xs"
-              style={{ borderColor: '#E2E8F0', fontSize: '12.5px', color: '#334155' }}
+              style={{ borderColor: '#E2E8F0', fontSize: '12.5px', color: '#334155', cursor: isQrLocked ? 'default' : 'pointer' }}
+              title={isQrLocked ? 'Ordered from Table QR' : 'Switch Branch'}
             >
               <span>{branchName}</span>
-              <FiChevronDown size={14} className="text-muted" />
+              {!isQrLocked && <FiChevronDown size={14} className="text-muted" />}
             </button>
 
             {showBranchDropdown && branches.length > 0 && (
@@ -153,6 +169,11 @@ export const Header = () => {
                         localStorage.setItem('foodie_branch_name', b.name);
                         sessionStorage.setItem('foodie_branch_id', String(b.id));
                         localStorage.setItem('foodie_branch_id', String(b.id));
+                        sessionStorage.setItem('foodie_public_branch', String(b.id));
+                        localStorage.setItem('foodie_public_branch', String(b.id));
+                        sessionStorage.setItem('foodie_branch_source', 'chosen');
+                        localStorage.setItem('foodie_branch_source', 'chosen');
+                        window.dispatchEvent(new CustomEvent('foodie_products_updated'));
                         setShowBranchDropdown(false);
                         window.dispatchEvent(new CustomEvent('foodie_branch_changed', { detail: { branchId: b.id, name: b.name } }));
                       }}
@@ -171,17 +192,17 @@ export const Header = () => {
           <form onSubmit={handleSearchSubmit} className="w-100 position-relative">
             <FiSearch 
               className="position-absolute text-muted" 
-              style={{ left: '14px', top: '11px', fontSize: '14px' }} 
+              style={{ left: '14px', top: '13px', fontSize: '15px' }} 
             />
             <input
               type="text"
               className="form-control rounded-pill shadow-xs"
               style={{
-                height: '36px',
-                borderRadius: '18px',
+                height: '42px',
+                borderRadius: '21px',
                 paddingLeft: '38px',
                 paddingRight: headerSearch ? '32px' : '14px',
-                fontSize: '12.5px',
+                fontSize: '13px',
                 borderColor: '#E2E8F0',
                 backgroundColor: '#F8FAFC'
               }}
@@ -193,10 +214,10 @@ export const Header = () => {
               <button
                 type="button"
                 className="btn btn-link position-absolute p-0 text-muted border-0"
-                style={{ right: '12px', top: '8px' }}
+                style={{ right: '12px', top: '11px' }}
                 onClick={() => setHeaderSearch('')}
               >
-                <FiX size={15} />
+                <FiX size={16} />
               </button>
             )}
           </form>

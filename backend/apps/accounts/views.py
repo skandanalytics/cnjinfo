@@ -339,6 +339,8 @@ class EmployeeViewSet(BranchScopedMixin, viewsets.ModelViewSet):
         emp = self.get_object()
         if emp.user_id == request.user.id:
             raise PermissionDenied("You cannot delete your own account.")
+        if emp.role == Employee.Role.SUPER_ADMIN or getattr(emp.user, "is_superuser", False):
+            raise PermissionDenied("Super Admin cannot be deleted.")
         if emp.role in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
             remaining = Employee.objects.filter(
                 role__in=(Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN),

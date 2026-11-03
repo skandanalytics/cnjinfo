@@ -110,6 +110,10 @@ export const Inventory = () => {
       }
     };
 
+    const handleBranchSync = () => {
+      fetchInventory(true);
+    };
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
     window.addEventListener('foodie_categories_updated', handleUpdateEvents);
     window.addEventListener('foodie_products_updated', handleUpdateEvents);
     window.addEventListener('foodie_inventory_updated', handleUpdateEvents);
@@ -122,6 +126,7 @@ export const Inventory = () => {
     document.addEventListener('visibilitychange', handleVis);
 
     return () => {
+      window.removeEventListener('foodie_branch_selected', handleBranchSync);
       window.removeEventListener('foodie_categories_updated', handleUpdateEvents);
       window.removeEventListener('foodie_products_updated', handleUpdateEvents);
       window.removeEventListener('foodie_inventory_updated', handleUpdateEvents);
@@ -474,11 +479,11 @@ export const Inventory = () => {
                             {item.stock <= 0 ? 'Out of Stock' : `${item.stock} Units`}
                           </span>
                         </td>
-                        <td>
+                        <td className="pe-4">
                           <Badge status={isOutOfStockItem(item) ? 'Out of Stock' : isLowStockItem(item) ? 'Low Stock' : 'In Stock'} style={{ fontSize: '10px' }} />
                         </td>
                         {canManageStock && (
-                          <td className="text-end">
+                          <td className="text-end ps-3">
                             <button 
                               onClick={() => handleStartRestock(item)}
                               className="btn btn-sm btn-outline-danger rounded-pill px-3 fw-bold"

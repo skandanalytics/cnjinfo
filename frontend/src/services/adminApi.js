@@ -59,12 +59,29 @@ function roleToApi(role) {
 
 let branchMemo = null;
 
+export function getSelectedAdminBranch() {
+  try {
+    const rawUser = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
+    const u = rawUser ? JSON.parse(rawUser)?.user : null;
+    const isSuperAdmin = u?.backendRole === 'SUPER_ADMIN' || u?.is_superuser || (u?.role === 'admin' && !u?.branchId);
+    if (!isSuperAdmin) {
+      return u?.branchId ? String(u.branchId) : null;
+    }
+    return localStorage.getItem('foodie_admin_selected_branch') || 'ALL';
+  } catch {
+    return null;
+  }
+}
+
 export async function currentBranchId() {
   const raw = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
   let sessionBranchId = null;
+  let isSuperAdmin = false;
   if (raw) {
     try {
-      sessionBranchId = JSON.parse(raw)?.user?.branchId || null;
+      const u = JSON.parse(raw)?.user;
+      sessionBranchId = u?.branchId || null;
+      isSuperAdmin = u?.backendRole === 'SUPER_ADMIN' || u?.is_superuser || (u?.role === 'admin' && !u?.branchId);
     } catch {
       /* ignore */
     }
@@ -75,6 +92,12 @@ export async function currentBranchId() {
   }
   if (sessionBranchId && branches.some((b) => String(b.id) === String(sessionBranchId))) {
     return sessionBranchId;
+  }
+  if (isSuperAdmin) {
+    const selectedBranch = localStorage.getItem('foodie_admin_selected_branch');
+    if (selectedBranch && selectedBranch !== 'ALL' && branches.some((b) => String(b.id) === String(selectedBranch))) {
+      return Number(selectedBranch);
+    }
   }
   if (branchMemo && branches.some((b) => String(b.id) === String(branchMemo))) {
     return branchMemo;
@@ -234,13 +257,20 @@ export async function listTableViews() {
   return listOf(await staffJson('/table-views/'));
 }
 
-export async function listTables(branchId) {
-  const query = branchId ? `?branch=${encodeURIComponent(branchId)}` : '';
+export async function listTables(branchId = null) {
+  let targetBranch = branchId;
+  if (!targetBranch) {
+    const selected = getSelectedAdminBranch();
+    if (selected && selected !== 'ALL') {
+      targetBranch = selected;
+    }
+  }
+  const query = targetBranch && targetBranch !== 'ALL' ? `?branch=${encodeURIComponent(targetBranch)}` : '';
   return listOf(await staffJson(`/tables/${query}`)).map(mapTable);
 }
 
 export async function createTable(data) {
-  const branch = await currentBranchId();
+  const branch = data.branch || await currentBranchId();
   const created = await staffJson('/tables/', {
     method: 'POST',
     body: JSON.stringify({
@@ -319,8 +349,16 @@ function mapCategory(c) {
   };
 }
 
-export async function listCategories() {
-  return listOf(await staffJson('/categories/')).map(mapCategory);
+export async function listCategories(branchId = null) {
+  let targetBranch = branchId;
+  if (!targetBranch) {
+    const selected = getSelectedAdminBranch();
+    if (selected && selected !== 'ALL') {
+      targetBranch = selected;
+    }
+  }
+  const query = targetBranch && targetBranch !== 'ALL' ? `?branch=${encodeURIComponent(targetBranch)}` : '';
+  return listOf(await staffJson(`/categories/${query}`)).map(mapCategory);
 }
 
 export async function createCategory(data) {
@@ -416,7 +454,14 @@ async function stockMap() {
 }
 
 export async function listFoods(branchId = null) {
-  const query = branchId ? ('&branch=' + encodeURIComponent(branchId)) : '';
+  let targetBranch = branchId;
+  if (!targetBranch) {
+    const selected = getSelectedAdminBranch();
+    if (selected && selected !== 'ALL') {
+      targetBranch = selected;
+    }
+  }
+  const query = targetBranch && targetBranch !== 'ALL' ? ('&branch=' + encodeURIComponent(targetBranch)) : '';
   const [foods, stocks] = await Promise.all([
     staffJson('/foods/?is_active=true' + query),
     stockMap(),
@@ -646,8 +691,8 @@ export async function deleteFood(id) {
   return true;
 }
 
-export async function listInventory() {
-  const foods = await listFoods();
+export async function listInventory(branchId = null) {
+  const foods = await listFoods(branchId);
   return foods
     .filter((f) => f.inventoryId)
     .map((f) => ({
@@ -709,8 +754,16 @@ function mapCoupon(c) {
   };
 }
 
-export async function listCoupons() {
-  return listOf(await staffJson('/coupons/')).map(mapCoupon);
+export async function listCoupons(branchId = null) {
+  let targetBranch = branchId;
+  if (!targetBranch) {
+    const selected = getSelectedAdminBranch();
+    if (selected && selected !== 'ALL') {
+      targetBranch = selected;
+    }
+  }
+  const query = targetBranch && targetBranch !== 'ALL' ? `?branch=${encodeURIComponent(targetBranch)}` : '';
+  return listOf(await staffJson(`/coupons/${query}`)).map(mapCoupon);
 }
 
 export async function createCoupon(couponData) {
@@ -1001,7 +1054,17 @@ export async function listOrdersForUi(options = {}) {
   if (isEmployee) {
     isMine = true;
   }
-  const query = isMine ? '?mine=1' : '';
+  let targetBranch = options?.branchId || null;
+  if (!targetBranch && !isEmployee) {
+    const selected = getSelectedAdminBranch();
+    if (selected && selected !== 'ALL') {
+      targetBranch = selected;
+    }
+  }
+  const params = [];
+  if (isMine) params.push('mine=1');
+  if (targetBranch && targetBranch !== 'ALL') params.push(`branch=${encodeURIComponent(targetBranch)}`);
+  const query = params.length > 0 ? `?${params.join('&')}` : '';
   const rows = listOf(await staffJson(`/orders/${query}`));
   let mapped = rows.map(mapOrder);
   if (isEmployee && loggedInUser?.id) {

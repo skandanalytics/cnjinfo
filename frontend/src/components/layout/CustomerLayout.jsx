@@ -151,7 +151,7 @@ export const CustomerLayout = ({ children }) => {
       <Header />
 
       {/* Main Content (Wide layout utilizing Bootstrap container system) */}
-      <div className="flex-grow-1 py-4 container" style={{ paddingBottom: hasCartItems ? '140px' : '80px' }}>
+      <div className="flex-grow-1 pt-2 pb-4 container" style={{ paddingBottom: hasCartItems ? '140px' : '80px' }}>
         {children}
       </div>
 

@@ -25,13 +25,7 @@ class CouponViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, view
     search_fields = ["code", "description"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-        if user.is_authenticated:
-            emp = getattr(user, "employee", None)
-            if emp and emp.role == "SUPER_ADMIN":
-                qs = qs.filter(Q(created_by=user) | Q(created_by__isnull=True))
-        return qs.distinct()
+        return super().get_queryset().distinct()
 
     def destroy(self, request, *args, **kwargs):
         """Coupons are deleted cleanly; historical redemptions retain snapshot coupon_code and order data."""

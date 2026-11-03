@@ -9,11 +9,15 @@ export const AddTableModal = ({
   onClose,
   onAdd,
   existingTables = [],
+  branches = [],
+  initialBranchId = null,
+  isSuperAdmin = false,
 }) => {
   const [numberDigits, setNumberDigits] = useState('');
   const [capacity, setCapacity] = useState('4');
   const [area, setArea] = useState('Indoor Main');
   const [status, setStatus] = useState('Available');
+  const [selectedBranchId, setSelectedBranchId] = useState(() => initialBranchId || (branches[0]?.id ? String(branches[0].id) : ''));
   const [errorMsg, setErrorMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -38,9 +42,10 @@ export const AddTableModal = ({
       setCapacity('4');
       setArea('Indoor Main');
       setStatus('Available');
+      setSelectedBranchId(initialBranchId ? String(initialBranchId) : (branches[0]?.id ? String(branches[0].id) : ''));
       setErrorMsg('');
     }
-  }, [isOpen, existingTables]);
+  }, [isOpen, existingTables, initialBranchId, branches]);
 
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
@@ -106,7 +111,8 @@ export const AddTableModal = ({
         capacity: capNum,
         area,
         location: area,
-        status
+        status,
+        branch: selectedBranchId ? Number(selectedBranchId) : undefined,
       });
       setNumberDigits('');
       setCapacity('4');
@@ -191,6 +197,27 @@ export const AddTableModal = ({
       <form onSubmit={handleSubmit}>
         {errorMsg && (
           <div className="alert alert-danger py-2 small fw-semibold mb-3">{errorMsg}</div>
+        )}
+
+        {isSuperAdmin && branches && branches.length > 0 && (
+          <div className="mb-3">
+            <label className="form-label small fw-semibold text-secondary mb-1">
+              Assign to Branch <span className="text-danger">*</span>
+            </label>
+            <select
+              className="form-select rounded-3 py-2 fw-semibold text-dark"
+              style={{ fontSize: '13.5px', borderColor: '#CBD5E1' }}
+              value={selectedBranchId}
+              onChange={(e) => setSelectedBranchId(e.target.value)}
+              required
+            >
+              {branches.map((b) => (
+                <option key={b.id} value={String(b.id)}>
+                  {b.name} ({b.code}){b.isMainBranch || b.is_primary ? ' - HQ' : ''}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
 
         <div className="row g-3 mb-3">

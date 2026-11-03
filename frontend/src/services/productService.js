@@ -422,36 +422,8 @@ export function chooseCustomerBranch(id) {
 }
 
 async function resolveCustomerBranchId() {
-  const qr = new URLSearchParams(window.location.search).get('qr');
-  if (qr) {
-    try {
-      const resolved = await api.get(`/public/qr/${qr}/`);
-      if (resolved.data?.branch?.id) {
-        const bId = String(resolved.data.branch.id);
-        const prevBranch = sessionStorage.getItem('foodie_public_branch');
-        if (prevBranch && prevBranch !== bId) {
-          clearStaticProductCache();
-        }
-        sessionStorage.setItem('foodie_public_branch', bId);
-        localStorage.setItem('foodie_public_branch', bId);
-        sessionStorage.setItem('foodie_branch_source', 'qr');
-        localStorage.setItem('foodie_branch_source', 'qr');
-        sessionStorage.setItem('foodie_table_qr', qr);
-        return bId;
-      }
-    } catch (e) { /* unknown QR falls through */ }
-  }
-  const source = sessionStorage.getItem('foodie_branch_source') || localStorage.getItem('foodie_branch_source');
-  const saved = sessionStorage.getItem('foodie_public_branch') || localStorage.getItem('foodie_public_branch');
-  if (saved && (source === 'qr' || source === 'chosen')) return saved;
-  try {
-    const rows = await listOpenBranches();
-    if (rows.length === 1) {
-      chooseCustomerBranch(rows[0].id);
-      return String(rows[0].id);
-    }
-  } catch (e) { /* no public branch */ }
-  return null;
+  const { resolveAuthoritativeBranch } = await import('./branchResolution');
+  return await resolveAuthoritativeBranch();
 }
 
 export const productService = {

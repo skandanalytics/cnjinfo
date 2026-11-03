@@ -121,7 +121,7 @@ export const TableCard = ({
             if (onEdit) onEdit(table);
           }}
           className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
-          style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '32px' }}
+          style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '30px', lineHeight: '1.2' }}
           title="Edit Table"
         >
           <FiEdit2 size={12} className="text-muted" />
@@ -141,11 +141,11 @@ export const TableCard = ({
             }
           }}
           className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
-          style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '32px' }}
+          style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '30px', lineHeight: '1.2' }}
           title={isOccupied ? "View active order" : "Take table order"}
         >
           <FiEye size={12} className="text-muted" />
-          <span>View Order</span>
+          <span>{isOccupied ? 'View Order' : 'Take Order'}</span>
         </button>
 
         {onViewQR && (
@@ -156,7 +156,7 @@ export const TableCard = ({
               onViewQR(table);
             }}
             className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
-            style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '32px' }}
+            style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '30px', lineHeight: '1.2' }}
             title="View Table QR Code"
           >
             <i className="bi bi-qr-code text-muted" style={{ fontSize: '11px' }} />

@@ -105,6 +105,22 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if allowed is not None and (branch is None or branch.id != allowed):
             raise serializers.ValidationError({"branch": "You can only manage employees of your own branch."})
 
+        # Exactly one active Branch Admin per branch rule (AC-01, AC-02, AC-12)
+        new_status = attrs.get("status", inst.status if inst else Employee.Status.ACTIVE)
+        if role == Employee.Role.ADMIN and new_status == Employee.Status.ACTIVE and branch is not None:
+            existing_admin = Employee.objects.filter(
+                branch=branch,
+                role=Employee.Role.ADMIN,
+                status=Employee.Status.ACTIVE
+            )
+            if inst:
+                existing_admin = existing_admin.exclude(pk=inst.pk)
+            replace_admin = self.context.get("request") and self.context["request"].query_params.get("replace_admin") == "true"
+            if existing_admin.exists() and not replace_admin:
+                raise serializers.ValidationError(
+                    {"role": f"Branch '{branch.name}' already has an active Branch Admin. Only one active Branch Admin is allowed per branch."}
+                )
+
         if inst is None and not attrs.get("password"):
             raise serializers.ValidationError({"password": "Password is required."})
 

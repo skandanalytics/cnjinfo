@@ -167,16 +167,9 @@ export const couponService = {
   getCoupons: async () => {
     const { isStaffScreen, listCoupons } = await import('./adminApi');
     if (isStaffScreen()) return listCoupons();
-    let branchId = sessionStorage.getItem('foodie_public_branch');
-    if (!branchId) {
-      const listed = await api.get('/public/branches/').catch(() => ({ data: [] }));
-      const rows = Array.isArray(listed.data) ? listed.data : [];
-      const pick = rows.find((row) => row.is_primary) || (rows.length === 1 ? rows[0] : null);
-      if (!pick) return [];
-      branchId = String(pick.id);
-      sessionStorage.setItem('foodie_public_branch', branchId);
-      sessionStorage.setItem('foodie_branch_source', 'chosen');
-    }
+    const { resolveAuthoritativeBranch } = await import('./branchResolution');
+    const branchId = await resolveAuthoritativeBranch();
+    if (!branchId) return [];
     const menu = await api.get(`/public/branches/${branchId}/menu/`);
     const offers = Array.isArray(menu.data?.offers) ? menu.data.offers : [];
     return offers

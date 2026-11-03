@@ -102,6 +102,10 @@ export const Dashboard = () => {
       }, 300);
     };
 
+    const handleBranchSync = () => {
+      fetchAnalytics(true);
+    };
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
     window.addEventListener('foodie_orders_updated', scheduleSync);
     window.addEventListener('foodie_tables_updated', scheduleSync);
     window.addEventListener('foodie_inventory_updated', scheduleSync);
@@ -110,6 +114,7 @@ export const Dashboard = () => {
 
     return () => {
       if (syncDebounceTimerRef.current) clearTimeout(syncDebounceTimerRef.current);
+      window.removeEventListener('foodie_branch_selected', handleBranchSync);
       window.removeEventListener('foodie_orders_updated', scheduleSync);
       window.removeEventListener('foodie_tables_updated', scheduleSync);
       window.removeEventListener('foodie_inventory_updated', scheduleSync);

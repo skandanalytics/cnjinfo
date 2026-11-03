@@ -353,10 +353,6 @@ export const OrderConfirmation = () => {
             Order Number: <span className="font-monospace fw-bold text-dark" data-testid="order-number">#{displayNo}</span>
           </p>
 
-          {paymentNote && paymentNote.status !== 'PAID' && (
-            <div className="alert alert-warning text-start small mb-3" role="alert">{paymentNote.message}</div>
-          )}
-
           {/* Key Value Details matching Screenshot 8 & 9 */}
           <div className="w-100 text-start border-top border-bottom py-3 my-2">
             <div className="d-flex align-items-center justify-content-between mb-2.5">

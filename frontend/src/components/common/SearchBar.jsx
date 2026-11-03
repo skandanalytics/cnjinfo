@@ -184,7 +184,7 @@ export const SearchBar = ({
   ) : null;
 
   return (
-    <div ref={containerRef} className={`position-relative ${className}`} style={{ ...style, minWidth: '160px' }}>
+    <div ref={containerRef} className={`position-relative ${className}`} style={{ minWidth: '220px', ...style }}>
       <div
         className="position-absolute start-0 top-0 bottom-0 d-flex align-items-center justify-content-center ms-3"
         style={{ color: disabled ? '#94a3b8' : 'var(--primary-color)', zIndex: 3, pointerEvents: 'none' }}
@@ -209,7 +209,7 @@ export const SearchBar = ({
         }}
         onKeyDown={handleKeyDown}
         style={{
-          height: style?.height || '40px',
+          height: style?.height || '42px',
           fontSize: '13px',
           backgroundColor: disabled ? '#f1f5f9' : '#ffffff',
           cursor: disabled ? 'not-allowed' : 'text',

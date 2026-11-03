@@ -38,6 +38,8 @@ export const FoodCard = ({ dish }) => {
   const discountLabel = calculatedPct > 0 ? `${calculatedPct}% OFF` : `OFFER AVAILABLE`;
 
   const isOutOfStock = isDishOutOfStock(dish);
+  const currentStock = dish.stock !== undefined && dish.stock !== null && dish.stock !== '' ? Number(dish.stock) : 10;
+  const isLowStock = !isOutOfStock && currentStock > 0 && currentStock <= 5;
 
   const isPopular = Boolean(
     dish.isPopular ||
@@ -188,44 +190,57 @@ export const FoodCard = ({ dish }) => {
             )}
           </div>
 
-          {isOutOfStock ? (
-            <div className="text-end">
+          {/* Fixed-position Add / Quantity Controls with Availability Dot */}
+          <div className="d-flex align-items-center justify-content-end gap-2" style={{ minWidth: '100px' }}>
+            {/* Availability Dot Indicator beside Add button */}
+            <span
+              className="rounded-circle flex-shrink-0"
+              style={{
+                width: '8px',
+                height: '8px',
+                backgroundColor: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A',
+                boxShadow: isOutOfStock ? '0 0 0 2px rgba(220, 38, 38, 0.2)' : isLowStock ? '0 0 0 2px rgba(217, 119, 6, 0.2)' : '0 0 0 2px rgba(22, 163, 74, 0.2)'
+              }}
+              title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
+            />
+
+            {isOutOfStock ? (
               <button
                 type="button"
                 onClick={handleOutOfStockClick}
-                className="btn btn-sm btn-secondary rounded-pill px-3 py-1 fw-bold opacity-75"
-                style={{ fontSize: '11px', cursor: 'pointer' }}
+                className="btn btn-sm btn-secondary rounded-pill px-2.5 py-1 fw-bold opacity-75"
+                style={{ fontSize: '11px', cursor: 'pointer', height: '32px' }}
                 title="Click to view out of stock details"
               >
                 Out of Stock
               </button>
-            </div>
-          ) : quantityInCart > 0 ? (
-            <div onClick={(e) => e.stopPropagation()}>
-              <QuantityControl
-                quantity={quantityInCart}
-                min={0}
-                max={typeof dish.stock === 'number' ? dish.stock : undefined}
-                onIncrease={() => increaseQuantity(dish.id)}
-                onDecrease={() => decreaseQuantity(dish.id)}
-                onChange={(val) => updateQuantity(dish.id, val)}
-              />
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={handleQuickAdd}
-              className="btn btn-danger rounded-circle p-0 d-flex align-items-center justify-content-center shadow-sm flex-shrink-0 border-0"
-              style={{ 
-                width: '36px', 
-                height: '36px', 
-                backgroundColor: 'var(--primary-color, #F20D2D)'
-              }}
-              title={`Add ${dish.name}`}
-            >
-              <FiPlus size={20} className="text-white" />
-            </button>
-          )}
+            ) : quantityInCart > 0 ? (
+              <div onClick={(e) => e.stopPropagation()}>
+                <QuantityControl
+                  quantity={quantityInCart}
+                  min={0}
+                  max={typeof dish.stock === 'number' ? dish.stock : undefined}
+                  onIncrease={() => increaseQuantity(dish.id)}
+                  onDecrease={() => decreaseQuantity(dish.id)}
+                  onChange={(val) => updateQuantity(dish.id, val)}
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleQuickAdd}
+                className="btn btn-danger rounded-circle p-0 d-flex align-items-center justify-content-center shadow-sm flex-shrink-0 border-0"
+                style={{ 
+                  width: '34px', 
+                  height: '34px', 
+                  backgroundColor: 'var(--primary-color, #F20D2D)'
+                }}
+                title={`Add ${dish.name}`}
+              >
+                <FiPlus size={18} className="text-white" />
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

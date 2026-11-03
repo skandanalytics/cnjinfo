@@ -155,6 +155,20 @@ export const Home = () => {
     });
   };
 
+  const [showCategoryDesc, setShowCategoryDesc] = useState(true);
+
+  // Auto-hide category description after ~1 minute (60s) on mobile, reset when category changes
+  useEffect(() => {
+    setShowCategoryDesc(true);
+    const timer = setTimeout(() => {
+      // Only auto-hide on mobile screens (< 768px)
+      if (typeof window !== 'undefined' && window.innerWidth < 768) {
+        setShowCategoryDesc(false);
+      }
+    }, 60000);
+    return () => clearTimeout(timer);
+  }, [selectedCategories]);
+
   const primarySelectedCategory = selectedCategories.length === 1 ? selectedCategories[0] : (isAllSelected ? 'All' : null);
 
   const activeCategoryObj = primarySelectedCategory ? rawCategories.find(c =>
@@ -957,8 +971,8 @@ export const Home = () => {
             </div>
           </div>
 
-          {/* Active Category Description Notice */}
-          {activeCategoryDescription && (
+          {/* Active Category Description Notice (auto-hides after ~1 min on mobile) */}
+          {activeCategoryDescription && showCategoryDesc && (
             <div className="d-flex align-items-center gap-2 px-3 py-2 mb-2 rounded-3 bg-light border border-light-subtle text-start">
               <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1 flex-shrink-0" style={{ fontSize: '10px' }}>
                 {primarySelectedCategory || `${selectedCategories.length} Categories`}
@@ -973,20 +987,21 @@ export const Home = () => {
             <div className="d-flex align-items-center gap-2 flex-wrap px-1 pt-2 border-top border-light-subtle w-100">
               <span className="small fw-semibold text-secondary me-1" style={{ fontSize: '12px' }}>Food Type:</span>
 
-              {/* All Food Types Pill */}
+              {/* All Food Types Pill (Icon Only, Checkbox Toggle) */}
               <button
                 type="button"
                 id="customer-food-filter-all"
                 onClick={() => handleFoodTypeToggle('all')}
-                className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
+                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
                   selectedFoodTypes.length === 0
                     ? 'btn-danger text-white shadow-xs'
                     : 'btn-outline-secondary bg-white text-secondary'
                 }`}
-                style={{ fontSize: '12px' }}
+                style={{ width: '32px', height: '32px' }}
+                title="All Food Types"
+                aria-label="All Food Types"
               >
-                <FiGrid size={13} />
-                <span>All</span>
+                <FiGrid size={15} />
               </button>
 
               {availableFoodTypes.has('veg') && (
@@ -994,15 +1009,16 @@ export const Home = () => {
                   type="button"
                   id="customer-food-filter-veg"
                   onClick={() => handleFoodTypeToggle('veg')}
-                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
+                  className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
                     selectedFoodTypes.includes('veg')
                       ? 'btn-success text-white shadow-xs'
                       : 'btn-outline-success bg-white text-success'
                   }`}
-                  style={{ fontSize: '12px' }}
+                  style={{ width: '32px', height: '32px' }}
+                  title="Vegetarian"
+                  aria-label="Vegetarian"
                 >
-                  <span className="veg-badge me-2" style={{ width: '12px', height: '12px' }}></span>
-                  <span>Veg</span>
+                  <span className="veg-badge" style={{ width: '15px', height: '15px' }}></span>
                 </button>
               )}
 
@@ -1011,15 +1027,16 @@ export const Home = () => {
                   type="button"
                   id="customer-food-filter-non-veg"
                   onClick={() => handleFoodTypeToggle('non-veg')}
-                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
+                  className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
                     selectedFoodTypes.includes('non-veg')
                       ? 'btn-danger text-white shadow-xs'
                       : 'btn-outline-danger bg-white text-danger'
                   }`}
-                  style={{ fontSize: '12px' }}
+                  style={{ width: '32px', height: '32px' }}
+                  title="Non-Vegetarian"
+                  aria-label="Non-Vegetarian"
                 >
-                  <span className="non-veg-badge me-2" style={{ width: '12px', height: '12px' }}></span>
-                  <span>Non-Veg</span>
+                  <span className="non-veg-badge" style={{ width: '15px', height: '15px' }}></span>
                 </button>
               )}
 
@@ -1028,15 +1045,16 @@ export const Home = () => {
                   type="button"
                   id="customer-food-filter-vegan"
                   onClick={() => handleFoodTypeToggle('vegan')}
-                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-semibold d-inline-flex align-items-center gap-1.5 transition-all ${
+                  className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
                     selectedFoodTypes.includes('vegan')
                       ? 'btn-success text-white shadow-xs'
                       : 'btn-outline-success bg-white text-success'
                   }`}
-                  style={{ fontSize: '12px' }}
+                  style={{ width: '32px', height: '32px' }}
+                  title="Vegan"
+                  aria-label="Vegan"
                 >
-                  <span className="vegan-badge me-2" style={{ width: '12px', height: '12px' }}></span>
-                  <span>Vegan</span>
+                  <span className="vegan-badge" style={{ width: '15px', height: '15px' }}></span>
                 </button>
               )}
             </div>

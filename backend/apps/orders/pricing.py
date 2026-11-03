@@ -68,14 +68,7 @@ class Line:
 def _load_lines(branch, lines):
     errors, resolved = [], []
     food_ids = {l.food_id for l in lines}
-    if branch.is_primary:
-        foods_qs = Food.objects.filter(pk__in=food_ids, branch=branch)
-    else:
-        primary = Branch.objects.filter(is_primary=True, is_active=True).first()
-        branch_q = Q(branch=branch)
-        if primary:
-            branch_q |= Q(branch=primary)
-        foods_qs = Food.objects.filter(pk__in=food_ids).filter(branch_q)
+    foods_qs = Food.objects.filter(pk__in=food_ids, branch=branch)
     foods = {f.pk: f for f in foods_qs.select_related("inventory").prefetch_related("discounts")}
     option_ids = {o for l in lines for o in l.option_ids}
     options = {o.pk: o for o in CustomizationOption.objects.filter(pk__in=option_ids)}

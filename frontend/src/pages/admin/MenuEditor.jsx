@@ -122,12 +122,17 @@ export const MenuEditor = () => {
       }
     };
 
+    const handleBranchSync = () => {
+      fetchDetails(true);
+    };
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
     window.addEventListener('foodie_products_updated', handleSync);
     window.addEventListener('foodie_inventory_updated', handleSync);
     window.addEventListener('foodie_categories_updated', handleSync);
     window.addEventListener('storage', handleStorage);
 
     return () => {
+      window.removeEventListener('foodie_branch_selected', handleBranchSync);
       window.removeEventListener('foodie_products_updated', handleSync);
       window.removeEventListener('foodie_inventory_updated', handleSync);
       window.removeEventListener('foodie_categories_updated', handleSync);
@@ -470,45 +475,60 @@ export const MenuEditor = () => {
           </div>
 
           <div className="d-flex align-items-center gap-2 flex-wrap">
-            {/* Category Dropdown */}
-            <select
-              aria-label="Filter dishes by category"
-              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
-              style={{ width: 'auto', minWidth: '150px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
-              value={isAllSelected ? 'all' : (selectedCategories[0] || 'all')}
-              onChange={(e) => {
-                const val = e.target.value;
-                if (val === 'all') {
-                  setSelectedCategories([]);
-                } else {
-                  setSelectedCategories([val]);
-                }
-              }}
-            >
-              <option value="all">All Categories</option>
-              {categoriesList.map((cat) => (
-                <option key={cat.id || cat.name} value={cat.name}>
-                  {cat.name}
-                </option>
-              ))}
-            </select>
+            {/* Food Type Buttons (Icon Only, Checkbox Toggle) */}
+            <div className="d-inline-flex align-items-center gap-1.5 p-1 bg-light rounded-pill border border-light-subtle">
+              <button
+                type="button"
+                onClick={() => setSelectedFoodTypes([])}
+                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                  selectedFoodTypes.length === 0 ? 'btn-danger text-white shadow-xs' : 'btn-light text-secondary'
+                }`}
+                style={{ width: '32px', height: '32px' }}
+                title="All Food Types"
+                aria-label="All Food Types"
+              >
+                <FiGrid size={15} />
+              </button>
 
-            {/* Food Type Dropdown */}
-            <select
-              aria-label="Filter dishes by food type"
-              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
-              style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
-              value={selectedFoodTypes.length === 1 ? selectedFoodTypes[0] : 'all'}
-              onChange={(e) => {
-                if (e.target.value === 'all') setSelectedFoodTypes([]);
-                else setSelectedFoodTypes([e.target.value]);
-              }}
-            >
-              <option value="all">All Food Types</option>
-              <option value="veg">Veg</option>
-              <option value="non-veg">Non-Veg</option>
-              <option value="vegan">Vegan</option>
-            </select>
+              <button
+                type="button"
+                onClick={() => handleFoodTypeToggle('veg')}
+                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                  selectedFoodTypes.includes('veg') ? 'btn-success text-white shadow-xs' : 'btn-light'
+                }`}
+                style={{ width: '32px', height: '32px' }}
+                title="Vegetarian"
+                aria-label="Vegetarian"
+              >
+                <span className="veg-badge" style={{ width: '15px', height: '15px' }}></span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleFoodTypeToggle('non-veg')}
+                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                  selectedFoodTypes.includes('non-veg') ? 'btn-danger text-white shadow-xs' : 'btn-light'
+                }`}
+                style={{ width: '32px', height: '32px' }}
+                title="Non-Vegetarian"
+                aria-label="Non-Vegetarian"
+              >
+                <span className="non-veg-badge" style={{ width: '15px', height: '15px' }}></span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleFoodTypeToggle('vegan')}
+                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                  selectedFoodTypes.includes('vegan') ? 'btn-success text-white shadow-xs' : 'btn-light'
+                }`}
+                style={{ width: '32px', height: '32px' }}
+                title="Vegan"
+                aria-label="Vegan"
+              >
+                <span className="vegan-badge" style={{ width: '15px', height: '15px' }}></span>
+              </button>
+            </div>
 
             {/* Status Dropdown */}
             <select

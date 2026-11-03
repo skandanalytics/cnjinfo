@@ -41,14 +41,7 @@ def public_food(food, request, now=None):
 
 
 def _foods(branch):
-    if branch.is_primary:
-        return (Food.objects.filter(branch=branch, is_active=True, category__is_active=True)
-                .select_related("category", "inventory").prefetch_related("images", "customizations", "discounts"))
-    primary = Branch.objects.filter(is_primary=True, is_active=True).first()
-    branch_q = Q(branch=branch)
-    if primary:
-        branch_q |= Q(branch=primary)
-    return (Food.objects.filter(branch_q, is_active=True, category__is_active=True)
+    return (Food.objects.filter(branch=branch, is_active=True, category__is_active=True)
             .select_related("category", "inventory").prefetch_related("images", "customizations", "discounts"))
 
 
@@ -121,10 +114,7 @@ class PublicMenuView(PublicThrottled):
         elif ordering == "name":
             rows.sort(key=lambda r: r["name"].lower())
 
-        primary = Branch.objects.filter(is_primary=True, is_active=True).first() if not branch.is_primary else None
         cat_branch_q = Q(branch=branch, is_active=True)
-        if primary:
-            cat_branch_q |= Q(branch=primary, is_active=True)
         raw_cats = list(Category.objects.filter(cat_branch_q).order_by("display_order", "id"))
         seen_cat_names = set()
         categories = []
@@ -139,8 +129,6 @@ class PublicMenuView(PublicThrottled):
                 })
 
         coupon_branch_q = Q(branch=branch, is_active=True, valid_from__lte=now, valid_to__gte=now)
-        if primary:
-            coupon_branch_q |= Q(branch=primary, is_active=True, valid_from__lte=now, valid_to__gte=now)
         raw_coupons = list(Coupon.objects.filter(coupon_branch_q).order_by("min_order_value", "code"))
         seen_coupon_codes = set()
         offers = []

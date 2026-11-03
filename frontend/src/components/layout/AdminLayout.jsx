@@ -2,7 +2,9 @@ import React, { useContext, useState, useEffect, useRef } from 'react';
 import Sidebar from './Sidebar';
 import { AppContext } from '../../context/AppContext';
 import { useAuth } from '../../hooks/useAuth';
-import { FiAlignLeft, FiBell, FiChevronDown, FiLogOut, FiShoppingBag, FiX, FiSearch } from 'react-icons/fi';
+import { FiAlignLeft, FiBell, FiChevronDown, FiLogOut, FiShoppingBag, FiX, FiSearch, FiMapPin } from 'react-icons/fi';
+import { useBranches } from '../../hooks/useBranches';
+import { getSelectedAdminBranch } from '../../services/adminApi';
 import { useNavigate } from 'react-router-dom';
 import { orderService } from '../../services/orderService';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
@@ -20,6 +22,53 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
   const { sidebarCollapsed } = useContext(AppContext);
   const unreadCount = (notifications || []).filter(n => !n.read).length;
   const sidebarWidth = sidebarCollapsed ? '70px' : '250px';
+
+  const { branches } = useBranches();
+  const isSuperAdmin = user?.backendRole === 'SUPER_ADMIN' || user?.is_superuser || (user?.role === 'admin' && !user?.branchId);
+  const allowAllBranches = window.location.pathname.includes('/dashboard') || window.location.pathname.includes('/admin/users');
+
+  const [selectedBranch, setSelectedBranch] = useState(() => {
+    return getSelectedAdminBranch() || 'ALL';
+  });
+
+  useEffect(() => {
+    const handleBranchSync = (e) => {
+      if (e?.detail?.branchId) {
+        setSelectedBranch(String(e.detail.branchId));
+      } else {
+        setSelectedBranch(getSelectedAdminBranch() || 'ALL');
+      }
+    };
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
+    return () => window.removeEventListener('foodie_branch_selected', handleBranchSync);
+  }, []);
+
+  // If on a page that requires a single branch (Tables, Menu, Inventory, Coupons) and ALL is currently selected, pick primary or first branch
+  useEffect(() => {
+    if (isSuperAdmin && branches.length > 0 && selectedBranch === 'ALL' && !allowAllBranches) {
+      const primary = branches.find(b => b.is_primary && b.is_active) || branches.find(b => b.is_primary) || branches[0];
+      if (primary) {
+        const nextId = String(primary.id);
+        setSelectedBranch(nextId);
+        localStorage.setItem('foodie_admin_selected_branch', nextId);
+        window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: nextId } }));
+      }
+    }
+  }, [isSuperAdmin, branches, selectedBranch, allowAllBranches]);
+
+  const handleBranchChange = (e) => {
+    const nextVal = e.target.value;
+    setSelectedBranch(nextVal);
+    localStorage.setItem('foodie_admin_selected_branch', nextVal);
+    window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: nextVal } }));
+    window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
+    window.dispatchEvent(new CustomEvent('foodie_products_updated'));
+    window.dispatchEvent(new CustomEvent('foodie_inventory_updated'));
+    window.dispatchEvent(new CustomEvent('foodie_offers_updated'));
+    window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
+  };
+
+  const assignedBranchName = user?.branchName || (branches.find(b => String(b.id) === String(user?.branchId))?.name) || '';
 
   useEffect(() => {
     if (!notifications || notifications.length === 0) return;
@@ -116,7 +165,36 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
               <FiAlignLeft size={22} />
             </button>
 
-{/* Global search removed as per requirements */}
+            {/* Centralized Branch Selector for Super Admin / Fixed Indicator for Branch Staff */}
+            {isSuperAdmin ? (
+              <div className="d-flex align-items-center gap-2 bg-light px-3 py-1.5 rounded-pill border shadow-2xs" style={{ borderColor: '#E2E8F0' }}>
+                <FiMapPin className="text-danger flex-shrink-0" size={15} />
+                <span className="small fw-semibold text-secondary d-none d-sm-inline" style={{ fontSize: '12px' }}>Branch:</span>
+                <select
+                  value={selectedBranch}
+                  onChange={handleBranchChange}
+                  className="form-select form-select-sm border-0 bg-transparent fw-bold text-dark p-0 pe-4 shadow-none"
+                  style={{ fontSize: '13px', cursor: 'pointer', outline: 'none' }}
+                  title="Switch Branch"
+                >
+                  {allowAllBranches && <option value="ALL">All Branches</option>}
+                  {branches.map(b => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.name} ({b.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              assignedBranchName && (
+                <div className="d-flex align-items-center gap-1.5 bg-light px-3 py-1.5 rounded-pill border" style={{ borderColor: '#E2E8F0' }}>
+                  <FiMapPin className="text-danger flex-shrink-0" size={14} />
+                  <span className="small fw-bold text-dark" style={{ fontSize: '12.5px' }}>
+                    {assignedBranchName}
+                  </span>
+                </div>
+              )
+            )}
           </div>
 
           <div className="d-flex align-items-center gap-2 gap-md-3">

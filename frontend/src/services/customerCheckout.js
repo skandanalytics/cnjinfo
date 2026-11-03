@@ -202,17 +202,8 @@ export async function availableTables(branchId) {
 }
 
 export async function resolvePublicBranchId() {
-  const listed = await api.get('/public/branches/');
-  const rows = Array.isArray(listed.data) ? listed.data : [];
-  const saved = sessionStorage.getItem('foodie_public_branch');
-  const current = rows.find((row) => String(row.id) === String(saved));
-  if (current) return String(current.id);
-  sessionStorage.removeItem('foodie_public_branch');
-  const pick = rows.find((row) => row.is_primary) || (rows.length === 1 ? rows[0] : null);
-  if (!pick) return null;
-  sessionStorage.setItem('foodie_public_branch', String(pick.id));
-  sessionStorage.setItem('foodie_branch_source', 'chosen');
-  return String(pick.id);
+  const { resolveAuthoritativeBranch } = await import('./branchResolution');
+  return await resolveAuthoritativeBranch();
 }
 
 export function selectableTables(tables, activeTableId = null) {

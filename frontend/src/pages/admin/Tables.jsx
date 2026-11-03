@@ -36,7 +36,8 @@ export const Tables = () => {
   const statusFilterParam = (searchParams.get('status') || searchParams.get('filter') || '').toLowerCase();
   const isAvailableOnly = statusFilterParam === 'available';
 
-  const { loading: branchesLoading, hasBranches } = useBranches();
+  const { loading: branchesLoading, hasBranches, branches } = useBranches();
+  const isSuperAdmin = user?.backendRole === 'SUPER_ADMIN' || user?.is_superuser || (user?.role === 'admin' && !user?.branchId);
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hasDishes, setHasDishes] = useState(true);
@@ -131,12 +132,20 @@ export const Tables = () => {
   useEffect(() => {
     fetchTables();
     const handleUpdated = () => fetchTablesSilently();
+    const handleBranchSync = (e) => {
+      if (e?.detail?.branchId && e.detail.branchId !== 'ALL') {
+        setTargetBranchId(Number(e.detail.branchId));
+      }
+      fetchTables();
+    };
     window.addEventListener('foodie_tables_updated', handleUpdated);
     window.addEventListener('foodie_orders_updated', handleUpdated);
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
     window.addEventListener('storage', handleUpdated);
     return () => {
       window.removeEventListener('foodie_tables_updated', handleUpdated);
       window.removeEventListener('foodie_orders_updated', handleUpdated);
+      window.removeEventListener('foodie_branch_selected', handleBranchSync);
       window.removeEventListener('storage', handleUpdated);
     };
   }, []);
@@ -494,24 +503,24 @@ export const Tables = () => {
           title="Tables" 
           showBackButton
           actions={
-            <div className="d-flex align-items-center gap-2.5 flex-wrap">
-              <div className="position-relative" style={{ minWidth: '220px', maxWidth: '300px' }}>
-                <FiSearch className="position-absolute text-muted" style={{ left: '12px', top: '10px' }} size={14} />
+            <div className="d-flex align-items-center gap-3 flex-wrap">
+              <div className="position-relative" style={{ minWidth: '240px', maxWidth: '320px' }}>
+                <FiSearch className="position-absolute text-muted" style={{ left: '14px', top: '13px', fontSize: '15px' }} />
                 <input
                   type="text"
                   placeholder="Search table (e.g., T01)..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="form-control form-control-sm rounded-pill ps-4 py-1.5 border bg-white text-dark shadow-2xs"
-                  style={{ fontSize: '12.5px', borderColor: '#CBD5E1' }}
+                  className="form-control rounded-pill ps-5 bg-white border shadow-xs"
+                  style={{ height: '42px', fontSize: '13px', borderColor: '#E2E8F0' }}
                 />
               </div>
               {isAdmin && hasBranches && (
                 <Button 
                   onClick={() => setIsAddOpen(true)} 
                   variant="primary" 
-                  className="d-flex align-items-center gap-2 py-2 px-3.5 rounded-pill fw-bold"
-                  style={{ fontSize: '13px' }}
+                  className="d-flex align-items-center gap-2 py-2 px-3.5 rounded-pill fw-bold shadow-xs ms-1"
+                  style={{ height: '42px', fontSize: '13px' }}
                 >
                   <FiPlus /> Add Table
                 </Button>
@@ -676,6 +685,9 @@ export const Tables = () => {
         <AddTableModal
           isOpen={isAddOpen}
           existingTables={sameBranchTables(targetBranchId)}
+          branches={branches}
+          initialBranchId={targetBranchId}
+          isSuperAdmin={isSuperAdmin}
           onClose={() => setIsAddOpen(false)}
           onAdd={handleAddTable}
         />

@@ -78,6 +78,10 @@ class OrderListCreateView(APIView):
             qs = Order.objects.all()
             if emp and emp.branch_id is not None:
                 qs = qs.filter(branch_id=emp.branch_id)
+            elif request.query_params.get("branch"):
+                branch_param = request.query_params.get("branch")
+                if branch_param and branch_param.upper() != "ALL":
+                    qs = qs.filter(branch_id=branch_param)
             if not _sees_every_order(user) or request.query_params.get("mine") == "1":
                 qs = qs.filter(placed_by=user)
         status_filter = request.query_params.get("status")

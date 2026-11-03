@@ -138,6 +138,10 @@ export const Offers = () => {
     const handleStorage = (event) => {
       if (event.key === 'foodie_data_sync' || event.key === 'foodie_inventory_sync_trigger') handleSync();
     };
+    const handleBranchSync = () => {
+      fetchData();
+    };
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
     window.addEventListener('foodie_offers_updated', handleSync);
     window.addEventListener('foodie_products_updated', handleSync);
     window.addEventListener('foodie_inventory_updated', handleSync);
@@ -149,6 +153,7 @@ export const Offers = () => {
     };
     document.addEventListener('visibilitychange', handleVis);
     return () => {
+      window.removeEventListener('foodie_branch_selected', handleBranchSync);
       window.removeEventListener('foodie_offers_updated', handleSync);
       window.removeEventListener('foodie_products_updated', handleSync);
       window.removeEventListener('foodie_inventory_updated', handleSync);
@@ -566,14 +571,14 @@ export const Offers = () => {
               <table className="table align-middle">
                 <thead>
                   <tr className="text-secondary small">
-                    <th>CODE</th>
-                    <th>DISCOUNT TYPE</th>
-                    <th>VALUE</th>
-                    <th>MIN ORDER</th>
-                    <th>VALID UNTIL</th>
-                    <th>AUTO APPLY</th>
-                    <th>STATUS</th>
-                    <th className="text-end">ACTIONS</th>
+                    <th className="pe-3">CODE</th>
+                    <th className="px-3">DISCOUNT TYPE</th>
+                    <th className="px-3">VALUE</th>
+                    <th className="px-3">MIN ORDER</th>
+                    <th className="px-3">VALID UNTIL</th>
+                    <th className="px-3">AUTO APPLY</th>
+                    <th className="px-3">STATUS</th>
+                    <th className="text-end ps-3">ACTIONS</th>
                   </tr>
                 </thead>
                 <tbody>

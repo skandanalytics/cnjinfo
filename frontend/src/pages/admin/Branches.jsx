@@ -506,8 +506,8 @@ export const Branches = () => {
             </div>
 
             <div className="col-12 col-md-3">
-              <div className="mb-3">
-                <label className="form-label small fw-bold text-dark mb-1 text-nowrap">
+              <div className="mb-3" style={{ minWidth: "160px" }}>
+                <label className="form-label small fw-normal text-dark mb-1 text-nowrap">
                   Opening Time&nbsp;<span className="text-danger">*</span>
                 </label>
                 <select
@@ -526,8 +526,8 @@ export const Branches = () => {
             </div>
 
             <div className="col-12 col-md-3">
-              <div className="mb-3">
-                <label className="form-label small fw-bold text-dark mb-1 text-nowrap">
+              <div className="mb-3" style={{ minWidth: "160px" }}>
+                <label className="form-label small fw-normal text-dark mb-1 text-nowrap">
                   Closing Time&nbsp;<span className="text-danger">*</span>
                 </label>
                 <select

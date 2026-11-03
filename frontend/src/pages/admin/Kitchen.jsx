@@ -482,19 +482,6 @@ export const Kitchen = () => {
               </div>
             )}
 
-            <select
-              className="form-select form-select-sm rounded-pill border bg-white fw-semibold px-3 py-1.5 shadow-2xs text-dark"
-              style={{ minWidth: '120px', fontSize: '12.5px', borderColor: '#CBD5E1' }}
-              value={activeStageTab}
-              onChange={(e) => setActiveStageTab(e.target.value)}
-            >
-              <option value="ALL">All Status</option>
-              <option value="NEW">New</option>
-              <option value="PREPARING">Preparing</option>
-              <option value="READY">Ready</option>
-              <option value="COMPLETED">Completed</option>
-            </select>
-
             <button
               type="button"
               className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-2xs bg-white"

@@ -28,13 +28,7 @@ class CategoryViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, vi
     ordering_fields = ["display_order", "name", "id"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-        if user.is_authenticated:
-            emp = getattr(user, "employee", None)
-            if emp and emp.role == "SUPER_ADMIN":
-                qs = qs.filter(Q(created_by=user) | Q(created_by__isnull=True))
-        return qs.distinct()
+        return super().get_queryset().distinct()
 
     def destroy(self, request, *args, **kwargs):
         """A category that still lists dishes is not deleted; the admin deletes or moves them first. Dishes that
@@ -72,13 +66,7 @@ class FoodViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, viewse
     ordering_fields = ["name", "price", "created_at"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-        if user.is_authenticated:
-            emp = getattr(user, "employee", None)
-            if emp and emp.role == "SUPER_ADMIN":
-                qs = qs.filter(Q(created_by=user) | Q(created_by__isnull=True))
-        return qs.distinct()
+        return super().get_queryset().distinct()
 
     def destroy(self, request, *args, **kwargs):
         """Deletes the dish. Past orders keep their item snapshot and the stock ledger keeps its rows."""
@@ -162,10 +150,4 @@ class DishDiscountViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin
     search_fields = ["food__name"]
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        user = self.request.user
-        if user.is_authenticated:
-            emp = getattr(user, "employee", None)
-            if emp and emp.role == "SUPER_ADMIN":
-                qs = qs.filter(Q(food__created_by=user) | Q(food__created_by__isnull=True))
-        return qs.distinct()
+        return super().get_queryset().distinct()

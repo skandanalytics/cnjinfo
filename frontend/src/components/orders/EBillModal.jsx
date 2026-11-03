@@ -338,7 +338,12 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
             />
           )}
           <Row label="Taxable amount" value={money(order.taxable_amount ?? 0)} />
-          {couponDiscount > 0 && <Row label="Coupon discounts" value={discount(couponDiscount)} />}
+          {couponDiscount > 0 && (
+            <Row 
+              label={`Coupon (${order.coupon_code || order.couponCode || previewData?.coupon_code || 'Discount'})`} 
+              value={discount(couponDiscount)} 
+            />
+          )}
           <Row label={order.gst_rate != null && order.gst_rate !== '' ? `GST (${order.gst_rate}%)` : 'GST'} value={money(tax)} />
           {roundOff !== 0 && <Row label="Round-off" value={money(roundOff)} />}
           {Number(order.paid_amount || 0) > 0 && (
