@@ -120,12 +120,12 @@ export const TableCard = ({
             e.stopPropagation();
             if (onEdit) onEdit(table);
           }}
-          className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
-          style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '30px', lineHeight: '1.2' }}
+          className="btn btn-sm bg-white rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-2xs border text-secondary"
+          style={{ width: '32px', height: '32px', borderColor: '#CBD5E1' }}
           title="Edit Table"
+          aria-label="Edit Table"
         >
-          <FiEdit2 size={12} className="text-muted" />
-          <span>Edit</span>
+          <FiEdit2 size={13} className="text-muted" />
         </button>
 
         <button
@@ -140,12 +140,12 @@ export const TableCard = ({
               onTrackOrder(table);
             }
           }}
-          className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
-          style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '30px', lineHeight: '1.2' }}
+          className="btn btn-sm bg-white rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-2xs border text-secondary"
+          style={{ width: '32px', height: '32px', borderColor: '#CBD5E1' }}
           title={isOccupied ? "View active order" : "Take table order"}
+          aria-label={isOccupied ? "View Order" : "Take Order"}
         >
-          <FiEye size={12} className="text-muted" />
-          <span>{isOccupied ? 'View Order' : 'Take Order'}</span>
+          <FiEye size={14} className="text-muted" />
         </button>
 
         {onViewQR && (
@@ -155,12 +155,12 @@ export const TableCard = ({
               e.stopPropagation();
               onViewQR(table);
             }}
-            className="btn btn-sm bg-white rounded-pill px-2.5 py-1.5 fw-semibold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs border text-secondary"
-            style={{ fontSize: '11px', borderColor: '#CBD5E1', height: '30px', lineHeight: '1.2' }}
+            className="btn btn-sm bg-white rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-2xs border text-secondary"
+            style={{ width: '32px', height: '32px', borderColor: '#CBD5E1' }}
             title="View Table QR Code"
+            aria-label="QR Code"
           >
-            <i className="bi bi-qr-code text-muted" style={{ fontSize: '11px' }} />
-            <span>QR Code</span>
+            <i className="bi bi-qr-code text-muted" style={{ fontSize: '13px' }} />
           </button>
         )}
       </div>

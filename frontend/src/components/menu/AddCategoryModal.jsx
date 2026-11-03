@@ -24,6 +24,10 @@ export const AddCategoryModal = ({
       setErrorMsg('Please enter a category name.');
       return;
     }
+    if (/^\d+$/.test(trimmedName)) {
+      setErrorMsg('Category name cannot be numeric only.');
+      return;
+    }
 
     if (['all', 'all categories', 'all category'].includes(trimmedName.toLowerCase())) {
       setErrorMsg('"All Categories" is an aggregate view and cannot be created as a category.');

@@ -500,13 +500,24 @@ export const Branches = () => {
                 name="managerName"
                 placeholder="e.g. Rajesh Sharma"
                 value={formData.managerName}
-                onChange={handleFormChange}
+                onKeyDown={(e) => {
+                  if (['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter', 'Home', 'End'].includes(e.key) || e.ctrlKey || e.metaKey) {
+                    return;
+                  }
+                  if (!/^[a-zA-Z\s]$/.test(e.key)) {
+                    e.preventDefault();
+                  }
+                }}
+                onChange={(e) => {
+                  const cleaned = e.target.value.replace(/[^a-zA-Z\s]/g, '');
+                  setFormData(prev => ({ ...prev, managerName: cleaned }));
+                }}
                 required
               />
             </div>
 
             <div className="col-12 col-md-3">
-              <div className="mb-3" style={{ minWidth: "160px" }}>
+              <div className="mb-3 w-100">
                 <label className="form-label small fw-normal text-dark mb-1 text-nowrap">
                   Opening Time&nbsp;<span className="text-danger">*</span>
                 </label>
@@ -514,7 +525,7 @@ export const Branches = () => {
                   name="openTime"
                   value={formData.openTime}
                   onChange={handleFormChange}
-                  className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs"
+                  className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs w-100"
                   style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
                   required
                 >
@@ -526,7 +537,7 @@ export const Branches = () => {
             </div>
 
             <div className="col-12 col-md-3">
-              <div className="mb-3" style={{ minWidth: "160px" }}>
+              <div className="mb-3 w-100">
                 <label className="form-label small fw-normal text-dark mb-1 text-nowrap">
                   Closing Time&nbsp;<span className="text-danger">*</span>
                 </label>
@@ -534,7 +545,7 @@ export const Branches = () => {
                   name="closeTime"
                   value={formData.closeTime}
                   onChange={handleFormChange}
-                  className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs"
+                  className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs w-100"
                   style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
                   required
                 >
@@ -802,21 +813,23 @@ export const Branches = () => {
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(branch)}
-                          className="btn btn-sm btn-outline-danger d-inline-flex align-items-center rounded-pill px-3 py-1.5 fw-bold shadow-xs transition-all gap-1.5"
-                          style={{ fontSize: '12px', height: '32px', gap: '6px' }}
+                          className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs transition-all"
+                          style={{ width: '32px', height: '32px' }}
+                          title={`Edit ${branch.name}`}
+                          aria-label={`Edit ${branch.name}`}
                         >
-                          <FiEdit2 size={13} className="flex-shrink-0" />
-                          <span>Edit Branch</span>
+                          <FiEdit2 size={14} />
                         </button>
 
                         <button
                           type="button"
                           onClick={() => openDelete(branch)}
-                          className="btn btn-sm btn-link text-danger p-0 text-decoration-none d-flex align-items-center"
-                          style={{ fontSize: '12px' }}
+                          className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs transition-all"
+                          style={{ width: '32px', height: '32px' }}
                           title={`Delete branch ${branch.name}`}
+                          aria-label={`Delete branch ${branch.name}`}
                         >
-                          <FiTrash2 size={13} className="me-1" /> Delete
+                          <FiTrash2 size={14} />
                         </button>
                       </div>
                     )}

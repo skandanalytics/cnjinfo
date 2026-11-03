@@ -241,20 +241,7 @@ export const FoodDetails = () => {
                     {dish.category}
                   </span>
                   
-                  {/* Veg / Non-Veg / Vegan Badge */}
-                  {(() => {
-                    const resolvedType = (dish.foodType || dish.type || (dish.is_veg === false || dish.is_veg === 'false' ? 'non-veg' : 'veg')).toLowerCase();
-                    const isVeg = resolvedType === 'veg';
-                    const isVegan = resolvedType === 'vegan';
-                    return (
-                      <div className="d-flex align-items-center gap-1.5 px-2.5 py-1 rounded-pill border bg-white shadow-xs">
-                        <span className={isVeg ? 'veg-badge' : isVegan ? 'vegan-badge' : 'non-veg-badge'} style={{ width: '13px', height: '13px' }}></span>
-                        <span className="fw-bold" style={{ fontSize: '11px', color: isVeg ? '#16a34a' : isVegan ? '#059669' : '#dc2626' }}>
-                          {isVeg ? 'Veg' : isVegan ? 'Vegan' : 'Non-Veg'}
-                        </span>
-                      </div>
-                    );
-                  })()}
+
 
                   {(() => {
                     let catDesc = '';

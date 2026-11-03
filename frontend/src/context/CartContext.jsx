@@ -217,9 +217,22 @@ export const CartProvider = ({ children }) => {
         sessionStorage.removeItem(getCartStorageKey(user));
       }
     };
+    const handleStorageChange = (e) => {
+      if (e.key === 'foodie_table') {
+        try {
+          if (e.newValue) {
+            setTableContext(JSON.parse(e.newValue));
+          } else {
+            setTableContext(null);
+          }
+        } catch (err) {}
+      }
+    };
     window.addEventListener('foodie_logout', handleLogout);
+    window.addEventListener('storage', handleStorageChange);
     return () => {
       window.removeEventListener('foodie_logout', handleLogout);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 

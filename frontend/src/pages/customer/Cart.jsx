@@ -350,7 +350,7 @@ export const Cart = () => {
                                 type="button"
                                 onClick={() => addToCart(dish, 1)}
                                 className="btn btn-sm btn-outline-danger p-0 d-flex align-items-center justify-content-center rounded-circle"
-                                style={{ width: '22px', height: '22px', border: '1px solid var(--primary-color)' }}
+                                style={{ width: '22px', height: '22px', border: '1px solid #CBD5E1', color: '#334155', backgroundColor: '#FFFFFF' }}
                                 title={`Add ${dish.name} to cart`}
                               >
                                 +
@@ -606,7 +606,7 @@ export const Cart = () => {
                     type="button"
                     onClick={handleCheckout} 
                     className="btn btn-danger w-100 rounded-pill py-3 fw-bold shadow-sm"
-                    style={{ height: '48px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)', fontSize: '15px' }}
+                    style={{ height: '44px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)', fontSize: '14px' }}
                   >
                     Proceed to Checkout
                   </button>
@@ -614,7 +614,7 @@ export const Cart = () => {
                     type="button"
                     onClick={() => navigate('/customer/home')}
                     className="btn btn-outline-danger w-100 rounded-pill py-2.5 fw-bold bg-white"
-                    style={{ fontSize: '13px', borderColor: 'var(--primary-color, #F20D2D)', color: 'var(--primary-color, #F20D2D)' }}
+                    style={{ height: '44px', fontSize: '14px', borderColor: 'var(--primary-color, #F20D2D)', color: 'var(--primary-color, #F20D2D)' }}
                   >
                     Save and Continue (Add More Items)
                   </button>
@@ -687,13 +687,13 @@ export const Cart = () => {
               </div>
 
               <div className="d-grid gap-2">
-                <Button onClick={handleCheckout} variant="primary" className="py-2.5 fw-bold shadow-sm">
+                <Button onClick={handleCheckout} variant="primary" className="py-2.5 fw-bold shadow-sm" style={{ height: '44px', fontSize: '14px' }}>
                   Proceed to Checkout
                 </Button>
                 <Button 
                   onClick={() => navigate('/customer/home')} 
                   variant="outline-primary" 
-                  className="py-2.5 fw-bold border-danger text-danger bg-white"
+                  className="py-2.5 fw-bold border-danger text-danger bg-white" style={{ height: '44px', fontSize: '14px' }}
                 >
                   Save and Continue (Add More Items)
                 </Button>

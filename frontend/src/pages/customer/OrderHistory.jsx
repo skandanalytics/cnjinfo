@@ -179,7 +179,7 @@ export const OrderHistory = () => {
                     <button
                       type="button"
                       onClick={() => setSelectedOrder(ord)}
-                      className="btn btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
+                      className="btn btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
                       style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '12px', backgroundColor: '#FFFFFF' }}
                     >
                       <FiEye size={13} />
@@ -191,7 +191,7 @@ export const OrderHistory = () => {
                         <button
                           type="button"
                           onClick={() => navigate(`/customer/order-tracking/${ord.id}`, { state: { order: ord } })}
-                          className="btn btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
+                          className="btn btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
                           style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '12px', backgroundColor: '#FFFFFF' }}
                         >
                           <span>Track Order</span>
@@ -200,7 +200,7 @@ export const OrderHistory = () => {
                         <button
                           type="button"
                           onClick={() => setViewingBillOrder(ord)}
-                          className="btn btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
+                          className="btn btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
                           style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '12px', backgroundColor: '#FFFFFF' }}
                         >
                           <FiFileText size={13} />
@@ -211,7 +211,7 @@ export const OrderHistory = () => {
                       <button
                         type="button"
                         onClick={() => navigate('/customer/home')}
-                        className="btn btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
+                        className="btn btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-2"
                         style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '12px', backgroundColor: '#FFFFFF' }}
                       >
                         <span>Order Again</span>
@@ -264,8 +264,8 @@ export const OrderHistory = () => {
                     setSelectedOrder(null);
                     setViewingBillOrder(ord);
                   }}
-                  className="btn btn-outline-danger rounded-pill w-100 py-2 fw-bold"
-                  style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px' }}
+                  className="btn btn-danger rounded-pill w-100 py-2 fw-bold text-white"
+                  style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D', fontSize: '13px' }}
                 >
                   View Invoice
                 </button>

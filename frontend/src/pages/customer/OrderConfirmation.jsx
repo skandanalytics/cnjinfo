@@ -402,8 +402,8 @@ export const OrderConfirmation = () => {
             </div>
           </div>
 
-          {/* Action Pill Buttons (3 horizontal on desktop, stacked on mobile) */}
-          <div className="d-flex flex-column flex-md-row align-items-stretch justify-content-center gap-2.5 pt-3">
+          {/* Action Pill Buttons */}
+          <div className="d-flex flex-column flex-md-row align-items-stretch justify-content-center gap-3 pt-3">
             <button
               type="button"
               onClick={handleOpenBill}
@@ -423,14 +423,16 @@ export const OrderConfirmation = () => {
               <span>Track Order</span>
             </button>
 
-            <button
-              type="button"
-              onClick={orderAgain}
-              className="btn btn-outline-danger rounded-pill px-3 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
-              style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
-            >
-              <span>Order Again</span>
-            </button>
+            {!isPaid && (
+              <button
+                type="button"
+                onClick={orderAgain}
+                className="btn btn-outline-danger rounded-pill px-3 py-2.5 fw-bold d-flex align-items-center justify-content-center gap-2 flex-grow-1"
+                style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px', backgroundColor: '#FFFFFF' }}
+              >
+                <span>Order Again</span>
+              </button>
+            )}
           </div>
         </div>
 

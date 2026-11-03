@@ -179,31 +179,19 @@ export const FoodCard = ({ dish }) => {
           onClick={(e) => e.stopPropagation()}
           className="d-flex align-items-center justify-content-between pt-2 border-top border-light mt-auto"
         >
-          <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
+          <div className="d-flex align-items-baseline gap-2 flex-wrap">
             <span className="fw-bold fs-6" style={{ color: 'var(--primary-color, #F20D2D)' }}>
               {formatCurrency(hasDiscount ? finalPrice : dish.price)}
             </span>
             {hasDiscount && (
-              <span className="text-muted text-decoration-line-through small" style={{ fontSize: '11px' }}>
+              <span className="text-muted text-decoration-line-through small ms-1.5" style={{ fontSize: '11px' }}>
                 {formatCurrency(oldPrice)}
               </span>
             )}
           </div>
 
-          {/* Fixed-position Add / Quantity Controls with Availability Dot */}
-          <div className="d-flex align-items-center justify-content-end gap-2" style={{ minWidth: '100px' }}>
-            {/* Availability Dot Indicator beside Add button */}
-            <span
-              className="rounded-circle flex-shrink-0"
-              style={{
-                width: '8px',
-                height: '8px',
-                backgroundColor: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A',
-                boxShadow: isOutOfStock ? '0 0 0 2px rgba(220, 38, 38, 0.2)' : isLowStock ? '0 0 0 2px rgba(217, 119, 6, 0.2)' : '0 0 0 2px rgba(22, 163, 74, 0.2)'
-              }}
-              title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
-            />
-
+          {/* Fixed-position Add / Quantity Controls */}
+          <div className="d-flex align-items-center justify-content-end gap-2" style={{ minWidth: '90px' }}>
             {isOutOfStock ? (
               <button
                 type="button"

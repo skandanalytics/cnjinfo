@@ -1562,7 +1562,6 @@ export const Pos = () => {
                 }}
                 title="All Categories"
               >
-                <span className="d-inline-flex align-items-center">{getCategoryIcon('all', 15)}</span>
                 <span>All Dishes ({dishes.length})</span>
               </button>
 
@@ -1599,7 +1598,6 @@ export const Pos = () => {
                     }}
                     title={`${cat} (${count})`}
                   >
-                    <span className="d-inline-flex align-items-center">{getCategoryIcon(cat, 15)}</span>
                     <span>{cat} ({count})</span>
                   </button>
                 );
@@ -1840,12 +1838,17 @@ export const Pos = () => {
                                   <button
                                     type="button"
                                     onClick={() => handleOpenCustomize(dish)}
-                                    className="btn btn-sm btn-outline-secondary px-2.5 py-1 d-inline-flex align-items-center gap-1 rounded-pill"
-                                    style={{ height: '32px', fontSize: '11px' }}
+                                    className="btn btn-sm px-3 py-1 fw-medium rounded-pill bg-white"
+                                    style={{ 
+                                      height: '32px', 
+                                      fontSize: '11.5px', 
+                                      border: '1.5px solid #CBD5E1', 
+                                      color: '#475569' 
+                                    }}
                                     title="Special instructions & customizations"
                                     disabled={isOutOfStock}
                                   >
-                                    ⚙ Customize
+                                    Customize
                                   </button>
                                 ) : <div />}
                               </div>
@@ -2568,6 +2571,7 @@ export const Pos = () => {
             <Modal
               isOpen={showTablePicker}
               title="Select Table for Dine-In"
+              size="lg"
               onClose={() => setShowTablePicker(false)}
             >
               <div className="p-3">
@@ -2658,14 +2662,14 @@ export const Pos = () => {
                     )}
 
                     {/* Search Tables Input */}
-                    <div className="mb-2.5">
+                    <div className="mb-3">
                       <input
                         type="text"
                         className="form-control form-control-sm rounded-pill px-3 border-light-subtle"
                         placeholder="Search table (e.g. 1, T1, 2)..."
                         value={tableSearchQuery}
                         onChange={(e) => setTableSearchQuery(e.target.value)}
-                        style={{ fontSize: '12px' }}
+                        style={{ fontSize: '12px', height: '36px' }}
                       />
                     </div>
 
@@ -2699,7 +2703,7 @@ export const Pos = () => {
                       </div>
                     ) : (
                       /* Table Grid */
-                      <div className="row row-cols-2 row-cols-sm-3 g-2.5 overflow-auto" style={{ maxHeight: '350px' }}>
+                      <div className="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-2.5 overflow-auto" style={{ maxHeight: '420px' }}>
                         {filteredTableList.map((table) => {
                           const isSelected = selectedTable && String(selectedTable.id) === String(table.id);
                           const shortName = getShortTableNumber(table.number || table.table_number || table.id);
@@ -2723,59 +2727,28 @@ export const Pos = () => {
                                 }`}
                                 style={{ 
                                   cursor: isOccupied ? 'not-allowed' : 'pointer', 
-                                  minHeight: '96px',
+                                  minHeight: '52px',
                                   backgroundColor: isOccupied ? '#FFF5F5' : '#FFFFFF',
                                   borderColor: isOccupied ? '#FECDD3' : '#E2E8F0'
                                 }}
                                 title={isOccupied ? `${shortName} is ${statusText} (Cannot be selected)` : `Select ${shortName}`}
                               >
                                 <div>
-                                  <div className="d-flex align-items-center justify-content-between mb-1.5">
+                                  <div className="d-flex align-items-center justify-content-between">
                                     <span className="fw-bold fs-6 text-dark">
                                       {shortName}
                                     </span>
-                                    <span className="badge rounded-pill px-2 py-0.5 fw-semibold d-inline-flex align-items-center gap-1" style={{
-                                      backgroundColor: isOccupied ? '#FEE2E2' : '#DCFCE7',
-                                      color: isOccupied ? '#DC2626' : '#16A34A',
-                                      fontSize: '10px'
-                                    }}>
-                                      <span
-                                        className="rounded-circle d-inline-block flex-shrink-0"
-                                        style={{
-                                          width: '6px',
-                                          height: '6px',
-                                          backgroundColor: isOccupied ? '#DC2626' : '#16A34A'
-                                        }}
-                                      />
-                                      <span>{statusText}</span>
-                                    </span>
-                                  </div>
-                                  <div className="small text-muted" style={{ fontSize: '11.5px' }}>
-                                    <div className="d-flex align-items-center gap-1">
-                                      <span>👥</span>
-                                      <span className="fw-medium text-dark">{table.capacity || 4} Seats</span>
-                                    </div>
-                                    {table.location && (
-                                      <div className="text-secondary ps-3 text-truncate" style={{ fontSize: '11px' }}>
-                                        {table.location}
-                                      </div>
-                                    )}
+                                    <span
+                                      className="rounded-circle d-inline-block flex-shrink-0"
+                                      style={{
+                                        width: '10px',
+                                        height: '10px',
+                                        backgroundColor: isOccupied ? '#DC2626' : '#16A34A'
+                                      }}
+                                      title={statusText}
+                                    />
                                   </div>
                                 </div>
-
-                                {isOccupied && activeOrderId && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleTrackExistingOrder(activeOrderId, table);
-                                    }}
-                                    className="btn btn-xs btn-outline-danger rounded-pill mt-2 w-100 fw-semibold"
-                                    style={{ fontSize: '10px', padding: '2px 6px' }}
-                                  >
-                                    View Active Order
-                                  </button>
-                                )}
                               </div>
                             </div>
                           );
@@ -2932,6 +2905,18 @@ export const Pos = () => {
                     {placedOrder.is_paid || String(placedOrder.payment_status).toUpperCase() === 'PAID' ? 'PAID (Cash)' : 'UNPAID'}
                   </strong>
                 </div>
+                {placedOrder.coupon_code && (
+                  <div className="d-flex justify-content-between mb-1 small text-success">
+                    <span>Applied Coupon:</span>
+                    <strong>{placedOrder.coupon_code} {placedOrder.coupon_discount ? `(-${formatCurrency(placedOrder.coupon_discount)})` : ''}</strong>
+                  </div>
+                )}
+                {placedOrder.item_discount && Number(placedOrder.item_discount) > 0 && (
+                  <div className="d-flex justify-content-between mb-1 small text-success">
+                    <span>Item Discount:</span>
+                    <strong>-{formatCurrency(placedOrder.item_discount)}</strong>
+                  </div>
+                )}
                 <div className="d-flex justify-content-between mb-1 small">
                   <span className="text-muted">Total Amount:</span>
                   <strong className="text-dark fs-6">{formatCurrency(placedOrder.total_amount || placedOrder.total)}</strong>

@@ -66,7 +66,26 @@ export const Home = () => {
   }, [tableParam]);
 
   const [selectedCategories, setSelectedCategories] = useState(['All']);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('search') || '');
+
+  useEffect(() => {
+    const query = searchParams.get('search');
+    if (query !== null) {
+      setSearch(query);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    const handleCustomerSearch = (e) => {
+      const q = e?.detail?.query !== undefined ? e.detail.query : '';
+      setSearch(q);
+      setCurrentPage(1);
+    };
+    window.addEventListener('foodie_customer_search', handleCustomerSearch);
+    return () => {
+      window.removeEventListener('foodie_customer_search', handleCustomerSearch);
+    };
+  }, []);
   const [sortBy, setSortBy] = useState('DEFAULT');
   const [selectedFoodTypes, setSelectedFoodTypes] = useState([]);
   const foodTypeOf = (dish) => normalizeFoodType(
@@ -667,25 +686,11 @@ export const Home = () => {
     return (
       <CustomerLayout>
         <main className="px-3 pt-5 text-center">
-          {openBranches.length > 1 ? (
-            <div>
-              <h5 className="fw-bold mb-3">Choose a restaurant</h5>
-              <div className="d-flex flex-column gap-2">
-                {openBranches.map(branch => (
-                  <button key={branch.id} type="button" className="btn btn-outline-danger rounded-pill"
-                    onClick={() => { chooseCustomerBranch(branch.id); refetch(); }}>
-                    {branch.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <EmptyState
-              title="No Dishes Found"
-              description="We couldn't find any dishes available on the menu."
-              icon="bi-emoji-frown"
-            />
-          )}
+          <EmptyState
+            title="No Dishes Found"
+            description="We couldn't find any dishes available on the menu."
+            icon="bi-emoji-frown"
+          />
         </main>
       </CustomerLayout>
     );

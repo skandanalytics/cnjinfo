@@ -81,7 +81,7 @@ export const Badge = ({
         color: style.text,
         border: `1px solid ${style.border}`,
         fontSize: '11.5px',
-        gap: '6px',
+        gap: '8px',
         lineHeight: 1,
         letterSpacing: '0.1px',
       }}

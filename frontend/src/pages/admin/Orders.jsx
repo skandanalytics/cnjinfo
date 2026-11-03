@@ -12,7 +12,7 @@ import { restaurantService } from '../../services/restaurantService';
 import { useAuth } from '../../hooks/useAuth';
 import EBillModal from '../../components/orders/EBillModal';
 import Toast from '../../components/common/Toast';
-import { FiEye, FiGrid, FiList } from 'react-icons/fi';
+import { FiEye, FiFileText, FiGrid, FiList } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
@@ -510,20 +510,22 @@ export const Orders = () => {
                           <button
                             type="button"
                             onClick={() => setSelectedOrder(order)}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center"
-                            style={{ fontSize: '12px', minWidth: '60px', height: '32px' }}
+                            className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
+                            style={{ width: '32px', height: '32px' }}
+                            title="View Order Details"
+                            aria-label="View Order Details"
                           >
-                            View Details
+                            <FiEye size={14} />
                           </button>
                           <button
                             type="button"
                             onClick={() => setEBillOrder(adj)}
-                            className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center gap-2"
-                            style={{ fontSize: '12px', height: '32px' }}
+                            className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
+                            style={{ width: '32px', height: '32px' }}
                             title="View E-Bill"
+                            aria-label="View E-Bill"
                           >
-                            <FiEye size={13} className="flex-shrink-0" />
-                            <span>Show Bill</span>
+                            <FiFileText size={14} />
                           </button>
                         </div>
                       </td>

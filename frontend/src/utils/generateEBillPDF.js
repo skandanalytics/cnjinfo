@@ -183,7 +183,7 @@ const printHtmlInvoice = (order, backendId, payment, customer) => {
         </div>
         <div class="neat-footer">
           <div>
-            <strong>${isTakeaway ? 'Thank you for choosing Foodie. Visit again.' : 'Thank you for dining with Foodie. Visit again.'}</strong><br>
+            <strong>Thank you for choosing Foodie. Visit again.</strong><br>
             <span>For feedback or queries: www.foodie.com | Helpline: +91 98765 43210</span>
           </div>
           <div style="text-align:right;">
@@ -759,7 +759,7 @@ export const generateEBillPDF = async (orderOrId) => {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(8.5);
       doc.setTextColor(...darkSlate);
-      doc.text(isTakeaway ? "Thank you for choosing Foodie. Visit again." : "Thank you for dining with Foodie Restaurant!", margin, footerY + 5);
+      doc.text("Thank you for choosing Foodie. Visit again.", margin, footerY + 5);
 
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7.5);

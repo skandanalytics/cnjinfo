@@ -25,6 +25,8 @@ class CouponSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
 
     def validate_code(self, value):
         value = value.strip().upper()
+        if len(value) > 12:
+            raise serializers.ValidationError("Coupon code cannot exceed 12 characters.")
         if not value.replace("-", "").replace("_", "").isalnum():
             raise serializers.ValidationError("Use letters, numbers, '-' or '_' only.")
         return value

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
+import { formatCompactTableLabel } from '../../utils/tableUtils';
 import { FiPhone, FiCheckCircle, FiChevronDown, FiArrowLeft, FiShoppingBag } from 'react-icons/fi';
 import { COUNTRY_CODES, detectUserCountryCode, fetchGeolocationCountryCode } from '../../utils/countryCodes';
 import { cartService } from '../../services/cartService';
@@ -12,7 +13,7 @@ export const CustomerLogin = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { sendOTP, verifyOTP } = useAuth();
-  const { cartItems } = useCart();
+  const { cartItems, setTable } = useCart();
 
   // Step 1: Login, Step 2: OTP, Step 3: Dining Option
   const [countryCode, setCountryCode] = useState('+91');
@@ -22,6 +23,10 @@ export const CustomerLogin = () => {
   const [otpLoading, setOtpLoading] = useState(false);
   const [showDiningOption, setShowDiningOption] = useState(Boolean(location.state?.chooseDining));
   const [selectedDining, setSelectedDining] = useState('DINE_IN');
+  const isQrSession = typeof window !== 'undefined' && Boolean(
+    sessionStorage.getItem('foodie_table_qr') || localStorage.getItem('foodie_table_qr') ||
+    (sessionStorage.getItem('foodie_branch_source') === 'qr')
+  );
   const [openTables, setOpenTables] = useState([]);
   const [selectedTable, setSelectedTable] = useState(null);
   const [tablesLoading, setTablesLoading] = useState(false);
@@ -41,12 +46,21 @@ export const CustomerLogin = () => {
             setOpenTables(avail);
             if (avail.length > 0) {
               const savedTableId = sessionStorage.getItem('foodie_selected_table') || localStorage.getItem('foodie_selected_table');
-              const found = avail.find(t => String(t.id) === String(savedTableId));
+              const savedTableNum = sessionStorage.getItem('foodie_table_number') || localStorage.getItem('foodie_table_number');
+              let found = null;
+              if (savedTableId) {
+                found = avail.find(t => String(t.id) === String(savedTableId));
+              }
+              if (!found && savedTableNum) {
+                const cleanTarget = formatCompactTableLabel(savedTableNum);
+                found = avail.find(t => formatCompactTableLabel(t.table_number || t.number || t.id) === cleanTarget);
+              }
               if (found) {
-                // Customer has scanned/selected this specific table: show only this scanned table
-                setOpenTables([found]);
                 setSelectedTable(found);
-              } else {
+                if (isQrSession) {
+                  setOpenTables([found]);
+                }
+              } else if (avail.length > 0) {
                 setSelectedTable(avail[0]);
               }
             }
@@ -226,12 +240,36 @@ export const CustomerLogin = () => {
     sessionStorage.setItem('foodie_order_type', selectedDining);
     localStorage.setItem('foodie_order_type', selectedDining);
     if (selectedDining === 'DINE_IN' && selectedTable) {
-      const tableNum = selectedTable.table_number || selectedTable.number || selectedTable.id;
-      const cleanTableNum = String(tableNum).startsWith('T') ? String(tableNum) : `T${tableNum}`;
+      const cleanTableNum = formatCompactTableLabel(selectedTable.table_number || selectedTable.number || selectedTable.id);
       sessionStorage.setItem('foodie_selected_table', String(selectedTable.id));
       localStorage.setItem('foodie_selected_table', String(selectedTable.id));
       sessionStorage.setItem('foodie_table_number', String(cleanTableNum));
       localStorage.setItem('foodie_table_number', String(cleanTableNum));
+      const tableObj = {
+        tableId: selectedTable.id,
+        id: selectedTable.id,
+        tableNumber: cleanTableNum,
+        orderType: 'DINE_IN',
+        isTakeaway: false
+      };
+      sessionStorage.setItem('foodie_table', JSON.stringify(tableObj));
+      localStorage.setItem('foodie_table', JSON.stringify(tableObj));
+      if (setTable) {
+        setTable(tableObj);
+      }
+    } else if (selectedDining === 'TAKEAWAY') {
+      const takeawayObj = {
+        tableId: null,
+        id: null,
+        tableNumber: 'Takeaway',
+        orderType: 'TAKEAWAY',
+        isTakeaway: true
+      };
+      sessionStorage.setItem('foodie_table', JSON.stringify(takeawayObj));
+      localStorage.setItem('foodie_table', JSON.stringify(takeawayObj));
+      if (setTable) {
+        setTable(takeawayObj);
+      }
     }
     const hasGuestCartItems = Array.isArray(cartItems) && cartItems.length > 0;
     if (destination) {
@@ -336,7 +374,7 @@ export const CustomerLogin = () => {
               )}
             </div>
 
-            {selectedDining === 'DINE_IN' && (
+            {selectedDining === 'DINE_IN' && !isQrSession && (
               <div className="text-start mb-3 p-3 rounded-4 bg-light border border-light-subtle shadow-2xs">
                 <div className="d-flex align-items-center justify-content-between mb-2">
                   <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>
@@ -365,8 +403,7 @@ export const CustomerLogin = () => {
                       style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' }}
                     >
                       {openTables.map(t => {
-                        const num = t.table_number || t.number || `T${t.id}`;
-                        const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                        const cleanNum = formatCompactTableLabel(t.table_number || t.number || t.id);
                         const loc = t.location || t.area || 'Indoor';
                         const cap = t.capacity || 4;
                         return (
@@ -379,8 +416,7 @@ export const CustomerLogin = () => {
 
                     <div className="d-flex align-items-center gap-1.5 flex-wrap mt-2.5">
                       {openTables.slice(0, 8).map(t => {
-                        const num = t.table_number || t.number || `T${t.id}`;
-                        const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                        const cleanNum = formatCompactTableLabel(t.table_number || t.number || t.id);
                         const isSelected = selectedTable && String(selectedTable.id) === String(t.id);
                         return (
                           <button

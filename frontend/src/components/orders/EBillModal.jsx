@@ -375,8 +375,7 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
             </div>
           ) : null}
         </div>
-        <p className="foodie-invoice-foot mt-3">{isTakeaway ? 'Thank you for choosing Foodie. Visit again.' : 'Thank you for dining with Foodie. Visit again.'}</p>
-        <p className="foodie-invoice-foot">Computer-generated invoice from the saved order.</p>
+        <p className="foodie-invoice-foot mt-3">Thank you for choosing Foodie. Visit again.</p>
       </div>
     </Modal>
   );

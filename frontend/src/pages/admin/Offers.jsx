@@ -168,6 +168,10 @@ export const Offers = () => {
     e.preventDefault();
     setCouponError('');
     if (!hasBranches || !code || !discount) return;
+    if (code.trim().length > 12) {
+      setCouponError('Coupon code cannot exceed 12 characters.');
+      return;
+    }
     if (!validity) {
       setCouponError('Valid until is required.');
       return;
@@ -524,19 +528,21 @@ export const Offers = () => {
                           <div className="d-inline-flex align-items-center justify-content-end gap-2">
                             <button
                               onClick={() => setEditingDish(dish)}
-                              className="btn btn-sm btn-outline-secondary rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs"
-                              style={{ fontSize: '12px', height: '32px' }}
+                              className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
+                              style={{ width: '32px', height: '32px' }}
                               title="Edit Offer"
+                              aria-label="Edit Offer"
                             >
-                              <FiEdit2 size={13} /> Edit
+                              <FiEdit2 size={14} />
                             </button>
                             <button
                               onClick={() => setDeletingDishOffer(dish)}
-                              className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs"
-                              style={{ fontSize: '12px', height: '32px' }}
+                              className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
+                              style={{ width: '32px', height: '32px' }}
                               title="Delete Dish Offer"
+                              aria-label="Delete Dish Offer"
                             >
-                              <FiTrash2 size={13} /> Delete
+                              <FiTrash2 size={14} />
                             </button>
                           </div>
                         </td>
@@ -628,26 +634,29 @@ export const Offers = () => {
                           <div className="d-inline-flex align-items-center justify-content-end gap-2">
                             <button
                               onClick={() => handleEditCouponClick(c)}
-                              className="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs"
+                              className="btn btn-sm btn-outline-primary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
                               title="Edit Coupon"
-                              style={{ fontSize: '12px', height: '32px', opacity: 1 }}
+                              aria-label="Edit Coupon"
+                              style={{ width: '32px', height: '32px' }}
                             >
-                              <FiEdit2 size={13} /> Edit
+                              <FiEdit2 size={14} />
                             </button>
                             <button
                               onClick={() => handleToggleStatus(c.id, c.code, c.status)}
-                              className={`btn btn-sm rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center shadow-xs ${c.status === 'Active' ? 'btn-outline-secondary' : 'btn-outline-success'}`}
-                              style={{ fontSize: '12px', height: '32px', opacity: 1 }}
+                              className={`btn btn-sm rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center justify-content-center shadow-xs ${c.status === 'Active' ? 'btn-outline-secondary' : 'btn-outline-success'}`}
+                              style={{ fontSize: '11px', height: '32px' }}
+                              title={c.status === 'Active' ? 'Deactivate Coupon' : 'Activate Coupon'}
                             >
                               {c.status === 'Active' ? 'Deactivate' : 'Activate'}
                             </button>
                             <button
                               onClick={() => handleDeleteCouponClick(c.id, c.code)}
-                              className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 shadow-xs"
+                              className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
                               title="Delete Coupon"
-                              style={{ fontSize: '12px', height: '32px', opacity: 1 }}
+                              aria-label="Delete Coupon"
+                              style={{ width: '32px', height: '32px' }}
                             >
-                              <FiTrash2 size={13} /> Delete
+                              <FiTrash2 size={14} />
                             </button>
                           </div>
                         </td>
@@ -692,7 +701,8 @@ export const Offers = () => {
             label="Promo Coupon Code"
             placeholder="e.g. MONSOON20"
             value={code}
-            onChange={(e) => setCode(e.target.value)}
+            onChange={(e) => setCode(e.target.value.slice(0, 12))}
+            maxLength={12}
             required
           />
 

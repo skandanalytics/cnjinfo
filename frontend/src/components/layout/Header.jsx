@@ -141,7 +141,6 @@ export const Header = () => {
               title={isQrLocked ? 'Ordered from Table QR' : 'Switch Branch'}
             >
               <span>{branchName}</span>
-              {!isQrLocked && <FiChevronDown size={14} className="text-muted" />}
             </button>
 
             {showBranchDropdown && branches.length > 0 && (
@@ -208,14 +207,25 @@ export const Header = () => {
               }}
               placeholder="Search for dishes..."
               value={headerSearch}
-              onChange={(e) => setHeaderSearch(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setHeaderSearch(val);
+                if (location.pathname === '/customer/home') {
+                  window.dispatchEvent(new CustomEvent('foodie_customer_search', { detail: { query: val } }));
+                }
+              }}
             />
             {headerSearch && (
               <button
                 type="button"
                 className="btn btn-link position-absolute p-0 text-muted border-0"
                 style={{ right: '12px', top: '11px' }}
-                onClick={() => setHeaderSearch('')}
+                onClick={() => {
+                  setHeaderSearch('');
+                  if (location.pathname === '/customer/home') {
+                    window.dispatchEvent(new CustomEvent('foodie_customer_search', { detail: { query: '' } }));
+                  }
+                }}
               >
                 <FiX size={16} />
               </button>
@@ -381,6 +391,53 @@ export const Header = () => {
 
         </div>
 
+      </div>
+
+      {/* Mobile Search Bar Row (Visible on small screens < 992px) */}
+      <div className="d-lg-none w-100 px-3 pt-2 pb-1 border-top border-light-subtle">
+        <form onSubmit={handleSearchSubmit} className="w-100 position-relative">
+          <FiSearch 
+            className="position-absolute text-muted" 
+            style={{ left: '14px', top: '11px', fontSize: '14px' }} 
+          />
+          <input
+            type="text"
+            className="form-control rounded-pill shadow-xs"
+            style={{
+              height: '36px',
+              borderRadius: '18px',
+              paddingLeft: '36px',
+              paddingRight: headerSearch ? '30px' : '14px',
+              fontSize: '12.5px',
+              borderColor: '#E2E8F0',
+              backgroundColor: '#F8FAFC'
+            }}
+            placeholder="Search for dishes..."
+            value={headerSearch}
+            onChange={(e) => {
+              const val = e.target.value;
+              setHeaderSearch(val);
+              if (location.pathname === '/customer/home') {
+                window.dispatchEvent(new CustomEvent('foodie_customer_search', { detail: { query: val } }));
+              }
+            }}
+          />
+          {headerSearch && (
+            <button
+              type="button"
+              className="btn btn-link position-absolute p-0 text-muted border-0"
+              style={{ right: '10px', top: '7px' }}
+              onClick={() => {
+                setHeaderSearch('');
+                if (location.pathname === '/customer/home') {
+                  window.dispatchEvent(new CustomEvent('foodie_customer_search', { detail: { query: '' } }));
+                }
+              }}
+            >
+              <FiX size={15} />
+            </button>
+          )}
+        </form>
       </div>
     </nav>
   );
