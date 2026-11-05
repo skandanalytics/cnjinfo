@@ -131,62 +131,15 @@ export const Header = () => {
             </span>
           </Link>
 
-          {/* Branch Dropdown Selector */}
-          <div className="position-relative d-none d-sm-block">
-            <button
-              type="button"
-              onClick={() => { if (!isQrLocked) setShowBranchDropdown(!showBranchDropdown); }}
-              className="btn btn-sm btn-light border bg-white rounded-pill px-3 py-1.5 fw-semibold d-flex align-items-center gap-1.5 shadow-xs"
-              style={{ borderColor: '#E2E8F0', fontSize: '12.5px', color: '#334155', cursor: isQrLocked ? 'default' : 'pointer' }}
-              title={isQrLocked ? 'Ordered from Table QR' : 'Switch Branch'}
-            >
-              <span>{branchName}</span>
-            </button>
-
-            {showBranchDropdown && branches.length > 0 && (
-              <>
-                <div 
-                  className="position-fixed top-0 start-0 w-100 h-100" 
-                  style={{ zIndex: 998 }}
-                  onClick={() => setShowBranchDropdown(false)}
-                />
-                <div 
-                  className="dropdown-menu show position-absolute start-0 mt-1 shadow-lg border-0 rounded-3 p-2"
-                  style={{ zIndex: 999, minWidth: '180px' }}
-                >
-                  <div className="px-2 py-1 text-muted small fw-bold text-uppercase" style={{ fontSize: '10px' }}>
-                    Select Branch
-                  </div>
-                  {branches.map(b => (
-                    <button
-                      key={b.id}
-                      type="button"
-                      className={`dropdown-item rounded-2 py-1.5 px-2.5 small fw-semibold text-start ${branchName === b.name ? 'bg-danger text-white' : 'text-dark'}`}
-                      onClick={() => {
-                        setBranchName(b.name);
-                        sessionStorage.setItem('foodie_branch_name', b.name);
-                        localStorage.setItem('foodie_branch_name', b.name);
-                        sessionStorage.setItem('foodie_branch_id', String(b.id));
-                        localStorage.setItem('foodie_branch_id', String(b.id));
-                        sessionStorage.setItem('foodie_public_branch', String(b.id));
-                        localStorage.setItem('foodie_public_branch', String(b.id));
-                        sessionStorage.setItem('foodie_branch_source', 'chosen');
-                        localStorage.setItem('foodie_branch_source', 'chosen');
-                        window.dispatchEvent(new CustomEvent('foodie_products_updated'));
-                        setShowBranchDropdown(false);
-                        window.dispatchEvent(new CustomEvent('foodie_branch_changed', { detail: { branchId: b.id, name: b.name } }));
-                      }}
-                    >
-                      {b.name}
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
+          {/* Branch Plain Text with Location Icon */}
+          <div className="customer-branch-location d-none d-sm-flex align-items-center gap-1.5 text-secondary" style={{ fontSize: '13px' }}>
+            <FiMapPin size={15} className="text-danger flex-shrink-0" />
+            <span className="fw-semibold text-dark">{branchName}</span>
           </div>
         </div>
 
-        {/* Center: Search for dishes bar (Matching Reference 4 / 13) */}
+        {/* Center: Search for dishes bar (Only shown on Customer Home) */}
+        {location.pathname === '/customer/home' && (
         <div className="d-none d-lg-flex align-items-center justify-content-center flex-grow-1 px-4" style={{ maxWidth: '420px' }}>
           <form onSubmit={handleSearchSubmit} className="w-100 position-relative">
             <FiSearch 
@@ -232,6 +185,7 @@ export const Header = () => {
             )}
           </form>
         </div>
+        )}
 
         {/* Right Side: Cart Icon with Badge & User Profile */}
         <div className="d-flex align-items-center gap-3">
@@ -393,7 +347,8 @@ export const Header = () => {
 
       </div>
 
-      {/* Mobile Search Bar Row (Visible on small screens < 992px) */}
+      {/* Mobile Search Bar Row (Visible only on Customer Home) */}
+      {location.pathname === '/customer/home' && (
       <div className="d-lg-none w-100 px-3 pt-2 pb-1 border-top border-light-subtle">
         <form onSubmit={handleSearchSubmit} className="w-100 position-relative">
           <FiSearch 
@@ -439,6 +394,7 @@ export const Header = () => {
           )}
         </form>
       </div>
+      )}
     </nav>
   );
 };

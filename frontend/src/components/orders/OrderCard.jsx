@@ -55,8 +55,17 @@ export const OrderCard = ({
           <div className="fw-bold text-dark text-truncate mt-2" style={{ maxWidth: '400px' }}>
             {itemsSummary}
           </div>
-          <div className="text-muted small mt-1">
-            Source: <strong>{isTakeaway ? 'Takeaway' : (order.source || 'Dine-In')}</strong> | Payment: <strong className={String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' ? 'text-success' : 'text-danger'}>{String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' ? 'Paid' : 'Unpaid'}</strong>
+          <div className="text-muted small mt-1 d-flex align-items-center gap-1.5 flex-wrap">
+            <span>Source: <strong>{isTakeaway ? 'Takeaway' : (order.source || 'Dine-In')}</strong></span>
+            <span>|</span>
+            <span>Payment: </span>
+            {String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' ? (
+              <span className="badge bg-success-subtle text-success rounded-pill px-2 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>Paid</span>
+            ) : (String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PENDING' || String(order.payment_method || '').toUpperCase() === 'UPI') ? (
+              <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>Pending Verification (UPI)</span>
+            ) : (
+              <span className="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>Unpaid</span>
+            )}
           </div>
         </div>
 

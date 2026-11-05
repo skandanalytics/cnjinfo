@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import PageHeader from '../../components/layout/PageHeader';
@@ -10,7 +10,7 @@ import TopDishes from '../../components/dashboard/TopDishes';
 import Loader from '../../components/common/Loader';
 import { analyticsService } from '../../services/analyticsService';
 import { dashboardService } from '../../services/dashboardService';
-import { FiTrendingUp, FiShoppingBag, FiLayers, FiAlertCircle } from 'react-icons/fi';
+import { FiTrendingUp, FiShoppingBag, FiLayers, FiAlertCircle, FiCalendar } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 
 export const Dashboard = () => {
@@ -21,6 +21,10 @@ export const Dashboard = () => {
   const [topDishes, setTopDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState('Weekly');
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const d = new Date();
+    return d.toISOString().split('T')[0];
+  });
   const [revenueDetails, setRevenueDetails] = useState({
     revenuePeriod: "Weekly Revenue",
     revenueAmount: 0,
@@ -123,6 +127,14 @@ export const Dashboard = () => {
     };
   }, [fetchAnalytics]);
 
+
+  const todayStrIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const minDateIso = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().split('T')[0];
+  }, []);
+
   const isInitialMount = React.useRef(true);
   useEffect(() => {
     if (isInitialMount.current) {
@@ -140,6 +152,46 @@ export const Dashboard = () => {
     };
     updatePeriodRevenue();
   }, [selectedPeriod]);
+
+  // Filter metrics according to selectedDate (ALWAYS defined before any conditional return)
+  const filteredMetrics = useMemo(() => {
+    if (!cachedOrdersRef.current) return null;
+    const targetOrders = cachedOrdersRef.current.filter(o => {
+      const orderDate = o.created_at || o.createdAt || o.placedAt || o.date;
+      if (!orderDate) return false;
+      const d = new Date(orderDate);
+      if (isNaN(d.getTime())) return false;
+      return d.toISOString().split('T')[0] === selectedDate;
+    });
+
+    const successful = targetOrders.filter(o => {
+      const ps = (o.payment_status || o.paymentStatus || '').toUpperCase();
+      const st = (o.status || o.order_status || '').toUpperCase();
+      return ps !== 'FAILED' && st !== 'CANCELLED' && st !== 'REJECTED';
+    });
+
+    const dayRevenue = successful.reduce((sum, o) => {
+      const val = parseFloat(o.total || o.total_amount || o.totalAmount || 0);
+      return sum + (isNaN(val) ? 0 : val);
+    }, 0);
+
+    const pending = targetOrders.filter(o => {
+      const st = (o.status || o.order_status || '').toUpperCase();
+      return st === 'PENDING' || st === 'PLACED';
+    }).length;
+
+    const inProgress = targetOrders.filter(o => {
+      const st = (o.status || o.order_status || '').toUpperCase();
+      return st === 'PREPARING' || st === 'READY' || st === 'COOKING';
+    }).length;
+
+    return {
+      totalRevenue: dayRevenue,
+      pendingOrders: pending,
+      activeOrders: inProgress,
+      count: targetOrders.length
+    };
+  }, [selectedDate, summary]);
 
   if (loading) {
     return (
@@ -159,10 +211,20 @@ export const Dashboard = () => {
         actions={
           <div className="d-flex align-items-center gap-2">
             <div 
-              className="d-flex align-items-center px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
+              className="d-flex align-items-center gap-2 px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
               style={{ height: '38px', backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
             >
-              <span>{todayFormatted}</span>
+              <FiCalendar className="text-danger flex-shrink-0" size={15} />
+              <input
+                type="date"
+                value={selectedDate}
+                max={todayStrIso}
+                min={minDateIso}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                className="border-0 bg-transparent text-dark fw-bold shadow-none p-0"
+                style={{ fontSize: '13px', cursor: 'pointer', outline: 'none' }}
+                title="Select Date for Metrics (Past 1 Year Available)"
+              />
             </div>
           </div>
         }
@@ -173,7 +235,7 @@ export const Dashboard = () => {
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Total Revenue"
-            value={formatCurrency(summary?.totalRevenue ?? revenueDetails?.revenueAmount ?? 0)}
+            value={formatCurrency(selectedDate === todayStrIso ? (summary?.totalRevenue ?? revenueDetails?.revenueAmount ?? 0) : (filteredMetrics?.totalRevenue ?? 0))}
             icon={FiTrendingUp}
             color="success"
             pillText={`${revenueDetails?.percentageChange || '+0.0%'} from last week`}
@@ -183,7 +245,7 @@ export const Dashboard = () => {
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Pending Orders"
-            value={summary?.pendingOrders ?? 0}
+            value={selectedDate === todayStrIso ? (summary?.pendingOrders ?? 0) : (filteredMetrics?.pendingOrders ?? 0)}
             icon={FiAlertCircle}
             color="danger"
             pillText={`+${summary?.pendingOrders ?? 0} new`}
@@ -193,7 +255,7 @@ export const Dashboard = () => {
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Orders In Progress"
-            value={summary?.activeOrders ?? 0}
+            value={selectedDate === todayStrIso ? (summary?.activeOrders ?? 0) : (filteredMetrics?.activeOrders ?? 0)}
             icon={FiShoppingBag}
             color="warning"
             pillText={`${summary?.activeOrders ?? 0} in kitchen`}

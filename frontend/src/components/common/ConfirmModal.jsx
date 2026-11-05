@@ -50,7 +50,7 @@ export const ConfirmModal = ({
   };
 
   const footerActions = (
-    <div className="d-flex align-items-center justify-content-center gap-2.5 w-100 flex-wrap">
+    <div className="d-flex align-items-center justify-content-center gap-3 w-100 flex-wrap">
       {!singleAction && (
         <button
           type="button"

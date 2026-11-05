@@ -10,6 +10,7 @@ import Modal from '../../components/common/Modal';
 import Button from '../../components/common/Button';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
+import SearchBar from '../../components/common/SearchBar';
 import BranchRequiredState from '../../components/common/BranchRequiredState';
 import { tableService } from '../../services/tableService';
 import { useBranches } from '../../hooks/useBranches';
@@ -504,22 +505,23 @@ export const Tables = () => {
           showBackButton
           actions={
             <div className="d-flex align-items-center gap-3 flex-wrap">
-              <div className="position-relative" style={{ minWidth: '240px', maxWidth: '320px' }}>
-                <FiSearch className="position-absolute text-muted" style={{ left: '14px', top: '13px', fontSize: '15px' }} />
-                <input
-                  type="text"
-                  placeholder="Search table (e.g., T01)..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="form-control rounded-pill ps-5 bg-white border shadow-xs"
-                  style={{ height: '42px', fontSize: '13px', borderColor: '#E2E8F0' }}
-                />
-              </div>
+              <SearchBar
+                placeholder="Search table (e.g., T1)..."
+                value={searchQuery}
+                onChange={setSearchQuery}
+                records={(tables || []).map(t => ({
+                  id: t.id,
+                  label: tableService.getCanonicalTableNumber(t.number || t.table_number || t.id),
+                  title: `Table ${tableService.getCanonicalTableNumber(t.number || t.table_number || t.id)}`,
+                  subtitle: `${t.location || 'Indoor'} • ${t.capacity || 4} Seats`,
+                }))}
+                style={{ width: '280px', height: '42px' }}
+              />
               {isAdmin && hasBranches && (
                 <Button 
                   onClick={() => setIsAddOpen(true)} 
                   variant="primary" 
-                  className="d-flex align-items-center gap-2 py-2 px-3.5 rounded-pill fw-bold shadow-xs ms-1"
+                  className="d-flex align-items-center gap-2 py-2 px-3.5 rounded-pill fw-bold shadow-xs ms-2"
                   style={{ height: '42px', fontSize: '13px' }}
                 >
                   <FiPlus /> Add Table
@@ -529,43 +531,7 @@ export const Tables = () => {
           }
         />
 
-        {/* Panel 9 Filter Toolbar: Location display boxes & Status pills */}
-        <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white d-flex flex-row align-items-center justify-content-between flex-wrap gap-3">
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            <span className="small fw-bold text-dark me-1" style={{ fontSize: '13px' }}>
-              Locations:
-            </span>
-            <button
-              type="button"
-              onClick={() => setSelectedLocation('ALL')}
-              className={`btn btn-sm rounded-3 px-3 py-1.5 fw-semibold transition-all d-flex align-items-center gap-1.5 ${
-                selectedLocation === 'ALL'
-                  ? 'btn-danger text-white shadow-xs'
-                  : 'bg-light text-dark border border-light-subtle shadow-2xs'
-              }`}
-              style={{ fontSize: '12.5px', cursor: 'pointer' }}
-            >
-              <span>All Locations</span>
-            </button>
-            {uniqueLocations.map(loc => (
-              <button
-                key={loc}
-                type="button"
-                onClick={() => setSelectedLocation(selectedLocation === loc ? 'ALL' : loc)}
-                className={`btn btn-sm rounded-3 px-3 py-1.5 fw-semibold transition-all d-flex align-items-center gap-1.5 ${
-                  selectedLocation === loc
-                    ? 'btn-danger text-white shadow-xs'
-                    : 'bg-light text-dark border border-light-subtle shadow-2xs'
-                }`}
-                style={{ fontSize: '12.5px', cursor: 'pointer' }}
-              >
-                <i className={`bi bi-geo-alt ${selectedLocation === loc ? 'text-white' : 'text-danger opacity-75'}`}></i>
-                <span>{loc}</span>
-              </button>
-            ))}
-          </div>
 
-        </div>
 
         {/* 2 KPI Stat Cards & Filter Toolbar (Matches Reference Screenshot 1) */}
         <div className="row g-3 mb-4 align-items-center">

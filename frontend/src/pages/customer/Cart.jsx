@@ -21,7 +21,7 @@ import CheckoutStepper from '../../components/customer/CheckoutStepper';
 
 export const Cart = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, loading: authLoading } = useAuth();
   const {
     cartItems,
     addToCart,
@@ -89,21 +89,38 @@ export const Cart = () => {
   const isCustomer = (isAuthenticated && user?.role === 'customer')
     || sessionStorage.getItem('foodie_staff_ordering') === '1'
     || Boolean(sessionStorage.getItem('foodie_guest_token'));
-  const [serverCart, setServerCart] = useState(null);
+  const [serverCart, setServerCart] = useState(() => {
+    // Immediate seed from sessionStorage if available to eliminate initial flicker
+    try {
+      const cached = sessionStorage.getItem('foodie_cached_server_cart');
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+
   useEffect(() => {
     const branch = customerBranchId();
     if (!isCustomer || !branch) return undefined;
     let active = true;
-    // Cart edits reach the server asynchronously; wait briefly so the bill reflects the latest change.
-    const timer = setTimeout(() => {
-      const chosen = getOrderType();
-      const load = chosen
-        ? applyOrderContext(chosen).catch(() => api.get(`/cart/?branch=${branch}`, { bypassCache: true }).then((res) => res.data))
-        : api.get(`/cart/?branch=${branch}`, { bypassCache: true }).then((res) => res.data);
-      load
-        .then((view) => { if (active) setServerCart(view); })
-        .catch(() => { if (active) setServerCart(null); });
-    }, 700);
+    const fetchCart = async () => {
+      try {
+        const chosen = getOrderType();
+        const load = chosen
+          ? await applyOrderContext(chosen).catch(() => api.get(`/cart/?branch=${branch}`, { bypassCache: true }).then((res) => res.data))
+          : await api.get(`/cart/?branch=${branch}`, { bypassCache: true }).then((res) => res.data);
+        if (active && load) {
+          setServerCart(load);
+          sessionStorage.setItem('foodie_cached_server_cart', JSON.stringify(load));
+        }
+      } catch {
+        if (active) setServerCart(null);
+      }
+    };
+
+    // Immediate fetch on mount if no cached cart, or debounced update on edits
+    const delay = serverCart ? 400 : 0;
+    const timer = setTimeout(fetchCart, delay);
     return () => { active = false; clearTimeout(timer); };
   }, [isCustomer, cartItems, coupon]);
 
@@ -605,7 +622,7 @@ export const Cart = () => {
                   <button 
                     type="button"
                     onClick={handleCheckout} 
-                    className="btn btn-danger w-100 rounded-pill py-3 fw-bold shadow-sm"
+                    className="btn btn-danger w-100 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center p-0"
                     style={{ height: '44px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)', fontSize: '14px' }}
                   >
                     Proceed to Checkout
@@ -623,9 +640,11 @@ export const Cart = () => {
             ) : (
             <div className="card rounded-3 border-0 shadow-sm p-3 p-sm-4 bg-white mb-4">
               <h5 className="fw-bold text-dark mb-1">Estimated Bill</h5>
-              <p className="text-secondary small border-bottom pb-2 mb-3">
-                The final bill, including the restaurant's tax and charges, is calculated at checkout after you sign in.
-              </p>
+              {!authLoading && !isCustomer && (
+                <p className="text-secondary small border-bottom pb-2 mb-3">
+                  The final bill, including the restaurant's tax and charges, is calculated at checkout after you sign in.
+                </p>
+              )}
               
               <div className="d-flex align-items-center justify-content-between mb-2">
                 <span className="text-secondary small">Item Subtotal</span>
@@ -687,7 +706,7 @@ export const Cart = () => {
               </div>
 
               <div className="d-grid gap-2">
-                <Button onClick={handleCheckout} variant="primary" className="py-2.5 fw-bold shadow-sm" style={{ height: '44px', fontSize: '14px' }}>
+                <Button onClick={handleCheckout} variant="primary" className="fw-bold shadow-sm d-flex align-items-center justify-content-center p-0" style={{ height: '44px', fontSize: '14px' }}>
                   Proceed to Checkout
                 </Button>
                 <Button 

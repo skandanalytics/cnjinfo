@@ -129,7 +129,22 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
 
   const isTakeaway = activeSource.order_type === 'TAKEAWAY'
     || activeSource.orderType === 'Takeaway'
-    || String(activeSource.table || '').toLowerCase() === 'takeaway';
+    || String(activeSource.table || '').toLowerCase() === 'takeaway'
+    || String(activeSource.table_label || '').toLowerCase() === 'takeaway';
+
+  // Resolve dining table display prioritizing activeSource/previewData then order
+  const displayTable = isTakeaway ? null : (
+    (typeof activeSource.table === 'object' && activeSource.table !== null ? (activeSource.table.label || activeSource.table.table_number || activeSource.table.number) : null)
+    || activeSource.table_label
+    || activeSource.table_number
+    || (typeof order.table === 'object' && order.table !== null ? (order.table.label || order.table.table_number || order.table.number) : null)
+    || order.table_label
+    || order.table_number
+    || activeSource.table
+    || order.tableNumber
+    || order.table
+    || null
+  );
   const subtotal = Number(activeSource.subtotal ?? activeSource.items_subtotal ?? 0);
   const dishDiscount = Number(activeSource.dish_discount_total || 0);
   const couponDiscount = Number(activeSource.coupon_discount_total || 0);
@@ -270,14 +285,14 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
           </div>
         </div>
 
-        {(customerName || customerPhone || order.table) && (
+        {(customerName || customerPhone || (!isTakeaway && displayTable)) && (
           <div className="p-2.5 rounded-3 bg-light-subtle border mb-3 small d-flex flex-wrap align-items-center justify-content-between gap-2">
             <div>
               {customerName && <span className="fw-semibold text-dark me-3">Customer: {customerName}</span>}
               {customerPhone && <span className="text-secondary">Mobile: +91 {customerPhone}</span>}
             </div>
             <div>
-              <span className="fw-bold text-dark">{isTakeaway ? 'Takeaway' : `Dining Table: ${order.table || order.tableNumber || order.table_label || '—'}`}</span>
+              <span className="fw-bold text-dark">{isTakeaway ? 'Takeaway' : `Dining Table: ${displayTable || '—'}`}</span>
             </div>
           </div>
         )}

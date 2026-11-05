@@ -19,6 +19,7 @@ import { notifyOrderCreated } from '../../services/notificationService';
 import { normalizeFoodType } from '../../utils/filters';
 import { getCategoryIcon } from '../../utils/categoryIcons';
 import EBillModal from '../../components/orders/EBillModal';
+import PaymentModal from '../../components/common/PaymentModal';
 import OrderDetailsModal from '../../components/orders/OrderDetailsModal';
 import TrackOrderModal from '../../components/orders/TrackOrderModal';
 import Toast from '../../components/common/Toast';
@@ -26,7 +27,7 @@ import {
   FiSearch, FiX, FiPlus, FiMinus, FiTrash2, FiShoppingBag, 
   FiLayers, FiTag, FiCheck, FiDollarSign, FiClock, FiPercent,
   FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw, FiChevronLeft,
-  FiCreditCard, FiGrid, FiList, FiSave, FiShoppingCart
+  FiCreditCard, FiGrid, FiList, FiSave, FiShoppingCart, FiEdit2
 } from 'react-icons/fi';
 import { getShortTableNumber } from '../../components/tables/TableCard';
 
@@ -221,6 +222,7 @@ export const Pos = () => {
   const [tableSearchQuery, setTableSearchQuery] = useState('');
   const [showCouponModal, setShowCouponModal] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [orderError, setOrderError] = useState('');
   const [toast, setToast] = useState({ show: false, message: '', type: 'remove' });
   const [placedOrder, setPlacedOrder] = useState(null);
@@ -1240,7 +1242,7 @@ export const Pos = () => {
   };
 
   // Submit Order Action
-  const handleSubmitOrder = async (isPaid = false) => {
+  const handleSubmitOrder = async (isPaid = false, selectedMethod = 'CASH') => {
     setOrderError('');
     if (cartItems.length === 0) {
       setOrderError('Add at least one dish to the order.');
@@ -1289,6 +1291,14 @@ export const Pos = () => {
     const resolvedPhone = cleanDigits || (effectivePhone ? effectivePhone.trim() : (parentOrder?.customer_phone ? String(parentOrder.customer_phone).trim() : ''));
     const resolvedName = customerName.trim() || parentOrder?.customer_name || selectedTable?.active_order?.customer_name || '';
 
+    const methodMap = {
+      'UPI': 'UPI',
+      'COUNTER': 'CASH',
+      'CASH': 'CASH',
+      'CARD': 'CARD',
+    };
+    const apiPaymentMethod = methodMap[selectedMethod] || 'CASH';
+
     const payload = {
       order_type: orderType,
       table: orderType === 'DINE_IN' ? Number(selectedTable?.id) : null,
@@ -1298,7 +1308,7 @@ export const Pos = () => {
       coupon_code: appliedCoupon ? appliedCoupon.code : (userDismissedCouponRef.current ? 'NONE' : ''),
       customer_phone: resolvedPhone,
       customer_name: resolvedName,
-      payment_method: 'CASH',
+      payment_method: apiPaymentMethod,
       mark_paid: isPaid,
       service_tax_enabled: serviceTaxEnabled,
     };
@@ -1310,6 +1320,7 @@ export const Pos = () => {
 
     try {
       const order = await createAssistedOrder(payload);
+      setShowPaymentModal(false);
       setPlacedOrder({
         ...order,
         is_paid: isPaid,
@@ -1463,24 +1474,7 @@ export const Pos = () => {
                   </p>
                 </div>
 
-                {/* Branch Selector (if multi-branch admin) */}
-                {branches.length > 1 && isAdmin && (
-                  <div className="d-none d-md-flex align-items-center gap-2 ps-3 border-start ms-2">
-                    <span className="small text-muted fw-semibold">Branch:</span>
-                    <select 
-                      className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs"
-                      style={{ width: 'auto', minWidth: '140px', paddingTop: '4px', paddingBottom: '4px', paddingLeft: '12px', fontSize: '12px' }}
-                      value={selectedBranchId || ''}
-                      onChange={(e) => setSelectedBranchId(Number(e.target.value))}
-                    >
-                      {branches.map(b => (
-                        <option key={b.id} value={b.id}>
-                          {b.name} {b.city ? `(${b.city})` : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
+
               </div>
 
               {/* Search dishes input & Availability dropdown aligned to the right */}
@@ -1815,9 +1809,9 @@ export const Pos = () => {
                                 {dish.category || 'General'}
                               </div>
 
-                              {/* Price Row */}
-                              <div className="d-flex align-items-center justify-content-between mt-2 pt-1">
-                                <div className="d-flex align-items-baseline gap-1.5">
+                              {/* Price Row with Availability Status Dot */}
+                              <div className="d-flex align-items-center justify-content-between mt-2 pt-1 flex-wrap gap-2">
+                                <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
                                   <span className="fw-bold" style={{ color: '#F20D2D', fontSize: '16px' }}>
                                     {formatCurrency(dish.sellingPrice || dish.price)}
                                   </span>
@@ -1827,46 +1821,50 @@ export const Pos = () => {
                                     </span>
                                   )}
                                 </div>
+
+                                {/* Stock status pill/dot in price row where it never collides with buttons */}
+                                <div className="d-inline-flex align-items-center gap-1.5" title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}>
+                                  <span
+                                    className="rounded-circle flex-shrink-0"
+                                    style={{
+                                      width: '8px',
+                                      height: '8px',
+                                      backgroundColor: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A',
+                                      boxShadow: isOutOfStock ? '0 0 0 2px rgba(220, 38, 38, 0.2)' : isLowStock ? '0 0 0 2px rgba(217, 119, 6, 0.2)' : '0 0 0 2px rgba(22, 163, 74, 0.2)'
+                                    }}
+                                  />
+                                  <span style={{ fontSize: '11px', color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A', fontWeight: 500 }}>
+                                    {isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
+                                  </span>
+                                </div>
                               </div>
                             </div>
 
-                            {/* Stepper / Add Row with Availability Dot Indicator beside Add button */}
-                            <div className="d-flex align-items-center justify-content-between mt-3 pt-2 border-top border-light-subtle">
-                              {/* Left side: Customize button if toppings */}
+                            {/* Action Row: Customize Button & Add/Stepper Button with full responsive wrapping */}
+                            <div className="d-flex align-items-center justify-content-between mt-3 pt-2 border-top border-light-subtle flex-wrap gap-2">
+                              {/* Left: Customize button (visible for all dishes to add instructions/customizations) */}
                               <div>
-                                {hasToppings ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => handleOpenCustomize(dish)}
-                                    className="btn btn-sm px-3 py-1 fw-medium rounded-pill bg-white"
-                                    style={{ 
-                                      height: '32px', 
-                                      fontSize: '11.5px', 
-                                      border: '1.5px solid #CBD5E1', 
-                                      color: '#475569' 
-                                    }}
-                                    title="Special instructions & customizations"
-                                    disabled={isOutOfStock}
-                                  >
-                                    Customize
-                                  </button>
-                                ) : <div />}
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenCustomize(dish)}
+                                  className="btn btn-sm px-2.5 py-1 fw-medium rounded-pill bg-white flex-shrink-0 d-inline-flex align-items-center gap-1"
+                                  style={{ 
+                                    height: '32px', 
+                                    fontSize: '11.5px', 
+                                    border: '1.5px solid #F20D2D', 
+                                    color: '#F20D2D',
+                                    whiteSpace: 'nowrap'
+                                  }}
+                                  title="Special instructions & customizations"
+                                  disabled={isOutOfStock}
+                                >
+                                  <FiEdit2 size={12} />
+                                  <span>Customize</span>
+                                </button>
                               </div>
 
-                              {/* Right side: Availability status dot + Fixed-width Add / Stepper container */}
-                              <div className="d-flex align-items-center justify-content-end gap-2" style={{ minWidth: '105px' }}>
-                                {/* Availability Dot Indicator */}
-                                <span
-                                  className="rounded-circle flex-shrink-0"
-                                  style={{
-                                    width: '8px',
-                                    height: '8px',
-                                    backgroundColor: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A',
-                                    boxShadow: isOutOfStock ? '0 0 0 2px rgba(220, 38, 38, 0.2)' : isLowStock ? '0 0 0 2px rgba(217, 119, 6, 0.2)' : '0 0 0 2px rgba(22, 163, 74, 0.2)'
-                                  }}
-                                  title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
-                                />
-
+                              {/* Right: Add / Stepper container (Initial state has only Add) */}
+                              <div className="d-flex align-items-center ms-auto">
                                 {cartQty > 0 ? (
                                   <div 
                                     className="d-flex align-items-center justify-content-between bg-white border px-2 shadow-xs"
@@ -1874,7 +1872,7 @@ export const Pos = () => {
                                       height: '32px',
                                       borderRadius: '16px',
                                       borderColor: '#E2E8F0',
-                                      width: '84px'
+                                      minWidth: '80px'
                                     }}
                                   >
                                     <button
@@ -1886,7 +1884,7 @@ export const Pos = () => {
                                     >
                                       −
                                     </button>
-                                    <span className="fw-bold small px-1" style={{ fontSize: '13px', color: '#0F172A' }}>
+                                    <span className="fw-bold small px-1.5" style={{ fontSize: '13px', color: '#0F172A' }}>
                                       {cartQty}
                                     </span>
                                     <button
@@ -1903,16 +1901,17 @@ export const Pos = () => {
                                   <button
                                     type="button"
                                     onClick={() => handleAddDish(dish)}
-                                    className="btn btn-sm px-3 py-1 d-inline-flex align-items-center justify-content-center gap-1 rounded-pill shadow-xs transition-all fw-semibold"
+                                    className="btn btn-sm px-3 py-1 d-inline-flex align-items-center justify-content-center gap-1 rounded-pill shadow-xs transition-all fw-semibold flex-shrink-0"
                                     style={{
                                       height: '32px',
-                                      width: '84px',
+                                      minWidth: '78px',
                                       backgroundColor: '#F20D2D',
                                       borderColor: '#F20D2D',
                                       color: '#FFFFFF',
                                       cursor: isOutOfStock ? 'not-allowed' : 'pointer',
                                       opacity: isOutOfStock ? 0.4 : 1,
-                                      fontSize: '12px'
+                                      fontSize: '12px',
+                                      whiteSpace: 'nowrap'
                                     }}
                                     disabled={isOutOfStock}
                                     title={isOutOfStock ? "Out of Stock" : `Add ${dish.name} to order`}
@@ -2005,13 +2004,15 @@ export const Pos = () => {
                     >
                       <FiLayers className="position-absolute text-muted" style={{ left: '11px', top: '12px', fontSize: '14px' }} />
                       <div
-                        className="form-control form-control-sm shadow-xs fw-semibold d-flex align-items-center justify-content-between text-truncate bg-white cursor-pointer"
+                        className="form-control form-control-sm shadow-xs fw-semibold d-flex align-items-center justify-content-between bg-white cursor-pointer"
                         style={{
-                          height: '38px',
+                          minHeight: selectedTable ? '48px' : '38px',
                           borderRadius: '10px',
                           paddingLeft: '32px',
                           paddingRight: '12px',
-                          fontSize: '12.5px',
+                          paddingTop: selectedTable ? '4px' : '6px',
+                          paddingBottom: selectedTable ? '4px' : '6px',
+                          fontSize: '12px',
                           borderColor: '#E2E8F0',
                           cursor: 'pointer'
                         }}
@@ -2019,12 +2020,19 @@ export const Pos = () => {
                         tabIndex={0}
                         onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setShowTablePicker(true); }}
                       >
-                        <span className={selectedTable ? "text-dark fw-bold" : "text-muted fw-normal"}>
-                          {selectedTable 
-                            ? `${getShortTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id)} (${selectedTable.capacity || 4} Seats)` 
-                            : "Select Table for Dine-In..."}
-                        </span>
-                        <span className="text-secondary small" style={{ fontSize: '10px' }}>▼</span>
+                        {selectedTable ? (
+                          <div className="d-flex flex-column text-start line-height-1">
+                            <span className="text-dark fw-bold" style={{ fontSize: '12.5px' }}>
+                              {getShortTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id)} ({selectedTable.capacity || 4} Seats)
+                            </span>
+                            <span className="text-secondary small" style={{ fontSize: '11px', marginTop: '2px' }}>
+                              {selectedTable.location || selectedTable.area || 'Indoor Main'}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted fw-normal">Select Table for Dine-In...</span>
+                        )}
+                        <span className="text-secondary small ms-2" style={{ fontSize: '10px' }}>▼</span>
                       </div>
                     </div>
                   ) : (
@@ -2231,14 +2239,24 @@ export const Pos = () => {
                             )}
                           </div>
 
-                          {/* Info */}
-                          <div className="flex-grow-1 min-w-0">
+                          {/* Info & Item Instructions */}
+                          <div className="flex-grow-1 min-w-0 text-start">
                             <div className="fw-bold text-dark text-truncate" style={{ fontSize: '12.5px' }}>
                               {item.dish.name}
                             </div>
                             <div className="text-secondary small" style={{ fontSize: '11px', color: '#64748B' }}>
                               {formatCurrency(itemUnitPrice)}
                             </div>
+                            {item.specialInstructions && (
+                              <div className="mt-1 small text-danger fw-medium" style={{ fontSize: '10.5px' }}>
+                                <span className="text-secondary me-1">Note:</span>{item.specialInstructions}
+                              </div>
+                            )}
+                            {Array.isArray(item.options) && item.options.length > 0 && (
+                              <div className="text-muted" style={{ fontSize: '10px' }}>
+                                + {item.options.map(o => o.name).join(', ')}
+                              </div>
+                            )}
                           </div>
 
                           {/* Controls Row: Stepper, Price & Delete with proper spacing */}
@@ -2394,7 +2412,11 @@ export const Pos = () => {
                   <button
                     type="button"
                     disabled={!canSubmitOrder || submittingOrder}
-                    onClick={() => handleSubmitOrder(true)}
+                    onClick={() => {
+                      if (!canSubmitOrder) return;
+                      setOrderError('');
+                      setShowPaymentModal(true);
+                    }}
                     className="btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
                     style={{
                       height: '44px',
@@ -2871,6 +2893,47 @@ export const Pos = () => {
               </div>
             </div>
           </Modal>
+        )}
+
+                {/* Universal Two-Section Payment Modal */}
+        {showPaymentModal && (
+          <PaymentModal
+            isOpen={showPaymentModal}
+            onClose={() => setShowPaymentModal(false)}
+            orderDetails={{
+              customerName: customerName.trim() || parentOrder?.customer_name || selectedTable?.active_order?.customer_name || 'Guest Customer',
+              customerPhone: customerPhone.trim() || parentOrder?.customer_phone || selectedTable?.active_order?.customer_phone || '',
+              branchName: branches.find(b => String(b.id) === String(selectedBranchId))?.name || 'Main Branch',
+              tableLabel: selectedTable?.number || selectedTable?.table_number || '',
+              orderType: orderType,
+              items: cartItems.map(item => ({
+                dish: item.dish,
+                quantity: item.quantity,
+                options: item.options,
+                specialInstructions: item.specialInstructions,
+                line_total: ((Number(item.dish?.price || 0) + (item.options || []).reduce((s, o) => s + Number(o?.price || 0), 0)) * item.quantity),
+              })),
+              pricing: {
+                items_subtotal: billSummary.itemsSubtotal,
+                customization_total: billSummary.addOnsTotal,
+                dish_discount_total: billSummary.dishDiscountsTotal,
+                coupon_discount_total: billSummary.couponDiscount,
+                takeaway_charge: billSummary.packingCharge,
+                gst_rate: 5,
+                gst_amount: billSummary.gstAmount,
+                total_amount: billSummary.grandTotal,
+              },
+              couponCode: appliedCoupon?.code || '',
+              couponDiscount: billSummary.couponDiscount || 0,
+            }}
+            onConfirmPayment={(method) => {
+              const isPaid = method !== 'COUNTER';
+              handleSubmitOrder(isPaid, method);
+            }}
+            loading={submittingOrder}
+            error={orderError}
+            isStaff={true}
+          />
         )}
 
         {/* Order Placed Success Modal */}

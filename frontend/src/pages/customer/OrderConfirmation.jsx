@@ -16,7 +16,7 @@ import CheckoutStepper from '../../components/customer/CheckoutStepper';
 const PAYMENT_LABEL = {
   PAID: 'Paid',
   UNPAID: 'Pay at the counter',
-  PENDING: 'Awaiting online payment',
+  PENDING: 'Pending Verification',
   FAILED: 'Payment failed',
   REFUNDED: 'Refunded',
 };
@@ -383,9 +383,27 @@ export const OrderConfirmation = () => {
             <div className="d-flex align-items-center justify-content-between mb-2.5">
               <span className="text-secondary small fw-medium">Payment</span>
               <span className="fw-bold text-dark" data-testid="payment-status">
-                {isPaid ? 'Paid (UPI)' : (PAYMENT_LABEL[raw.payment_status] || 'Pay at the counter')}
+                {isPaid ? (
+                  <span className="badge bg-success-subtle text-success rounded-pill px-2.5 py-1">
+                    Paid {raw.payment_method ? `(${raw.payment_method})` : ''}
+                  </span>
+                ) : (String(raw.payment_status || '').toUpperCase() === 'PENDING' || String(raw.payment_method || '').toUpperCase() === 'UPI') ? (
+                  <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2.5 py-1">
+                    Pending Verification (UPI)
+                  </span>
+                ) : (
+                  <span className="badge bg-secondary-subtle text-secondary rounded-pill px-2.5 py-1">
+                    {PAYMENT_LABEL[raw.payment_status] || 'Pay at the counter'}
+                  </span>
+                )}
               </span>
             </div>
+            {!isPaid && (String(raw.payment_status || '').toUpperCase() === 'PENDING' || String(raw.payment_method || '').toUpperCase() === 'UPI') && (
+              <div className="alert alert-warning py-2 px-3 small rounded-3 mb-2 text-start" style={{ fontSize: '12px' }}>
+                <i className="bi bi-info-circle me-1"></i>
+                Your UPI payment has been submitted and will be verified by the restaurant cashier.
+              </div>
+            )}
 
             <div className="d-flex align-items-center justify-content-between mb-2.5">
               <span className="text-secondary small fw-medium">Items</span>

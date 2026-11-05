@@ -20,16 +20,27 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
   const knownNotifIdsRef = useRef(null);
 
   const { sidebarCollapsed } = useContext(AppContext);
-  const unreadCount = (notifications || []).filter(n => !n.read).length;
   const sidebarWidth = sidebarCollapsed ? '70px' : '250px';
 
   const { branches } = useBranches();
   const isSuperAdmin = user?.backendRole === 'SUPER_ADMIN' || user?.is_superuser || (user?.role === 'admin' && !user?.branchId);
-  const allowAllBranches = window.location.pathname.includes('/dashboard') || window.location.pathname.includes('/admin/users');
+  const allowAllBranches = window.location.pathname.includes('/dashboard') || window.location.pathname.includes('/admin/users') || window.location.pathname.includes('/admin/branches');
 
   const [selectedBranch, setSelectedBranch] = useState(() => {
     return getSelectedAdminBranch() || 'ALL';
   });
+
+  // Filter notifications by selected branch for Super Admin
+  const branchFilteredNotifications = React.useMemo(() => {
+    if (!notifications) return [];
+    if (!selectedBranch || selectedBranch === 'ALL') return notifications;
+    return notifications.filter((n) => {
+      if (!n.branchId) return true;
+      return String(n.branchId) === String(selectedBranch);
+    });
+  }, [notifications, selectedBranch]);
+
+  const unreadCount = branchFilteredNotifications.filter(n => !n.read).length;
 
   useEffect(() => {
     const handleBranchSync = (e) => {
@@ -68,7 +79,13 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
     window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
   };
 
-  const assignedBranchName = user?.branchName || (branches.find(b => String(b.id) === String(user?.branchId))?.name) || '';
+  const assignedBranchName = user?.branchName || (branches.find(b => String(b.id) === String(user?.branchId || user?.branch))?.name) || '';
+  const currentBranchObj = branches.find(b => String(b.id) === String(selectedBranch));
+  const activeBranchText = isSuperAdmin
+    ? (selectedBranch === 'ALL' || !selectedBranch
+        ? 'All Branches'
+        : (currentBranchObj ? `${currentBranchObj.name} (${currentBranchObj.code})` : (branches.length === 0 ? 'All Branches' : 'All Branches')))
+    : (assignedBranchName || (currentBranchObj ? `${currentBranchObj.name} (${currentBranchObj.code})` : ''));
 
   useEffect(() => {
     if (!notifications || notifications.length === 0) return;
@@ -165,35 +182,17 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
               <FiAlignLeft size={22} />
             </button>
 
-            {/* Centralized Branch Selector for Super Admin / Fixed Indicator for Branch Staff */}
-            {isSuperAdmin ? (
-              <div className="d-flex align-items-center gap-2 bg-light px-3 py-1.5 rounded-pill border shadow-2xs" style={{ borderColor: '#E2E8F0' }}>
+            {/* Centered Branch Display (Plain text, not a dropdown or button, no arrows) */}
+            {activeBranchText && (
+              <div className="d-flex align-items-center gap-2">
                 <FiMapPin className="text-danger flex-shrink-0" size={15} />
-                <span className="small fw-semibold text-secondary d-none d-sm-inline" style={{ fontSize: '12px' }}>Branch:</span>
-                <select
-                  value={selectedBranch}
-                  onChange={handleBranchChange}
-                  className="form-select form-select-sm border-0 bg-transparent fw-bold text-dark p-0 pe-4 shadow-none"
-                  style={{ fontSize: '13px', cursor: 'pointer', outline: 'none' }}
-                  title="Switch Branch"
-                >
-                  {allowAllBranches && <option value="ALL">All Branches</option>}
-                  {branches.map(b => (
-                    <option key={b.id} value={String(b.id)}>
-                      {b.name} ({b.code})
-                    </option>
-                  ))}
-                </select>
+                <span className="small text-secondary fw-semibold" style={{ fontSize: '13px' }}>
+                  Branch:
+                </span>
+                <span className="fw-bold text-dark" style={{ fontSize: '14px', letterSpacing: '-0.2px' }}>
+                  {activeBranchText}
+                </span>
               </div>
-            ) : (
-              assignedBranchName && (
-                <div className="d-flex align-items-center gap-1.5 bg-light px-3 py-1.5 rounded-pill border" style={{ borderColor: '#E2E8F0' }}>
-                  <FiMapPin className="text-danger flex-shrink-0" size={14} />
-                  <span className="small fw-bold text-dark" style={{ fontSize: '12.5px' }}>
-                    {assignedBranchName}
-                  </span>
-                </div>
-              )
             )}
           </div>
 
@@ -274,13 +273,13 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                     </div>
 
                     <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
-                      {notifications.length === 0 ? (
+                      {branchFilteredNotifications.length === 0 ? (
                         <div className="text-center py-4 text-secondary small">
                           <FiBell size={28} className="text-muted mb-2 opacity-50 d-block mx-auto" />
                           No notifications yet
                         </div>
                       ) : (
-                        notifications.map((n) => (
+                        branchFilteredNotifications.map((n) => (
                           <div 
                             key={n.id} 
                             onClick={() => {

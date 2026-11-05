@@ -96,7 +96,20 @@ export const Login = () => {
   // Step 1: Send OTP / Reset Code
   const handleSendResetCode = (e) => {
     e.preventDefault();
-    setForgotError('Password reset is not available here. Ask an administrator to set a new password.');
+    setForgotError('');
+    const id = forgotIdentifier.trim();
+    if (!id) {
+      setForgotError('Please enter your email or registered phone number.');
+      return;
+    }
+    setForgotLoading(true);
+    setTimeout(() => {
+      // Generate a friendly 4-digit verification code
+      const code = String(Math.floor(1000 + Math.random() * 9000));
+      setGeneratedOtp(code);
+      setForgotLoading(false);
+      setForgotStep(2);
+    }, 500);
   };
 
   // Step 2: Verify OTP & Reset Password
@@ -232,10 +245,7 @@ export const Login = () => {
           </div>
         </form>
 
-        <div className="mt-3 p-2.5 rounded-3 bg-light border text-secondary small text-start d-flex justify-content-between align-items-center" style={{ fontSize: '12px' }}>
-          <div>Admin ID: <strong className="text-dark">ADMIN</strong></div>
-          <div>Password: <strong className="text-dark">Admin@123</strong></div>
-        </div>
+
 
         <p className="text-muted small mt-3 mb-0">Sign in with your Admin ID, employee code, email, or registered mobile number.</p>
       </div>

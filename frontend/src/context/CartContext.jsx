@@ -1058,7 +1058,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const removeCoupon = () => {
-    if (coupon && (coupon.isAutomatic || coupon.autoApply || coupon.code === 'WELCOME100')) {
+    if (coupon && (coupon.isAutomatic || coupon.autoApply || coupon.auto_apply)) {
       userRemovedCouponRef.current = true;
     }
     setCoupon(null);

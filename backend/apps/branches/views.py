@@ -311,7 +311,11 @@ class PublicRestaurantSettingsView(APIView):
     authentication_classes = []
 
     def get(self, request):
-        return Response({"qr_enabled": qr_ordering_enabled()})
+        from .models import qr_ordering_enabled, card_payment_enabled
+        return Response({
+            "qr_enabled": qr_ordering_enabled(),
+            "card_enabled": card_payment_enabled(),
+        })
 
 
 class RestaurantSettingsView(APIView):
@@ -323,12 +327,25 @@ class RestaurantSettingsView(APIView):
         return [IsAdminLevel()]
 
     def get(self, request):
-        return Response({"qr_enabled": qr_ordering_enabled()})
+        from .models import qr_ordering_enabled, card_payment_enabled
+        return Response({
+            "qr_enabled": qr_ordering_enabled(),
+            "card_enabled": card_payment_enabled(),
+        })
 
     def patch(self, request):
         from .models import RestaurantSetting
-        row, _ = RestaurantSetting.objects.get_or_create(pk=1, defaults={"qr_enabled": True})
+        row, _ = RestaurantSetting.objects.get_or_create(pk=1, defaults={"qr_enabled": True, "card_enabled": True})
+        fields_to_update = []
         if "qr_enabled" in request.data:
             row.qr_enabled = bool(request.data.get("qr_enabled"))
-            row.save(update_fields=["qr_enabled"])
-        return Response({"qr_enabled": row.qr_enabled})
+            fields_to_update.append("qr_enabled")
+        if "card_enabled" in request.data:
+            row.card_enabled = bool(request.data.get("card_enabled"))
+            fields_to_update.append("card_enabled")
+        if fields_to_update:
+            row.save(update_fields=fields_to_update)
+        return Response({
+            "qr_enabled": row.qr_enabled,
+            "card_enabled": getattr(row, "card_enabled", True),
+        })

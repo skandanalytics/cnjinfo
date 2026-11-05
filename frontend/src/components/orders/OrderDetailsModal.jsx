@@ -166,8 +166,15 @@ export const OrderDetailsModal = ({
             {isPaid ? (
               <span className="badge bg-success rounded-pill px-3 py-2 fw-bold">Paid</span>
             ) : String(currentOrder.status || '').toLowerCase() !== 'cancelled' && (
-              <Button variant="outline-danger" onClick={handleCounterPay} disabled={loading || togglingServiceCharge} className="rounded-pill px-3">
-                Mark as Paid
+              <Button 
+                variant="outline-danger" 
+                onClick={handleCounterPay} 
+                disabled={loading || togglingServiceCharge} 
+                className="rounded-pill px-3 fw-bold"
+              >
+                {(String(currentOrder.payment_status || '').toUpperCase() === 'PENDING' || String(currentOrder.payment_method || '').toUpperCase() === 'UPI')
+                  ? 'Confirm Payment (UPI Received)'
+                  : 'Mark as Paid'}
               </Button>
             )}
           </div>
@@ -323,7 +330,17 @@ export const OrderDetailsModal = ({
               <div className="mb-2">Customer Name: <strong className="text-dark">{currentOrder.customer_name || currentOrder.customerName || currentOrder.customer?.name}</strong></div>
             )}
             <div className="mb-2">Source: <strong>{currentOrder.source}</strong></div>
-            <div className="mb-2">Payment Method: <strong>{currentOrder.paymentMethod}</strong></div>
+            <div className="mb-2 d-flex align-items-center gap-1.5 flex-wrap">
+              <span>Payment Status: </span>
+              {isPaid ? (
+                <span className="badge bg-success-subtle text-success rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>Paid</span>
+              ) : (String(currentOrder.payment_status || '').toUpperCase() === 'PENDING' || String(currentOrder.payment_method || '').toUpperCase() === 'UPI') ? (
+                <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>Pending Verification (UPI)</span>
+              ) : (
+                <span className="badge bg-secondary-subtle text-secondary rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>Unpaid</span>
+              )}
+            </div>
+            <div className="mb-2">Payment Method: <strong>{currentOrder.paymentMethod || currentOrder.payment_method || 'COUNTER'}</strong></div>
             <div>Date/Time: <strong>{currentOrder.date} at {currentOrder.time}</strong></div>
           </div>
 

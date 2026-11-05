@@ -458,14 +458,18 @@ const formatOrderObject = (order, allItems = [], allFoods = [], allTables = [], 
   let tableNumber = 'Takeaway';
   let orderType = 'Takeaway';
 
+  // Extract authoritative table number directly from order fields first
+  const directTableNumber = order.table_number || order.table_no || order.table_label
+    || (typeof order.table === 'object' && order.table !== null ? (order.table.label || order.table.table_number || order.table.number) : null);
+
   if (effectiveData && effectiveData.tableNumber && effectiveData.tableNumber !== 'Takeaway') {
     tableNumber = String(effectiveData.tableNumber);
     orderType = effectiveData.orderType || 'Dining';
-  } else if (tableObj) {
-    tableNumber = String(tableObj.number || tableObj.table_number || `T0${tableObj.id}`);
+  } else if (directTableNumber && directTableNumber !== 'Takeaway' && !isExplicitTakeaway) {
+    tableNumber = String(directTableNumber);
     orderType = 'Dining';
-  } else if (order.table_number || order.table_no) {
-    tableNumber = String(order.table_number || order.table_no);
+  } else if (tableObj) {
+    tableNumber = String(tableObj.table_number || tableObj.number || tableObj.label || (tableObj.id ? `T0${tableObj.id}` : 'T01'));
     orderType = 'Dining';
   } else if (tableVal && tableVal !== null && !isExplicitTakeaway) {
     tableNumber = String(tableVal).startsWith('T') ? String(tableVal) : `T0${tableVal}`;

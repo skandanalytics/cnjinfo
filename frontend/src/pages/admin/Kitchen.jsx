@@ -7,7 +7,7 @@ import { branchService } from '../../services/branchService';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
-import { FiUser, FiShoppingBag, FiClock, FiFileText, FiCheck, FiChevronRight } from 'react-icons/fi';
+import { FiUser, FiShoppingBag, FiClock, FiFileText, FiCheck, FiRefreshCw, FiChevronLeft } from 'react-icons/fi';
 import EBillModal from '../../components/orders/EBillModal';
 import Toast from '../../components/common/Toast';
 import { tableService } from '../../services/tableService';
@@ -145,6 +145,16 @@ export const Kitchen = () => {
   useEffect(() => {
     fetchOrders(false);
     const handleSync = () => fetchOrders(false);
+    const handleBranchSync = (e) => {
+      if (e?.detail?.branchId) {
+        setSelectedBranch(String(e.detail.branchId));
+      } else {
+        const stored = localStorage.getItem('foodie_admin_selected_branch');
+        if (stored) setSelectedBranch(stored);
+      }
+      fetchOrders(false);
+    };
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
     window.addEventListener('foodie_orders_updated', handleSync);
     window.addEventListener('foodie_data_sync_refetch', handleSync);
     window.addEventListener('focus', handleSync);
@@ -153,6 +163,7 @@ export const Kitchen = () => {
     };
     document.addEventListener('visibilitychange', handleVis);
     return () => {
+      window.removeEventListener('foodie_branch_selected', handleBranchSync);
       window.removeEventListener('foodie_orders_updated', handleSync);
       window.removeEventListener('foodie_data_sync_refetch', handleSync);
       window.removeEventListener('focus', handleSync);
@@ -433,63 +444,44 @@ export const Kitchen = () => {
   const readyOrders = sortReadyQueue(activeBranchFilteredOrders.filter((o) => isReady(o.status)));
   const completedOrders = sortCompletedQueue(activeBranchFilteredOrders.filter((o) => isCompleted(o.status)));
 
+  const hasAnyActiveTickets = (pendingOrders.length + preparingOrders.length + readyOrders.length + completedOrders.length) > 0;
+
   return (
     <AdminLayout>
       <div className="kitchen-queue-page pb-4" style={{ overflow: "visible" }}>
-        {/* Header (Matches Reference Screenshot 3) */}
+        {/* Header with Back Arrow and larger font */}
         <div className="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3" ref={headerRef}>
           <div className="d-flex align-items-center gap-3">
-            <div 
-              className="rounded-circle d-flex align-items-center justify-content-center text-danger flex-shrink-0"
-              style={{ width: '46px', height: '46px', backgroundColor: '#FEECEE' }}
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="btn btn-light rounded-circle p-0 border d-inline-flex align-items-center justify-content-center flex-shrink-0 shadow-2xs"
+              style={{ width: '38px', height: '38px', backgroundColor: '#FFFFFF', borderColor: '#E2E8F0' }}
+              title="Go Back"
+              aria-label="Go Back"
             >
-              <i className="bi bi-person-workspace fs-4"></i>
-            </div>
+              <FiChevronLeft size={20} className="text-secondary" />
+            </button>
             <div>
-              <h2 className="fw-bold mb-0.5 text-dark" style={{ fontSize: '23px', letterSpacing: '-0.4px' }}>
+              <h1 className="fw-bold mb-0.5 text-dark" style={{ fontSize: '26px', letterSpacing: '-0.4px' }}>
                 Kitchen Queue & Live Status Monitor
-              </h2>
-              <p className="text-secondary small mb-0" style={{ fontSize: '12.5px' }}>
+              </h1>
+              <p className="text-secondary small mb-0" style={{ fontSize: '13px' }}>
                 Manage, track and update kitchen orders in real-time.
               </p>
             </div>
           </div>
 
           <div className="d-flex align-items-center gap-2">
-            {(!isBranchRestricted && (user?.role === 'admin' || user?.role === 'super_admin' || user?.isSuperAdmin) && branches.length > 1) && (
-              <div className="d-flex align-items-center gap-2">
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => {
-                    const targetId = e.target.value;
-                    const targetBranch = branches.find(b => String(b.id) === String(targetId));
-                    if (targetBranch && isBranchUnderConstruction(targetBranch)) return;
-                    setSelectedBranch(targetId);
-                  }}
-                  className="form-select form-select-sm rounded-pill border bg-white fw-semibold ps-3 pe-4 py-1.5 shadow-2xs text-dark"
-                  style={{ minWidth: '220px', fontSize: '12.5px', borderColor: '#CBD5E1' }}
-                  aria-label="Filter Kitchen by Branch"
-                >
-                  {branches.map(b => {
-                    const underConst = isBranchUnderConstruction(b);
-                    return (
-                      <option key={b.id} value={String(b.id)} disabled={underConst}>
-                        Branch: {b.name}{underConst ? ' — Under Construction' : ''}
-                      </option>
-                    );
-                  })}
-                </select>
-              </div>
-            )}
-
             <button
               type="button"
-              className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-2xs bg-white"
-              style={{ width: '34px', height: '34px', borderColor: '#CBD5E1' }}
+              className="btn btn-sm btn-white border rounded-pill px-3 py-1.5 d-inline-flex align-items-center gap-2 shadow-2xs text-dark fw-semibold transition-all"
+              style={{ height: '38px', fontSize: '13px', borderColor: '#E2E8F0', backgroundColor: '#FFFFFF' }}
               onClick={() => fetchOrders(true)}
               title="Refresh Kitchen Queue"
             >
-              <i className="bi bi-arrow-clockwise fs-6"></i>
+              <FiRefreshCw size={14} className={loading ? 'spin' : 'text-danger'} />
+              <span>Refresh Queue</span>
             </button>
           </div>
         </div>
@@ -518,7 +510,7 @@ export const Kitchen = () => {
           <div className="row g-3 align-items-stretch">
             {/* Column 1: New Tickets */}
             <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
-              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', height: '620px', maxHeight: 'calc(100vh - 300px)', minHeight: '440px' }}>
+              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Red Header Banner */}
                 <div 
                   className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
@@ -528,16 +520,18 @@ export const Kitchen = () => {
                     <i className="bi bi-receipt"></i>
                     <span style={{ fontSize: '14px' }}>New Tickets ({pendingOrders.length})</span>
                   </div>
-                  <FiChevronRight size={16} />
+                  
                 </div>
 
                 <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
                   {pendingOrders.length === 0 ? (
-                    <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
-                      <i className="bi bi-check2-circle text-muted fs-1 mb-2"></i>
-                      <h6 className="fw-bold text-dark mb-1">No New Tickets</h6>
-                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Incoming orders will appear here.</p>
-                    </div>
+                    !hasAnyActiveTickets ? (
+                      <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
+                        <i className="bi bi-check2-circle text-muted fs-1 mb-2"></i>
+                        <h6 className="fw-bold text-dark mb-1">No New Tickets</h6>
+                        <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Incoming orders will appear here.</p>
+                      </div>
+                    ) : null
                   ) : (
                     pendingOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
@@ -619,7 +613,7 @@ export const Kitchen = () => {
 
             {/* Column 2: Preparing */}
             <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
-              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', height: '620px', maxHeight: 'calc(100vh - 300px)', minHeight: '440px' }}>
+              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Orange Header Banner */}
                 <div 
                   className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
@@ -629,18 +623,20 @@ export const Kitchen = () => {
                     <i className="bi bi-fire"></i>
                     <span style={{ fontSize: '14px' }}>Preparing ({preparingOrders.length})</span>
                   </div>
-                  <FiChevronRight size={16} />
+                  
                 </div>
 
                 <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
                   {preparingOrders.length === 0 ? (
-                    <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
-                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-warning" style={{ width: '48px', height: '48px', backgroundColor: '#FEF3C7' }}>
-                        <i className="bi bi-fire fs-3"></i>
+                    !hasAnyActiveTickets ? (
+                      <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
+                        <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-warning" style={{ width: '48px', height: '48px', backgroundColor: '#FEF3C7' }}>
+                          <i className="bi bi-fire fs-3"></i>
+                        </div>
+                        <h6 className="fw-bold text-dark mb-1">No more orders in Preparing</h6>
+                        <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>New orders will appear here.</p>
                       </div>
-                      <h6 className="fw-bold text-dark mb-1">No more orders in Preparing</h6>
-                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>New orders will appear here.</p>
-                    </div>
+                    ) : null
                   ) : (
                     preparingOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
@@ -718,7 +714,7 @@ export const Kitchen = () => {
 
             {/* Column 3: Ready / Serving */}
             <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
-              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', height: '620px', maxHeight: 'calc(100vh - 300px)', minHeight: '440px' }}>
+              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Cyan / Blue Header Banner */}
                 <div 
                   className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
@@ -728,18 +724,20 @@ export const Kitchen = () => {
                     <i className="bi bi-box-seam"></i>
                     <span style={{ fontSize: '14px' }}>Ready / Serving ({readyOrders.length})</span>
                   </div>
-                  <FiChevronRight size={16} />
+                  
                 </div>
 
                 <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
                   {readyOrders.length === 0 ? (
-                    <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
-                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-info" style={{ width: '48px', height: '48px', backgroundColor: '#E0F2FE' }}>
-                        <i className="bi bi-collection-play fs-3"></i>
+                    !hasAnyActiveTickets ? (
+                      <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
+                        <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-info" style={{ width: '48px', height: '48px', backgroundColor: '#E0F2FE' }}>
+                          <i className="bi bi-collection-play fs-3"></i>
+                        </div>
+                        <h6 className="fw-bold text-dark mb-1">No more orders in Ready</h6>
+                        <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Orders marked ready will appear here.</p>
                       </div>
-                      <h6 className="fw-bold text-dark mb-1">No more orders in Ready</h6>
-                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Orders marked ready will appear here.</p>
-                    </div>
+                    ) : null
                   ) : (
                     readyOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
@@ -817,7 +815,7 @@ export const Kitchen = () => {
 
             {/* Column 4: Completed */}
             <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
-              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', height: '620px', maxHeight: 'calc(100vh - 300px)', minHeight: '440px' }}>
+              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Green Header Banner */}
                 <div 
                   className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
@@ -827,18 +825,20 @@ export const Kitchen = () => {
                     <i className="bi bi-check-circle"></i>
                     <span style={{ fontSize: '14px' }}>Completed ({completedOrders.length})</span>
                   </div>
-                  <FiChevronRight size={16} />
+                  
                 </div>
 
                 <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
                   {completedOrders.length === 0 ? (
-                    <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
-                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-success" style={{ width: '48px', height: '48px', backgroundColor: '#DCFCE7' }}>
-                        <i className="bi bi-check2-all fs-3"></i>
+                    !hasAnyActiveTickets ? (
+                      <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
+                        <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-success" style={{ width: '48px', height: '48px', backgroundColor: '#DCFCE7' }}>
+                          <i className="bi bi-check2-all fs-3"></i>
+                        </div>
+                        <h6 className="fw-bold text-dark mb-1">All caught up!</h6>
+                        <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Completed orders will be listed here.</p>
                       </div>
-                      <h6 className="fw-bold text-dark mb-1">All caught up!</h6>
-                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Completed orders will be listed here.</p>
-                    </div>
+                    ) : null
                   ) : (
                     completedOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);

@@ -38,9 +38,15 @@ const saveLocalNotification = (notification) => {
   try {
     const existing = getLocalNotifications();
 
-    const filtered = existing.filter(
-      (item) => String(item.id) !== String(notification.id)
-    );
+    // Prevent duplicate notification for the same order or ID
+    const notifOrderNo = notification.orderNumber || (notification.text && notification.text.match(/Order #([^\s!]+)/i)?.[1]);
+
+    const filtered = existing.filter((item) => {
+      if (String(item.id) === String(notification.id)) return false;
+      const itemOrderNo = item.orderNumber || (item.text && item.text.match(/Order #([^\s!]+)/i)?.[1]);
+      if (notifOrderNo && itemOrderNo && String(notifOrderNo) === String(itemOrderNo)) return false;
+      return true;
+    });
 
     const updated = [notification, ...filtered];
 
@@ -62,8 +68,9 @@ export const notifyOrderCreated = (order) => {
   const tableRaw = order.tableNumber || order.table_number || order.table || (order.orderType === 'TAKEAWAY' || order.order_type === 'TAKEAWAY' ? 'Takeaway' : 'N/A');
   const tableStr = typeof tableRaw === 'object' ? (tableRaw.number || tableRaw.label || 'N/A') : String(tableRaw || 'N/A');
   const total = order.totalAmount || order.total_amount || order.grandTotal || order.total || 0;
+  const branchId = order.branch_id || order.branchId || (typeof order.branch === 'object' ? order.branch?.id : order.branch);
   const msg = `New Order #${num}! Table: ${tableStr}, Total: ₹${total}`;
-  notificationService.createNotification(msg).catch(() => {});
+  notificationService.createNotification(msg, { branchId, orderNumber: num, orderId: order.id }).catch(() => {});
 };
 
 const getClearedNotifIds = () => {
@@ -236,15 +243,16 @@ export const notificationService = {
   |--------------------------------------------------------------------------
   */
 
-  createNotification: async (message) => {
+  createNotification: async (message, metadata = {}) => {
     clearNotificationCache();
-    const temporaryId = `local_${Date.now()}`;
+    const temporaryId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`;
 
     const localNotification = {
       id: temporaryId,
       text: message,
       read: false,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      ...metadata
     };
 
     saveLocalNotification(localNotification);

@@ -26,7 +26,7 @@ export const Modal = ({
           style={{ backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
         >
           <div className="modal-header border-bottom-0 pb-0">
-            <h5 className="modal-title fw-bold" style={{ color: 'var(--text-primary)' }}>{title}</h5>
+            <h5 className="modal-title fw-bold text-truncate pe-2" style={{ color: 'var(--text-primary)', maxWidth: 'calc(100% - 36px)', wordBreak: 'break-word' }} title={typeof title === 'string' ? title : undefined}>{title}</h5>
             <button type="button" className="btn-close" onClick={onClose} aria-label="Close"></button>
           </div>
           

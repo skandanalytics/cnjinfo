@@ -382,7 +382,9 @@ export const EmployeeDashboard = () => {
                               className="py-1 px-2.5 fw-bold rounded-pill"
                               style={{ fontSize: '11.5px' }}
                             >
-                              Mark as Paid
+                              {(String(ord.payment_status || '').toUpperCase() === 'PENDING' || String(ord.payment_method || '').toUpperCase() === 'UPI')
+                                ? 'Confirm Payment (UPI)'
+                                : 'Mark as Paid'}
                             </Button>
                           )}
                           <Button

@@ -90,12 +90,12 @@ export const OrderHistory = () => {
   return (
     <CustomerLayout>
       <main className="pt-3 pb-5 mx-auto" style={{ maxWidth: '840px' }}>
-        <div className="d-flex align-items-center justify-content-between mb-4">
-          <div>
-            <h3 className="fw-bold text-dark mb-1">My Orders</h3>
+        <div className="d-flex align-items-center gap-3 mb-4 pe-3 pe-sm-0">
+          <BackButton to="/customer/home" />
+          <div className="pe-2">
+            <h3 className="fw-bold text-dark mb-1 pe-3">My Orders</h3>
             <p className="text-secondary small mb-0">Track and view all past orders</p>
           </div>
-          <BackButton to="/customer/home" />
         </div>
 
         {/* Filter Tabs matching Screenshot 11 */}
@@ -167,11 +167,28 @@ export const OrderHistory = () => {
                     </div>
                   </div>
 
-                  {/* Middle Line: Dining Type, Table, Item count */}
-                  <div className="text-secondary small mb-3">
-                    <span>{isTakeaway ? 'Takeaway' : 'Dine-in'}</span>
-                    {!isTakeaway && tableLabel && <span> • Table {tableLabel}</span>}
-                    <span> • {itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
+                  {/* Middle Line: Dining Type, Table, Item count, Payment Status */}
+                  <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 text-secondary small mb-3">
+                    <div>
+                      <span>{isTakeaway ? 'Takeaway' : 'Dine-in'}</span>
+                      {!isTakeaway && tableLabel && <span> • Table {tableLabel}</span>}
+                      <span> • {itemCount} {itemCount === 1 ? 'item' : 'items'}</span>
+                    </div>
+                    <div>
+                      {String(ord.payment_status || ord.paymentStatus || '').toUpperCase() === 'PAID' ? (
+                        <span className="badge bg-success-subtle text-success rounded-pill px-2.5 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>
+                          ● Paid
+                        </span>
+                      ) : (String(ord.payment_status || ord.paymentStatus || '').toUpperCase() === 'PENDING' || String(ord.payment_method || '').toUpperCase() === 'UPI') ? (
+                        <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2.5 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>
+                          ● Pending Verification (UPI)
+                        </span>
+                      ) : (
+                        <span className="badge bg-secondary-subtle text-secondary rounded-pill px-2.5 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>
+                          ● Unpaid
+                        </span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Bottom Row: 3 Action Pill Buttons */}

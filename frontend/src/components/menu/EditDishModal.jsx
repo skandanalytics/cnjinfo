@@ -37,9 +37,9 @@ export const EditDishModal = ({
   const [toppingName, setToppingName] = useState('');
   const [toppingPrice, setToppingPrice] = useState('');
 
-  // Validation: name must be non-empty after trimming, price must be valid non-negative number (0 is accepted)
+  // Validation: name must be non-empty after trimming, price must be valid non-negative number <= 999 (0 is accepted, max 3 digits)
   const isToppingNameValid = toppingName.trim().length > 0;
-  const isToppingPriceValid = toppingPrice.trim() !== '' && !isNaN(Number(toppingPrice.trim())) && Number(toppingPrice.trim()) >= 0;
+  const isToppingPriceValid = toppingPrice.trim() !== '' && !isNaN(Number(toppingPrice.trim())) && Number(toppingPrice.trim()) >= 0 && Number(toppingPrice.trim()) <= 999;
   const isToppingValid = isToppingNameValid && isToppingPriceValid;
 
   const handleAddTopping = () => {
@@ -55,6 +55,10 @@ export const EditDishModal = ({
     }
     if (trimmedPrice === '' || isNaN(Number(trimmedPrice)) || Number(trimmedPrice) < 0) {
       setErrorMsg('Please enter a valid topping price.');
+      return;
+    }
+    if (Number(trimmedPrice) > 999) {
+      setErrorMsg('Topping price cannot exceed ₹999 (maximum 3 digits).');
       return;
     }
     const capName = trimmedName.charAt(0).toUpperCase() + trimmedName.slice(1);
@@ -610,10 +614,15 @@ export const EditDishModal = ({
                     type="number"
                     placeholder="Price (₹)"
                     value={toppingPrice}
-                    onChange={(e) => setToppingPrice(e.target.value)}
+                    onChange={(e) => {
+                      const cleanVal = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
+                      setToppingPrice(cleanVal);
+                    }}
                     className="form-control form-control-sm"
                     style={{ flex: 1 }}
                     min="0"
+                    max="999"
+                    maxLength={3}
                   />
                   <button
                     type="button"

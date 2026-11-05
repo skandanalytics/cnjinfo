@@ -754,39 +754,7 @@ export const Home = () => {
           </div>
         )}
 
-        {/* Hero Banner: Delicious Food For Every Mood (Matches Reference 13) */}
-        <div
-          className="rounded-4 p-3 p-md-4 mb-3 text-start position-relative overflow-hidden shadow-sm d-flex flex-column flex-md-row align-items-md-center justify-content-between"
-          style={{
-            background: 'linear-gradient(135deg, #FFF9F5 0%, #FFF3EC 50%, #FFEBE0 100%)',
-            border: '1px solid #FFE4D6'
-          }}
-        >
-          <div style={{ maxWidth: '440px', zIndex: 2 }}>
-            <h2 className="fw-bold mb-0.5" style={{ color: 'var(--primary-color, #F20D2D)', fontSize: 'clamp(22px, 3vw, 28px)', letterSpacing: '-0.5px', lineHeight: 1.15 }}>
-              Delicious Food For Every Mood
-            </h2>
-            <p className="text-secondary small mb-2.5" style={{ fontSize: '12px' }}>
-              Fresh ingredients, tasty dishes, great moments.
-            </p>
 
-          </div>
-
-          <div className="d-none d-md-flex align-items-center gap-2.5 mt-2 mt-md-0 position-relative" style={{ zIndex: 1 }}>
-            <img 
-              src="https://images.unsplash.com/photo-1589302168068-964664d93dc0?w=240&auto=format&fit=crop&q=80" 
-              alt="Delicious Biryani"
-              className="rounded-circle shadow-md"
-              style={{ width: '95px', height: '95px', objectFit: 'cover', border: '3px solid #fff' }}
-            />
-            <img 
-              src="https://images.unsplash.com/photo-1601050690597-df0568f70950?w=240&auto=format&fit=crop&q=80" 
-              alt="Crispy Pani Puri"
-              className="rounded-circle shadow-md"
-              style={{ width: '110px', height: '110px', objectFit: 'cover', border: '3px solid #fff' }}
-            />
-          </div>
-        </div>
 
         {/* Active Live Orders List Section (shows right AFTER Flat ₹50 OFF banner) */}
         {!isEmployee && activeOrders && activeOrders.length > 0 && (

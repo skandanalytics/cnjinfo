@@ -65,6 +65,8 @@ class BranchSerializer(serializers.ModelSerializer):
         val = value.strip()
         if not val:
             raise serializers.ValidationError("Branch name is required.")
+        if len(val) > 15:
+            raise serializers.ValidationError("Branch name cannot exceed 15 characters.")
         if any(ch.isdigit() for ch in val):
             raise serializers.ValidationError("Branch name cannot contain numbers.")
         qs = Branch.objects.filter(name__iexact=val)

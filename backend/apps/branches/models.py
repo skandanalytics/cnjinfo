@@ -50,6 +50,7 @@ class RestaurantSetting(models.Model):
     """One row for restaurant-wide switches. Existing table QR codes are kept; this only controls whether they are used."""
 
     qr_enabled = models.BooleanField(default=True)
+    card_enabled = models.BooleanField(default=True, help_text="Enable or disable Card/Swipe payments across POS and Checkout.")
 
     class Meta:
         db_table = "restaurant_settings"
@@ -59,8 +60,13 @@ class RestaurantSetting(models.Model):
 
 
 def qr_ordering_enabled():
-    row, _ = RestaurantSetting.objects.get_or_create(pk=1, defaults={"qr_enabled": True})
+    row, _ = RestaurantSetting.objects.get_or_create(pk=1, defaults={"qr_enabled": True, "card_enabled": True})
     return bool(row.qr_enabled)
+
+
+def card_payment_enabled():
+    row, _ = RestaurantSetting.objects.get_or_create(pk=1, defaults={"qr_enabled": True, "card_enabled": True})
+    return bool(getattr(row, "card_enabled", True))
 
 
 class DiningTable(models.Model):

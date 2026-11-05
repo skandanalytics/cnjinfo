@@ -1,5 +1,5 @@
 import React from 'react';
-import { FiEdit2, FiEye, FiMapPin, FiUsers, FiTrash2 } from 'react-icons/fi';
+import { FiEdit2, FiEye, FiMapPin, FiUsers, FiTrash2, FiRotateCw } from 'react-icons/fi';
 import { tableService } from '../../services/tableService';
 
 export function getShortTableNumber(val) {
@@ -47,6 +47,7 @@ export const TableCard = ({
   onDelete,
   onViewQR,
   onTrackOrder,
+  onOrderAgain,
   isAdmin = false,
   showActions = false,
   hasDishes = true,
@@ -100,20 +101,20 @@ export const TableCard = ({
           </h4>
 
           <div className="d-flex flex-column gap-0.5 text-secondary" style={{ fontSize: '11.5px' }}>
-            <div className="d-flex align-items-center gap-1.5 fw-medium text-secondary">
-              <FiMapPin size={12} className="text-muted flex-shrink-0" />
+            <div className="d-flex align-items-center gap-2 fw-medium text-secondary">
+              <FiMapPin size={13} className="text-muted flex-shrink-0" />
               <span>{locationLabel}</span>
             </div>
-            <div className="d-flex align-items-center gap-1.5 fw-medium text-muted">
-              <FiUsers size={12} className="text-muted flex-shrink-0" />
+            <div className="d-flex align-items-center gap-2 fw-medium text-muted">
+              <FiUsers size={13} className="text-muted flex-shrink-0" />
               <span>{capacityNumber} Seats</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Footer Action Buttons (3 Buttons: Edit, View Order, QR Code) with generous gap & padding */}
-      <div className="d-flex align-items-center justify-content-between gap-2 pt-3 mt-2 px-1 border-top" style={{ borderColor: isOccupied ? '#FEE2E2' : '#E2F3E9' }}>
+      {/* Footer Action Buttons with generous spacing and clear tooltips */}
+      <div className="d-flex align-items-center justify-content-between gap-2 pt-2.5 mt-2 px-1 border-top" style={{ borderColor: isOccupied ? '#FEE2E2' : '#E2F3E9' }}>
         <button
           type="button"
           onClick={(e) => {
@@ -142,11 +143,32 @@ export const TableCard = ({
           }}
           className="btn btn-sm bg-white rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-2xs border text-secondary"
           style={{ width: '32px', height: '32px', borderColor: '#CBD5E1' }}
-          title={isOccupied ? "View active order" : "Take table order"}
+          title={isOccupied ? "View Order" : "Take Order"}
           aria-label={isOccupied ? "View Order" : "Take Order"}
         >
           <FiEye size={14} className="text-muted" />
         </button>
+
+        {/* Order Again button for occupied tables */}
+        {isOccupied && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onOrderAgain) {
+                onOrderAgain(table);
+              } else if (onSelect) {
+                onSelect(table);
+              }
+            }}
+            className="btn btn-sm bg-white rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-2xs border text-secondary"
+            style={{ width: '32px', height: '32px', borderColor: '#CBD5E1' }}
+            title="Order Again (Add dishes to active order)"
+            aria-label="Order Again"
+          >
+            <FiRotateCw size={13} className="text-danger" />
+          </button>
+        )}
 
         {onViewQR && (
           <button

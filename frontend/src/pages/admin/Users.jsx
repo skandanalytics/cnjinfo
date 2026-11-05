@@ -143,6 +143,7 @@ export const Users = () => {
     const kitchenStaff = branchEmployees.filter(u => u.department === 'Kitchen' || (u.designation && u.designation.toLowerCase().includes('chef'))).length;
     const floorStaff = branchEmployees.filter(u => u.department === 'Dining Floor' || (u.designation && /steward|waiter/i.test(u.designation))).length;
     const billingStaff = branchEmployees.filter(u => u.department === 'Billing & POS' || (u.designation && u.designation.toLowerCase().includes('cashier'))).length;
+    const logisticsStaff = branchEmployees.filter(u => u.department === 'Logistics' || (u.designation && /delivery/i.test(u.designation))).length;
     const managementStaff = branchEmployees.filter(u => u.department === 'Management' || u.role === 'admin' || (u.designation && u.designation.toLowerCase().includes('manager'))).length;
 
     return {
@@ -150,6 +151,7 @@ export const Users = () => {
       kitchenStaff,
       floorStaff,
       billingStaff,
+      logisticsStaff,
       managementStaff
     };
   }, [branchEmployees]);
@@ -161,6 +163,7 @@ export const Users = () => {
       if (selectedTab === 'kitchen' && u.department !== 'Kitchen' && !u.designation?.toLowerCase().includes('chef')) return false;
       if (selectedTab === 'floor' && u.department !== 'Dining Floor' && !/steward|waiter/i.test(u.designation || '')) return false;
       if (selectedTab === 'billing' && u.department !== 'Billing & POS' && !u.designation?.toLowerCase().includes('cashier')) return false;
+      if (selectedTab === 'logistics' && u.department !== 'Logistics' && !/delivery/i.test(u.designation || '')) return false;
       if (selectedTab === 'management' && u.department !== 'Management' && u.role !== 'admin' && !u.designation?.toLowerCase().includes('manager')) return false;
 
       // Search query
@@ -188,11 +191,11 @@ export const Users = () => {
     if (isSubmitting) return;
 
     setFormError('');
+    const isSuperAdminEdit = editingUser && (editingUser.role === 'SUPER_ADMIN' || formData.role === 'SUPER_ADMIN');
     if (
       !formData.name?.trim() ||
       !formData.role?.trim() ||
-      !formData.designation?.trim() ||
-      !formData.department?.trim() ||
+      (!isSuperAdminEdit && (!formData.designation?.trim() || !formData.department?.trim())) ||
       (!editingUser && !formData.password?.trim())
     ) {
       setFormError('Fill in all required fields (a password is required for a new employee).');
@@ -406,6 +409,7 @@ export const Users = () => {
                   { key: 'kitchen', label: `Kitchen & Chefs (${stats.kitchenStaff})`, count: stats.kitchenStaff },
                   { key: 'floor', label: `Floor Stewards (${stats.floorStaff})`, count: stats.floorStaff },
                   { key: 'billing', label: `Cashiers & POS (${stats.billingStaff})`, count: stats.billingStaff },
+                  { key: 'logistics', label: `Logistics & Delivery (${stats.logisticsStaff})`, count: stats.logisticsStaff },
                   { key: 'management', label: `Management & Admin (${stats.managementStaff})`, count: stats.managementStaff }
                 ].filter(tab => tab.key === 'all' || tab.count > 0).map(tab => (
                   <button
@@ -628,11 +632,7 @@ export const Users = () => {
                 </div>
               </div>
 
-              <div className="modal-footer border-0 p-3 bg-white justify-content-end">
-                <button type="button" className="btn btn-secondary btn-sm rounded-pill px-4" onClick={() => setViewingUser(null)}>
-                  Close
-                </button>
-              </div>
+
             </div>
           </div>
         </div>
@@ -742,58 +742,62 @@ export const Users = () => {
                       />
                     </div>
 
-                    <div className="col-12 col-md-4">
-                      <label className="form-label small fw-bold text-secondary">Department *</label>
-                      <select
-                        className="form-select rounded-3"
-                        required
-                        value={formData.department}
-                        onChange={(e) => applyDepartment(e.target.value)}
-                      >
-                        {DEPARTMENT_OPTIONS.map((department) => (
-                          <option key={department} value={department}>{department}</option>
-                        ))}
-                      </select>
-                    </div>
+                    {!(editingUser && (editingUser.role === 'SUPER_ADMIN' || formData.role === 'SUPER_ADMIN')) && (
+                      <>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label small fw-bold text-secondary">Department *</label>
+                          <select
+                            className="form-select rounded-3"
+                            required
+                            value={formData.department}
+                            onChange={(e) => applyDepartment(e.target.value)}
+                          >
+                            {DEPARTMENT_OPTIONS.map((department) => (
+                              <option key={department} value={department}>{department}</option>
+                            ))}
+                          </select>
+                        </div>
 
-                    <div className="col-12 col-md-4">
-                      <label className="form-label small fw-bold text-secondary">Role Access *</label>
-                      <select
-                        className="form-select rounded-3"
-                        required
-                        value={formData.role}
-                        onChange={(e) => applyRole(e.target.value)}
-                      >
-                        {(() => {
-                          const roles = rolesForDepartment(formData.department);
-                          const options = roles.some((r) => r.value === formData.role)
-                            ? roles
-                            : [{ value: formData.role, label: formData.role === 'SUPER_ADMIN' ? 'Super Admin' : formData.role }, ...roles];
-                          return options.map((role) => (
-                            <option key={role.value} value={role.value}>{role.label}</option>
-                          ));
-                        })()}
-                      </select>
-                    </div>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label small fw-bold text-secondary">Role Access *</label>
+                          <select
+                            className="form-select rounded-3"
+                            required
+                            value={formData.role}
+                            onChange={(e) => applyRole(e.target.value)}
+                          >
+                            {(() => {
+                              const roles = rolesForDepartment(formData.department);
+                              const options = roles.some((r) => r.value === formData.role)
+                                ? roles
+                                : [{ value: formData.role, label: formData.role === 'SUPER_ADMIN' ? 'Super Admin' : formData.role }, ...roles];
+                              return options.map((role) => (
+                                <option key={role.value} value={role.value}>{role.label}</option>
+                              ));
+                            })()}
+                          </select>
+                        </div>
 
-                    <div className="col-12 col-md-4">
-                      <label className="form-label small fw-bold text-secondary">Designation *</label>
-                      <select
-                        className="form-select rounded-3"
-                        required
-                        value={formData.designation}
-                        onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                      >
-                        {(() => {
-                          const titles = designationsFor(formData.department, formData.role);
-                          const current = formData.designation;
-                          const options = current && !titles.includes(current) ? [current, ...titles] : titles;
-                          return options.map((title) => (
-                            <option key={title} value={title}>{displayJobTitle(title)}</option>
-                          ));
-                        })()}
-                      </select>
-                    </div>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label small fw-bold text-secondary">Designation *</label>
+                          <select
+                            className="form-select rounded-3"
+                            required
+                            value={formData.designation}
+                            onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
+                          >
+                            {(() => {
+                              const titles = designationsFor(formData.department, formData.role);
+                              const current = formData.designation;
+                              const options = current && !titles.includes(current) ? [current, ...titles] : titles;
+                              return options.map((title) => (
+                                <option key={title} value={title}>{displayJobTitle(title)}</option>
+                              ));
+                            })()}
+                          </select>
+                        </div>
+                      </>
+                    )}
 
                     <div className="col-12 col-md-6">
                       <label className="form-label small fw-bold text-secondary">Branch *</label>

@@ -144,12 +144,14 @@ export const DishCard = ({
             )}
           </div>
 
-          <span 
-            className="badge rounded-pill fw-bold px-2.5 py-1 shadow-2xs" 
-            style={{ fontSize: '11px', ...stockBadgeStyle }}
-          >
-            {stockLabel}
-          </span>
+          {stockLabel !== 'In Stock' && (
+            <span 
+              className="badge rounded-pill fw-bold px-2.5 py-1 shadow-2xs" 
+              style={{ fontSize: '11px', ...stockBadgeStyle }}
+            >
+              {stockLabel}
+            </span>
+          )}
         </div>
 
         {/* Card Footer: Restock Toggle & Circular Edit / Delete Buttons */}

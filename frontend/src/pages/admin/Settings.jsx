@@ -9,6 +9,7 @@ export const Settings = () => {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [autoAccept, setAutoAccept] = useState(false);
   const [qrEnabled, setQrEnabled] = useState(true);
+  const [cardEnabled, setCardEnabled] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -18,7 +19,10 @@ export const Settings = () => {
 
   useEffect(() => {
     import('../../services/staffClient').then(({ staffJson }) => staffJson('/settings/'))
-      .then((data) => setQrEnabled(data?.qr_enabled !== false))
+      .then((data) => {
+        setQrEnabled(data?.qr_enabled !== false);
+        setCardEnabled(data?.card_enabled !== false);
+      })
       .catch(() => setMessage('QR setting could not be loaded.'));
   }, []);
 
@@ -29,9 +33,10 @@ export const Settings = () => {
       const { staffJson } = await import('../../services/staffClient');
       const saved = await staffJson('/settings/', {
         method: 'PATCH',
-        body: JSON.stringify({ qr_enabled: qrEnabled }),
+        body: JSON.stringify({ qr_enabled: qrEnabled, card_enabled: cardEnabled }),
       });
       setQrEnabled(saved?.qr_enabled !== false);
+      setCardEnabled(saved?.card_enabled !== false);
       window.dispatchEvent(new CustomEvent('foodie_settings_updated'));
       setMessage(saved?.qr_enabled === false
         ? 'QR codes are turned off. Table QR actions are hidden.'
@@ -77,6 +82,18 @@ export const Settings = () => {
           />
           <p className="text-muted small ms-4 mt-1" style={{ fontSize: '11px' }}>
             When this is off, QR buttons are hidden and QR links cannot be opened. Tables and dine-in ordering stay available.
+          </p>
+        </div>
+
+        <div className="mb-4">
+          <h6 className="fw-bold text-dark mb-3">Payment Options</h6>
+          <Toggle
+            label="Enable Card / Swipe Payments"
+            checked={cardEnabled}
+            onChange={() => setCardEnabled(!cardEnabled)}
+          />
+          <p className="text-muted small ms-4 mt-1" style={{ fontSize: '11px' }}>
+            When disabled, Card / Swipe will be hidden as a payment option in the Checkout and POS payment dialogs.
           </p>
         </div>
 

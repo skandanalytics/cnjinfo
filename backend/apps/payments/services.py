@@ -262,4 +262,23 @@ def record_counter(staff_user, order_id, amount=None):
         raise PaymentError("This order is already paid.", "already_paid", 409)
     order.payment_status = Order.PaymentStatus.PAID
     order.save(update_fields=["payment_status", "updated_at"])
+
+    # If this order has continuations or is part of a continuation group, mark related orders as PAID as well
+    root = order.parent_order if order.parent_order_id else order
+    related_orders = [root] + list(root.continuations.exclude(pk=order.pk))
+    for rel in related_orders:
+        if rel.pk != order.pk and rel.payment_status != Order.PaymentStatus.PAID:
+            rel.payment_status = Order.PaymentStatus.PAID
+            rel.save(update_fields=["payment_status", "updated_at"])
+            Payment.objects.get_or_create(
+                order=rel,
+                defaults={
+                    "method": Payment.Method.COUNTER,
+                    "amount": rel.total_amount,
+                    "status": Payment.Status.SUCCESS,
+                    "recorded_by": staff_user,
+                    "paid_at": timezone.now(),
+                }
+            )
+
     return payment

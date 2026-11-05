@@ -87,6 +87,7 @@ export const Checkout = () => {
   const [orderType, setType] = useState(() => (hasDineInTable() || getOrderType() === TAKEAWAY ? getOrderType() : null));
   const [cartView, setCartView] = useState(null);
   const [tableChoices, setTableChoices] = useState([]);
+  const [allBranchTables, setAllBranchTables] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
@@ -143,6 +144,7 @@ export const Checkout = () => {
       const branchId = await resolvePublicBranchId();
       if (!branchId) return { open: [], all: [] };
       const tables = await availableTables(branchId);
+      setAllBranchTables(tables || []);
       const activeTableId = preferredId || getSelectedTableId() || getLastDineInTableId() || sessionStorage.getItem('foodie_selected_table');
       const open = selectableTables(tables, activeTableId);
       setTableChoices(open);
@@ -288,6 +290,7 @@ export const Checkout = () => {
             const branchId = await resolvePublicBranchId();
             if (branchId) {
               allTables = await availableTables(branchId);
+              if (active) setAllBranchTables(allTables);
               openTables = selectableTables(allTables, preferredId);
               if (active) setTableChoices(openTables);
             }
@@ -381,99 +384,97 @@ export const Checkout = () => {
           <div className="col-12 col-lg-8">
                         {/* Customer Details & Dining Service Card (Matches Reference 6) */}
             <div className="card border-0 shadow-sm p-4 bg-white text-start mb-4" style={{ borderRadius: '18px', border: '1px solid #E2E8F0' }}>
-              <h5 className="fw-bold text-dark mb-3" style={{ fontSize: '18px' }}>Dining Option</h5>
+              <h5 className="fw-bold text-dark mb-3" style={{ fontSize: '18px' }}>Choose Option</h5>
               <div className="row g-3 mb-3">
                 <div className="col-6">
                   <div
                     onClick={() => chooseType(DINE_IN)}
-                    className="p-3 rounded-4 d-flex align-items-center justify-content-between text-start cursor-pointer transition-all shadow-xs"
+                    className="p-3 rounded-4 d-flex align-items-center justify-content-center text-center cursor-pointer transition-all shadow-xs h-100"
                     style={{
                       cursor: 'pointer',
                       border: `2px solid ${orderType === DINE_IN ? '#F20D2D' : '#E2E8F0'}`,
                       backgroundColor: orderType === DINE_IN ? '#FFF5F5' : '#FFFFFF',
-                      minHeight: '68px'
+                      minHeight: '64px'
                     }}
                   >
-                    <div className="d-flex align-items-center gap-2.5">
-                      <div 
-                        className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
-                        style={{ width: '38px', height: '38px', backgroundColor: orderType === DINE_IN ? '#FFE4E6' : '#F1F5F9', color: '#F20D2D' }}
-                      >
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M4 18v3" /><path d="M20 18v3" /><path d="M2 14h20" /><path d="M4 14V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v6" />
-                        </svg>
-                      </div>
-                      <span className="fw-bold text-dark fs-6">Table Dine-in</span>
-                    </div>
-                    {orderType === DINE_IN && (
-                      <FiCheckCircle size={20} style={{ fill: '#F20D2D', color: '#FFFFFF' }} />
-                    )}
+                    <span className="fw-bold text-dark fs-6">Table Dine-in</span>
                   </div>
                 </div>
 
                 <div className="col-6">
                   <div
                     onClick={() => chooseType(TAKEAWAY)}
-                    className="p-3 rounded-4 d-flex align-items-center justify-content-between text-start cursor-pointer transition-all shadow-xs"
+                    className="p-3 rounded-4 d-flex align-items-center justify-content-center text-center cursor-pointer transition-all shadow-xs h-100"
                     style={{
                       cursor: 'pointer',
                       border: `2px solid ${orderType === TAKEAWAY ? '#F20D2D' : '#E2E8F0'}`,
                       backgroundColor: orderType === TAKEAWAY ? '#FFF5F5' : '#FFFFFF',
-                      minHeight: '68px'
+                      minHeight: '64px'
                     }}
                   >
-                    <div className="d-flex align-items-center gap-2.5">
-                      <div 
-                        className="rounded-3 d-flex align-items-center justify-content-center flex-shrink-0"
-                        style={{ width: '38px', height: '38px', backgroundColor: orderType === TAKEAWAY ? '#FFE4E6' : '#F1F5F9', color: '#F20D2D' }}
-                      >
-                        <FiShoppingBag size={20} />
-                      </div>
+                    <div className="d-flex align-items-center gap-2">
+                      <FiShoppingBag size={20} className="text-danger flex-shrink-0" />
                       <span className="fw-bold text-dark fs-6">Takeaway</span>
                     </div>
-                    {orderType === TAKEAWAY && (
-                      <FiCheckCircle size={20} style={{ fill: '#F20D2D', color: '#FFFFFF' }} />
-                    )}
                   </div>
                 </div>
               </div>
 
               {orderType === DINE_IN && (
-                <div className="mb-3">
-                  <label className="form-label small fw-bold text-dark mb-1">
-                    {(hasScannedTable() || cartView?.table || getSelectedTableId()) ? 'Dining Table' : 'Select Table *'}
-                  </label>
-                  <div className="d-flex align-items-center gap-2">
-                    {(hasScannedTable() || cartView?.table || getSelectedTableId()) ? (
-                      <div
-                        className="form-control rounded-3 shadow-xs fw-semibold flex-grow-1 d-flex align-items-center bg-light text-dark"
-                        style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
-                      >
+                <div className="mb-2 p-2.5 rounded-3 bg-light border border-light-subtle">
+                  {hasScannedTable() ? (
+                    <div className="d-flex align-items-center justify-content-between">
+                      <span className="small text-secondary fw-semibold">Table:</span>
+                      <span className="fw-bold text-dark font-monospace">
                         {formatCompactTableLabel(cartView?.table?.table_number || getSavedTableNumber() || String(getSelectedTableId()))}
+                      </span>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="row row-cols-3 row-cols-sm-6 g-2">
+                        {(allBranchTables.length > 0 ? allBranchTables : tableChoices).map((tbl) => {
+                          const num = tbl.table_number || tbl.number || tbl.id;
+                          const cleanNum = String(num).startsWith('T') ? String(num) : `T${String(num).padStart(2, '0')}`;
+                          const isAvail = tbl.available === true || tbl.status === 'AVAILABLE' || tbl.status === 'Available' || tbl.is_available === true;
+                          const currentTid = cartView?.table?.id || getSelectedTableId();
+                          const isSelected = currentTid && String(currentTid) === String(tbl.id);
+
+                          return (
+                            <div key={tbl.id} className="col">
+                              <button
+                                type="button"
+                                disabled={!isAvail}
+                                onClick={() => isAvail && chooseType(DINE_IN, tbl)}
+                                className={`btn w-100 p-2 rounded-3 text-center transition-all d-flex flex-column align-items-center justify-content-center ${
+                                  isSelected
+                                    ? 'btn-danger text-white shadow-sm'
+                                    : isAvail
+                                    ? 'btn-outline-secondary bg-white text-dark'
+                                    : 'btn-light text-muted opacity-50'
+                                }`}
+                                style={{
+                                  border: isSelected ? '2px solid #F20D2D' : isAvail ? '1.5px solid #CBD5E1' : '1px dashed #CBD5E1',
+                                  cursor: isAvail ? 'pointer' : 'not-allowed',
+                                  minHeight: '46px'
+                                }}
+                                title={isAvail ? `Table ${cleanNum}` : `Table ${cleanNum} (Occupied)`}
+                              >
+                                <span className="fw-bold" style={{ fontSize: '13px', lineHeight: 1.1 }}>
+                                  {cleanNum}
+                                </span>
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
-                    ) : (
-                      <select
-                        className="form-select rounded-3 shadow-xs fw-semibold flex-grow-1"
-                        style={{ height: '42px', fontSize: '13.5px', borderColor: '#CBD5E1' }}
-                        value={cartView?.table?.id || getSelectedTableId() || ''}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          const found = tableChoices.find(t => String(t.id) === String(val));
-                          if (found) chooseType(DINE_IN, found);
-                        }}
-                      >
-                        <option value="">Choose Table...</option>
-                        {tableChoices.map((tbl) => (
-                          <option key={tbl.id} value={tbl.id}>
-                            {formatCompactTableLabel(tbl.table_number)} ({tbl.capacity || 4} Seats)
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-3 py-2 fw-bold" style={{ fontSize: '11px' }}>
-                      Confirmed
-                    </span>
-                  </div>
+                      {cartView?.table && (
+                        <div className="mt-2 small text-secondary d-flex align-items-center gap-1.5">
+                          <span className="text-dark fw-bold">Selected:</span>
+                          <span className="font-monospace fw-semibold">{formatCompactTableLabel(cartView.table.table_number || cartView.table.id)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

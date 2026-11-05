@@ -427,21 +427,26 @@ export const MenuEditor = () => {
                 <FiPlus /> Add Category
               </Button>
 
-              {hasCategories && (
-                <>
-                  <Button
-                    onClick={() => {
-                      setIsAddOpen(true);
-                      setComboMode(false);
-                    }}
-                    variant="primary"
-                    className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold"
-                    style={{ backgroundColor: 'var(--primary-color, #C8102E)', borderColor: 'var(--primary-color, #C8102E)', color: '#FFFFFF' }}
-                  >
-                    <FiPlus /> Add Dish
-                  </Button>
-                </>
-              )}
+              <Button
+                onClick={() => {
+                  if (hasCategories) {
+                    setIsAddOpen(true);
+                    setComboMode(false);
+                  }
+                }}
+                disabled={!hasCategories}
+                variant="primary"
+                className={`d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold ${!hasCategories ? 'opacity-50' : ''}`}
+                style={{
+                  backgroundColor: !hasCategories ? '#94A3B8' : 'var(--primary-color, #C8102E)',
+                  borderColor: !hasCategories ? '#94A3B8' : 'var(--primary-color, #C8102E)',
+                  color: '#FFFFFF',
+                  cursor: !hasCategories ? 'not-allowed' : 'pointer'
+                }}
+                title={!hasCategories ? 'Please add a category first' : 'Add Dish'}
+              >
+                <FiPlus /> Add Dish
+              </Button>
             </div>
           )
         }
@@ -456,9 +461,10 @@ export const MenuEditor = () => {
               <FiSearch className="position-absolute top-50 start-0 translate-middle-y ms-3 text-secondary" />
               <input
                 type="text"
+                disabled={!hasCategories}
                 className="form-control rounded-pill ps-5 bg-light border-light-subtle shadow-xs"
-                style={{ height: '42px', fontSize: '13px' }}
-                placeholder="Search dishes (e.g. idli, pizza, burger...)"
+                style={{ height: '42px', fontSize: '13px', cursor: !hasCategories ? 'not-allowed' : 'text' }}
+                placeholder={!hasCategories ? "Add a category first to manage dishes" : "Search dishes (e.g. idli, pizza, burger...)"}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -476,9 +482,10 @@ export const MenuEditor = () => {
 
           <div className="d-flex align-items-center gap-2 flex-wrap">
             {/* Food Type Buttons (Icon Only, Checkbox Toggle) */}
-            <div className="d-inline-flex align-items-center gap-1.5 p-1 bg-light rounded-pill border border-light-subtle">
+            <div className={`d-inline-flex align-items-center gap-1.5 p-1 bg-light rounded-pill border border-light-subtle ${!hasCategories ? 'opacity-50' : ''}`} style={{ pointerEvents: !hasCategories ? 'none' : 'auto' }}>
               <button
                 type="button"
+                disabled={!hasCategories}
                 onClick={() => setSelectedFoodTypes([])}
                 className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
                   selectedFoodTypes.length === 0 ? 'btn-danger text-white shadow-xs' : 'btn-light text-secondary'
@@ -492,6 +499,7 @@ export const MenuEditor = () => {
 
               <button
                 type="button"
+                disabled={!hasCategories}
                 onClick={() => handleFoodTypeToggle('veg')}
                 className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
                   selectedFoodTypes.includes('veg') ? 'btn-success text-white shadow-xs' : 'btn-light'
@@ -505,6 +513,7 @@ export const MenuEditor = () => {
 
               <button
                 type="button"
+                disabled={!hasCategories}
                 onClick={() => handleFoodTypeToggle('non-veg')}
                 className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
                   selectedFoodTypes.includes('non-veg') ? 'btn-danger text-white shadow-xs' : 'btn-light'
@@ -518,6 +527,7 @@ export const MenuEditor = () => {
 
               <button
                 type="button"
+                disabled={!hasCategories}
                 onClick={() => handleFoodTypeToggle('vegan')}
                 className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
                   selectedFoodTypes.includes('vegan') ? 'btn-success text-white shadow-xs' : 'btn-light'
@@ -532,9 +542,10 @@ export const MenuEditor = () => {
 
             {/* Status Dropdown */}
             <select
+              disabled={!hasCategories}
               aria-label="Filter dishes by stock status"
-              className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
-              style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
+              className={`form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs ${!hasCategories ? 'opacity-50' : ''}`}
+              style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: !hasCategories ? 'not-allowed' : 'pointer' }}
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
             >

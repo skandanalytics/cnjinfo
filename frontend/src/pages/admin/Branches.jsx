@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import AdminLayout from '../../components/layout/AdminLayout';
 import PageHeader from '../../components/layout/PageHeader';
 import Button from '../../components/common/Button';
@@ -20,6 +20,7 @@ import {
   FiLayers, 
   FiAlertCircle, 
   FiCheckCircle,
+  FiCheck,
   FiStar,
   FiHome
 } from 'react-icons/fi';
@@ -49,6 +50,50 @@ export const Branches = () => {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('All'); // 'All' | 'Active' | 'Inactive' | 'Under Renovation'
+  const [selectedBranchId, setSelectedBranchId] = useState(() => {
+    return localStorage.getItem('foodie_admin_selected_branch') || 'ALL';
+  });
+
+  useEffect(() => {
+    const handleSync = (e) => {
+      if (e?.detail?.branchId) {
+        setSelectedBranchId(String(e.detail.branchId));
+      } else {
+        setSelectedBranchId(localStorage.getItem('foodie_admin_selected_branch') || 'ALL');
+      }
+    };
+    window.addEventListener('foodie_branch_selected', handleSync);
+    return () => window.removeEventListener('foodie_branch_selected', handleSync);
+  }, []);
+
+  const navigate = useNavigate();
+  const isSuperAdmin = user?.backendRole === 'SUPER_ADMIN' || user?.is_superuser || (user?.role === 'admin' && !user?.branchId);
+
+  const handleSelectBranch = (branch) => {
+    if (!isSuperAdmin) return;
+    const isCurrentSelected = String(selectedBranchId) === String(branch.id);
+    if (isCurrentSelected) {
+      setSelectedBranchId('ALL');
+      localStorage.setItem('foodie_admin_selected_branch', 'ALL');
+      window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: 'ALL' } }));
+      window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_products_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_inventory_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_offers_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
+    } else {
+      const nextId = String(branch.id);
+      setSelectedBranchId(nextId);
+      localStorage.setItem('foodie_admin_selected_branch', nextId);
+      window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: nextId } }));
+      window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_products_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_inventory_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_offers_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
+      navigate('/admin/dashboard');
+    }
+  };
 
   // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -173,6 +218,10 @@ export const Branches = () => {
     if (e) e.preventDefault();
     if (!formData.name?.trim()) {
       setErrorMessage('Branch name is required.');
+      return;
+    }
+    if (formData.name.trim().length > 15) {
+      setErrorMessage('Branch name cannot exceed 15 characters.');
       return;
     }
     if (/\d/.test(formData.name)) {
@@ -361,6 +410,7 @@ export const Branches = () => {
               <input 
                 type="text"
                 name="name"
+                maxLength={15}
                 className="form-control rounded-3"
                 style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
                 placeholder="Tumakuru Main"
@@ -368,6 +418,7 @@ export const Branches = () => {
                 onChange={handleFormChange}
                 required
               />
+              <span className="text-muted" style={{ fontSize: '11px' }}>Maximum 15 characters</span>
             </div>
 
             {editingBranch ? (
@@ -443,8 +494,9 @@ export const Branches = () => {
               </label>
               <textarea 
                 className="form-control rounded-3"
-                rows={2}
+                rows={3}
                 name="address"
+                style={{ resize: 'none' }}
                 placeholder="e.g. Ground Floor, Cyber Towers, Hitech City, Hyderabad - 500081"
                 value={formData.address}
                 onChange={handleFormChange}
@@ -525,7 +577,7 @@ export const Branches = () => {
                   name="openTime"
                   value={formData.openTime}
                   onChange={handleFormChange}
-                  className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs w-100"
+                  className="form-select form-select-sm rounded-pill fw-normal border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs w-100"
                   style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
                   required
                 >
@@ -545,7 +597,7 @@ export const Branches = () => {
                   name="closeTime"
                   value={formData.closeTime}
                   onChange={handleFormChange}
-                  className="form-select form-select-sm rounded-pill fw-semibold border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs w-100"
+                  className="form-select form-select-sm rounded-pill fw-normal border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs w-100"
                   style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
                   required
                 >
@@ -700,9 +752,27 @@ export const Branches = () => {
         <div className="row g-4">
           {filteredBranches.map((branch) => {
             const isInactive = branch.status !== 'Active';
+            const isCurrentSelected = String(selectedBranchId) === String(branch.id);
             return (
               <div key={branch.id} className="col-12 col-md-6 col-xl-4">
-                <div className={`card h-100 border-0 shadow-sm rounded-4 overflow-hidden foodie-card transition-all position-relative ${isInactive ? 'bg-light-subtle opacity-75' : 'bg-white'}`}>
+                <div 
+                  className={`card h-100 shadow-sm rounded-4 overflow-hidden foodie-card transition-all position-relative ${isInactive ? 'bg-light-subtle opacity-75' : 'bg-white'}`}
+                  onClick={() => isSuperAdmin && handleSelectBranch(branch)}
+                  role={isSuperAdmin ? 'button' : undefined}
+                  tabIndex={isSuperAdmin ? 0 : undefined}
+                  onKeyDown={(e) => {
+                    if (isSuperAdmin && (e.key === 'Enter' || e.key === ' ')) {
+                      e.preventDefault();
+                      handleSelectBranch(branch);
+                    }
+                  }}
+                  style={{
+                    border: isCurrentSelected ? '2px solid var(--primary-color, #F20D2D)' : '1px solid #E2E8F0',
+                    boxShadow: isCurrentSelected ? '0 4px 14px rgba(242, 13, 45, 0.15)' : undefined,
+                    cursor: isSuperAdmin ? 'pointer' : 'default',
+                    userSelect: 'none'
+                  }}
+                >
                   {/* Branch Image Cover */}
                   <div className="position-relative" style={{ height: '160px' }}>
                     {branch.image ? (
@@ -725,14 +795,19 @@ export const Branches = () => {
                       style={{ background: 'linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0.7) 100%)' }} 
                     />
 
-                    {/* Main Branch Pill */}
-                    {branch.isMainBranch && (
-                      <div className="position-absolute top-0 start-0 m-3">
+                    {/* Main Branch & Selected Pills */}
+                    <div className="position-absolute top-0 start-0 m-3 d-flex flex-column gap-1.5 align-items-start">
+                      {isCurrentSelected && (
+                        <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
+                          <FiCheck size={12} /> Active Branch
+                        </span>
+                      )}
+                      {branch.isMainBranch && (
                         <span className="badge bg-warning text-dark fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
                           <FiStar className="fill-current" /> Main HQ Branch
                         </span>
-                      </div>
-                    )}
+                      )}
+                    </div>
 
                     {/* Status Badge */}
                     <div className="position-absolute top-0 end-0 m-3">
@@ -754,7 +829,7 @@ export const Branches = () => {
                   <div className="card-body p-3.5 d-flex flex-column gap-2">
                     <div className="d-flex align-items-start text-secondary small">
                       <FiMapPin className="text-danger mt-1 flex-shrink-0 me-2" size={15} />
-                      <span className="text-dark fw-medium line-clamp-2" style={{ fontSize: '12.5px' }}>
+                      <span className="text-dark fw-medium text-truncate d-inline-block w-100" style={{ fontSize: '12.5px' }} title={branch.address}>
                         {branch.address}
                       </span>
                     </div>
@@ -797,9 +872,10 @@ export const Branches = () => {
                           <FiMail className="text-primary flex-shrink-0 me-2" size={14} />
                           <a 
                             href={branch.email ? `mailto:${branch.email}` : undefined}
-                            className="text-truncate text-secondary text-decoration-none fw-medium" 
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-secondary text-decoration-none fw-medium" 
                             title={branch.email} 
-                            style={{ fontSize: '11.5px' }}
+                            style={{ fontSize: '11.5px', wordBreak: 'break-all' }}
                           >
                             {branch.email || 'Email: N/A'}
                           </a>
@@ -809,28 +885,63 @@ export const Branches = () => {
 
                     {/* Actions Footer */}
                     {isAdmin && (
-                      <div className="d-flex align-items-center justify-content-between pt-3 border-top border-light mt-auto">
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(branch)}
-                          className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs transition-all"
-                          style={{ width: '32px', height: '32px' }}
-                          title={`Edit ${branch.name}`}
-                          aria-label={`Edit ${branch.name}`}
-                        >
-                          <FiEdit2 size={14} />
-                        </button>
+                      <div className="d-flex align-items-center justify-content-between pt-3 border-top border-light mt-auto gap-2">
+                        {isSuperAdmin ? (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleSelectBranch(branch);
+                            }}
+                            className={`btn btn-sm rounded-pill px-3 py-1 fw-bold d-flex align-items-center gap-1.5 shadow-2xs transition-all ${
+                              isCurrentSelected 
+                                ? 'btn-danger text-white' 
+                                : 'btn-outline-danger'
+                            }`}
+                            style={{ fontSize: '12px' }}
+                            title={isCurrentSelected ? 'Click to Deselect (Reset to All Branches)' : `Select ${branch.name} and open Dashboard`}
+                          >
+                            {isCurrentSelected ? (
+                              <>
+                                <FiCheck size={13} /> Selected
+                              </>
+                            ) : (
+                              'Select Branch'
+                            )}
+                          </button>
+                        ) : (
+                          <div />
+                        )}
 
-                        <button
-                          type="button"
-                          onClick={() => openDelete(branch)}
-                          className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs transition-all"
-                          style={{ width: '32px', height: '32px' }}
-                          title={`Delete branch ${branch.name}`}
-                          aria-label={`Delete branch ${branch.name}`}
-                        >
-                          <FiTrash2 size={14} />
-                        </button>
+                        <div className="d-flex align-items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenEdit(branch);
+                            }}
+                            className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs transition-all"
+                            style={{ width: '32px', height: '32px' }}
+                            title={`Edit ${branch.name}`}
+                            aria-label={`Edit ${branch.name}`}
+                          >
+                            <FiEdit2 size={14} />
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openDelete(branch);
+                            }}
+                            className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs transition-all"
+                            style={{ width: '32px', height: '32px' }}
+                            title={`Delete branch ${branch.name}`}
+                            aria-label={`Delete branch ${branch.name}`}
+                          >
+                            <FiTrash2 size={14} />
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

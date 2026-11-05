@@ -501,9 +501,19 @@ export const Orders = () => {
                         </span>
                       </td>
                       <td className="py-3">
-                        <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: isPaid ? 'rgba(22, 163, 74, 0.12)' : 'rgba(239, 68, 68, 0.12)', color: isPaid ? '#16A34A' : '#DC2626' }}>
-                          ● {isPaid ? 'Paid' : 'Unpaid'}
-                        </span>
+                        {isPaid ? (
+                          <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A' }}>
+                            ● Paid
+                          </span>
+                        ) : (String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PENDING' || String(order.payment_method || '').toUpperCase() === 'UPI') ? (
+                          <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#B45309', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
+                            ● Pending Verification
+                          </span>
+                        ) : (
+                          <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
+                            ● Unpaid
+                          </span>
+                        )}
                       </td>
                       <td className="text-end pe-4 py-3">
                         <div className="d-flex align-items-center justify-content-end" style={{ gap: '10px' }}>

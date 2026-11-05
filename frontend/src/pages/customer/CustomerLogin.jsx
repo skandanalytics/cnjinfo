@@ -142,9 +142,14 @@ export const CustomerLogin = () => {
     setError('');
     setInfoMessage('');
 
+    if (!phone || phone.trim().length === 0) {
+      setError('Enter mobile number');
+      return;
+    }
+
     const reqLen = selectedCountryObj.phoneLen || 10;
-    if (phone.length < reqLen) {
-      setError(`Please enter a valid ${reqLen}-digit mobile number`);
+    if (phone.length !== reqLen) {
+      setError('Enter valid phone number');
       return;
     }
 
@@ -152,16 +157,10 @@ export const CustomerLogin = () => {
     setOtpLoading(true);
     try {
       const fullPhone = `${countryCode}${phone}`;
-      const sent = await sendOTP(fullPhone);
+      await sendOTP(fullPhone);
       setOtpSent(true);
       setOtpArray(['', '', '', '', '', '']);
-      if (sent?.dev_otp) {
-        const devDigits = String(sent.dev_otp).split('').slice(0, 6);
-        setOtpArray(devDigits);
-        setInfoMessage(`Code sent! Dev OTP: ${sent.dev_otp}`);
-      } else {
-        setInfoMessage('Verification code sent to your mobile');
-      }
+      setInfoMessage('OTP request successful. Please contact authorized Foodie staff for your verification code.');
       startCooldown(30);
     } catch (err) {
       if (err.retryAfter > 0) {
@@ -175,8 +174,26 @@ export const CustomerLogin = () => {
   };
 
   const handleResendOTP = async () => {
-    if (otpLoading || cooldown > 0) return;
-    await handleSendOTP();
+    if (otpLoading || cooldown > 0 || isSubmittingRef.current) return;
+    setError('');
+    setInfoMessage('');
+    isSubmittingRef.current = true;
+    setOtpLoading(true);
+    try {
+      const fullPhone = `${countryCode}${phone}`;
+      await sendOTP(fullPhone);
+      setOtpArray(['', '', '', '', '', '']);
+      setInfoMessage('A new OTP has been requested. Please contact authorized Foodie staff.');
+      startCooldown(30);
+    } catch (err) {
+      if (err.retryAfter > 0) {
+        startCooldown(err.retryAfter);
+      }
+      setError(err.message || 'Failed to resend OTP. Please try again.');
+    } finally {
+      isSubmittingRef.current = false;
+      setOtpLoading(false);
+    }
   };
 
   const handleOtpChange = (index, value) => {
@@ -493,8 +510,8 @@ export const CustomerLogin = () => {
               Continue
             </button>
           </div>
-        ) : !otpSent ? (
-          /* SCREEN 1: Welcome to Foodie */
+        ) : (
+          /* SINGLE PAGE: Mobile Number + Inline OTP Verification */
           <div>
             <h4 className="fw-bold text-dark mb-1" style={{ fontSize: '22px' }}>
               Welcome to Foodie
@@ -503,13 +520,17 @@ export const CustomerLogin = () => {
               Order your favorite food
             </p>
 
-            <form onSubmit={handleSendOTP}>
-              {/* Phone Input Box with Icon & Country Code */}
+            {/* Mobile Number Input with Send OTP */}
+            <form onSubmit={handleSendOTP} noValidate>
               <div 
-                className="d-flex align-items-center bg-white border rounded-3 p-1.5 mb-3 shadow-xs"
-                style={{ borderColor: '#CBD5E1', height: '48px' }}
+                className="d-flex align-items-center bg-white border rounded-3 p-1 mb-2 shadow-xs w-100"
+                style={{ 
+                  borderColor: error && !otpSent ? '#DC2626' : '#CBD5E1', 
+                  height: '48px',
+                  boxShadow: 'none'
+                }}
               >
-                <div className="d-flex align-items-center gap-1 ps-2 text-muted pe-2 border-end">
+                <div className="d-flex align-items-center gap-1.5 ps-2.5 text-muted pe-2.5 border-end flex-shrink-0">
                   <FiPhone size={15} style={{ color: '#64748B' }} />
                   <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>{countryCode}</span>
                 </div>
@@ -517,37 +538,143 @@ export const CustomerLogin = () => {
                   type="tel"
                   inputMode="numeric"
                   maxLength={10}
-                  className="form-control border-0 shadow-none ps-3 text-dark fw-semibold"
-                  style={{ fontSize: '14px', backgroundColor: 'transparent' }}
+                  disabled={otpSent && otpLoading}
+                  className="form-control border-0 shadow-none ps-2 text-dark fw-semibold w-100"
+                  style={{ 
+                    fontSize: '14px', 
+                    backgroundColor: 'transparent',
+                    outline: 'none',
+                    boxShadow: 'none',
+                    border: 'none'
+                  }}
                   placeholder="Mobile number"
                   value={phone}
                   onChange={(e) => {
                     setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
                     setError('');
                   }}
-                  required
                   autoFocus
                 />
               </div>
 
-              {error && <div className="text-danger small mb-3 fw-semibold text-start">{error}</div>}
+              {!otpSent && (
+                <>
+                  {error && <div className="text-danger small mb-3 fw-semibold text-start" style={{ fontSize: '12.5px' }}>{error}</div>}
 
-              {/* Red Continue Pill Button */}
-              <button
-                type="submit"
-                disabled={otpLoading || cooldown > 0 || phone.length < (selectedCountryObj.phoneLen || 10)}
-                className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm"
-                style={{
-                  height: '46px',
-                  backgroundColor: '#F20D2D',
-                  borderColor: '#F20D2D',
-                  fontSize: '14.5px',
-                  boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)'
-                }}
-              >
-                {otpLoading ? 'Sending...' : (cooldown > 0 ? `Wait (${cooldown}s)` : 'Continue')}
-              </button>
+                  {/* Red Send OTP Pill Button */}
+                  <button
+                    type="submit"
+                    disabled={otpLoading || cooldown > 0}
+                    className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm mt-2"
+                    style={{
+                      height: '46px',
+                      backgroundColor: '#F20D2D',
+                      borderColor: '#F20D2D',
+                      fontSize: '14.5px',
+                      boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)'
+                    }}
+                  >
+                    {otpLoading ? 'Sending OTP...' : (cooldown > 0 ? `Wait (${cooldown}s)` : 'Send OTP')}
+                  </button>
+                </>
+              )}
             </form>
+
+            {/* OTP Section Revealed Directly Below on Same Page */}
+            {otpSent && (
+              <div className="mt-4 pt-3 border-top text-start">
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <span className="fw-bold text-dark small" style={{ fontSize: '14px' }}>
+                    Enter 6-Digit OTP
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => { setOtpSent(false); setError(''); }}
+                    className="btn btn-link text-decoration-none text-danger small p-0 fw-semibold"
+                    style={{ fontSize: '12px' }}
+                  >
+                    Change Number
+                  </button>
+                </div>
+
+                <p className="text-secondary small mb-3" style={{ fontSize: '12px', color: '#64748B' }}>
+                  Code requested for <strong className="text-dark">{countryCode} {phone}</strong>. Check WhatsApp group or ask staff.
+                </p>
+
+                {infoMessage && (
+                  <div className="alert alert-info py-2 px-3 small rounded-3 mb-3 text-start" style={{ fontSize: '12px' }}>
+                    {infoMessage}
+                  </div>
+                )}
+
+                <form onSubmit={handleVerifyOTP}>
+                  {/* 6 Individual Square OTP Inputs */}
+                  <div className="d-flex align-items-center justify-content-between gap-1 gap-sm-2 mb-3 w-100 flex-nowrap">
+                    {otpArray.map((digit, idx) => (
+                      <input
+                        key={idx}
+                        ref={el => otpInputRefs.current[idx] = el}
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={1}
+                        className="form-control text-center p-0 fw-bold shadow-xs flex-fill"
+                        style={{
+                          minWidth: '38px',
+                          maxWidth: '52px',
+                          height: 'clamp(44px, 12vw, 50px)',
+                          borderRadius: '12px',
+                          fontSize: 'clamp(18px, 5vw, 22px)',
+                          borderColor: digit ? '#F20D2D' : '#CBD5E1',
+                          borderWidth: digit ? '2px' : '1.5px',
+                          backgroundColor: digit ? '#FFF5F5' : '#FFFFFF',
+                          color: '#0F172A',
+                          boxShadow: 'none'
+                        }}
+                        value={digit}
+                        onChange={(e) => handleOtpChange(idx, e.target.value)}
+                        onKeyDown={(e) => handleOtpKeyDown(idx, e)}
+                      />
+                    ))}
+                  </div>
+
+                  {error && <div className="text-danger small mb-3 fw-semibold text-start">{error}</div>}
+
+                  {/* Verify & Continue Red Pill Button */}
+                  <button
+                    type="submit"
+                    disabled={otpLoading || otpArray.join('').length !== 6}
+                    className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm"
+                    style={{
+                      height: '46px',
+                      backgroundColor: '#F20D2D',
+                      borderColor: '#F20D2D',
+                      fontSize: '14.5px',
+                      boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)'
+                    }}
+                  >
+                    {otpLoading ? 'Verifying...' : 'Verify OTP'}
+                  </button>
+                </form>
+
+                {/* Resend OTP Timer */}
+                <div className="mt-3 text-center">
+                  <div className="text-secondary small" style={{ fontSize: '12.5px' }}>
+                    {cooldown > 0 ? (
+                      <span>Resend OTP in <strong className="text-danger">{formatTimer(cooldown)}</strong></span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={handleResendOTP}
+                        className="btn btn-link text-decoration-none fw-bold p-0 text-danger"
+                        style={{ fontSize: '12.5px' }}
+                      >
+                        Resend OTP
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Skip for Now Link */}
             <div className="mt-4">
@@ -570,96 +697,6 @@ export const CustomerLogin = () => {
               >
                 Employee / Admin Login
               </Link>
-            </div>
-          </div>
-        ) : (
-          /* SCREEN 2: Enter OTP */
-          <div>
-            <h4 className="fw-bold text-dark mb-1" style={{ fontSize: '22px' }}>
-              Enter OTP
-            </h4>
-            <p className="text-secondary small mb-4" style={{ fontSize: '13px', color: '#64748B' }}>
-              We've sent a 6-digit code to <strong className="text-dark">{countryCode} {phone}</strong>
-            </p>
-
-            {infoMessage && (
-              <div className="alert alert-info py-2 px-3 small rounded-3 mb-3 text-start" style={{ fontSize: '12px' }}>
-                {infoMessage}
-              </div>
-            )}
-
-            <form onSubmit={handleVerifyOTP}>
-              {/* 6 Individual Square OTP Inputs */}
-              <div className="d-flex align-items-center justify-content-between gap-2 mb-4">
-                {otpArray.map((digit, idx) => (
-                  <input
-                    key={idx}
-                    ref={el => otpInputRefs.current[idx] = el}
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={1}
-                    className="form-control text-center p-0 fw-bold shadow-xs"
-                    style={{
-                      width: '46px',
-                      height: '52px',
-                      borderRadius: '12px',
-                      fontSize: '22px',
-                      borderColor: digit ? '#F20D2D' : '#CBD5E1',
-                      borderWidth: digit ? '2px' : '1.5px',
-                      backgroundColor: digit ? '#FFF5F5' : '#FFFFFF',
-                      color: '#0F172A'
-                    }}
-                    value={digit}
-                    onChange={(e) => handleOtpChange(idx, e.target.value)}
-                    onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                  />
-                ))}
-              </div>
-
-              {error && <div className="text-danger small mb-3 fw-semibold text-start">{error}</div>}
-
-              {/* Verify & Continue Red Pill Button */}
-              <button
-                type="submit"
-                disabled={otpLoading || otpArray.join('').length !== 6}
-                className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm"
-                style={{
-                  height: '46px',
-                  backgroundColor: '#F20D2D',
-                  borderColor: '#F20D2D',
-                  fontSize: '14.5px',
-                  boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)'
-                }}
-              >
-                {otpLoading ? 'Verifying...' : 'Verify & Continue'}
-              </button>
-            </form>
-
-            {/* Resend OTP Timer & Change Mobile Number */}
-            <div className="mt-4 d-flex flex-column gap-2">
-              <div className="text-secondary small" style={{ fontSize: '13px' }}>
-                {cooldown > 0 ? (
-                  <span>Resend OTP in <strong className="text-danger">{formatTimer(cooldown)}</strong></span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleResendOTP}
-                    className="btn btn-link text-decoration-none fw-bold p-0 text-danger"
-                    style={{ fontSize: '13px' }}
-                  >
-                    Resend OTP
-                  </button>
-                )}
-              </div>
-
-              <button
-                type="button"
-                onClick={() => { setOtpSent(false); setError(''); }}
-                className="btn btn-link text-decoration-none text-secondary small p-0 fw-semibold"
-                style={{ fontSize: '13px' }}
-              >
-                Change Mobile Number
-              </button>
             </div>
           </div>
         )}

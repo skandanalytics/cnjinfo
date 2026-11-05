@@ -299,13 +299,25 @@ SIMPLE_JWT = {
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
 
-# OTP (Phase 3). Provider credentials stay in the environment; no production bypass exists.
+# Green API Configuration
+GREEN_API_BASE_URL = os.getenv("GREEN_API_BASE_URL", os.getenv("GREEN_API_HOST", "https://7107.api.greenapi.com")).rstrip("/")
+GREEN_API_INSTANCE_ID = os.getenv("GREEN_API_INSTANCE_ID", "")
+GREEN_API_TOKEN = os.getenv("GREEN_API_TOKEN", "")
+GREEN_API_GROUP_ID = os.getenv("GREEN_API_GROUP_ID", "")
+
+# Foodie OTP Policy
+FOODIE_OTP_EXPIRY_MINUTES = int(os.getenv("FOODIE_OTP_EXPIRY_MINUTES", 5))
+FOODIE_OTP_MAX_ATTEMPTS = int(os.getenv("FOODIE_OTP_MAX_ATTEMPTS", 5))
+FOODIE_OTP_RESEND_COOLDOWN_SECONDS = int(os.getenv("FOODIE_OTP_RESEND_COOLDOWN_SECONDS", 60))
+FOODIE_OTP_MAX_RESENDS = int(os.getenv("FOODIE_OTP_MAX_RESENDS", 3))
+
+# OTP Settings mapped to Foodie policy
 OTP_LENGTH = 6
-OTP_TTL_SECONDS = int(os.getenv("OTP_TTL_SECONDS", "300"))
-OTP_RESEND_COOLDOWN_SECONDS = int(os.getenv("OTP_RESEND_COOLDOWN_SECONDS", "30"))
-OTP_MAX_SENDS_PER_HOUR = int(os.getenv("OTP_MAX_SENDS_PER_HOUR", "5"))
-OTP_MAX_VERIFY_ATTEMPTS = int(os.getenv("OTP_MAX_VERIFY_ATTEMPTS", "5"))
-OTP_PROVIDER = os.getenv("OTP_PROVIDER", "console")  # "console" is rejected when DEBUG is off (enforced in Phase 3)
+OTP_TTL_SECONDS = FOODIE_OTP_EXPIRY_MINUTES * 60
+OTP_RESEND_COOLDOWN_SECONDS = FOODIE_OTP_RESEND_COOLDOWN_SECONDS
+OTP_MAX_SENDS_PER_HOUR = FOODIE_OTP_MAX_RESENDS + 1
+OTP_MAX_VERIFY_ATTEMPTS = FOODIE_OTP_MAX_ATTEMPTS
+OTP_PROVIDER = os.getenv("OTP_PROVIDER", "green_api")
 
 # Razorpay (Phase 8). Secrets live on the backend only.
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
