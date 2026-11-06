@@ -359,6 +359,14 @@ class ProceedToBillView(APIView):
         if root.status == Order.Status.CANCELLED:
             return Response({"detail": "Cancelled orders cannot proceed to bill.", "code": "order_cancelled"}, status=400)
 
+        # Check if any continuation suborder is still preparing or pending
+        active_subs = root.continuations.filter(status__in=[Order.Status.PENDING, Order.Status.PREPARING])
+        if active_subs.exists():
+            return Response({
+                "detail": "Order in progress. Cannot proceed to bill while sub-orders are still preparing.",
+                "code": "suborder_in_progress"
+            }, status=400)
+
         # Transition root order and all sibling continuations if not already completed
         if root.status != Order.Status.COMPLETED:
             try:

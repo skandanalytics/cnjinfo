@@ -63,7 +63,7 @@ export const Kitchen = () => {
     setClearingTableId(ord.id);
     try {
       await tableService.cleanTable(targetId);
-      setClearedOrderIds(prev => new Set(prev).add(ord.id).add(String(targetId)));
+      setClearedOrderIds(prev => new Set(prev).add(ord.id));
       const updatedTables = await tableService.getTables().catch(() => []);
       setTables(Array.isArray(updatedTables) ? updatedTables : []);
       const label = foundTable?.table_number || foundTable?.number || canonNum || 'assigned';
@@ -71,7 +71,7 @@ export const Kitchen = () => {
     } catch (err) {
       console.error('Failed to clean table:', err);
       await tableService.updateTableStatus(targetId, 'Available').catch(() => {});
-      setClearedOrderIds(prev => new Set(prev).add(ord.id).add(String(targetId)));
+      setClearedOrderIds(prev => new Set(prev).add(ord.id));
       setToast({ show: true, message: `Table marked Available.`, type: 'add' });
     } finally {
       setClearingTableId(null);
@@ -79,19 +79,8 @@ export const Kitchen = () => {
   };
 
   const isTableCleared = (ord) => {
-    if (clearedOrderIds.has(ord.id)) return true;
-    const rawVal = ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? (ord.table?.number || ord.table?.table_number || ord.table?.id) : ord.table);
-    const canonNum = tableService.getCanonicalTableNumber(rawVal || '');
-    const ordTableId = ord.table_id || ord.tableId || (typeof ord.table === 'object' ? ord.table?.id : null);
-    if (ordTableId && clearedOrderIds.has(String(ordTableId))) return true;
-
-    const foundTable = tables.find(t => {
-      if (ordTableId && String(t.id) === String(ordTableId)) return true;
-      const tCanon = tableService.getCanonicalTableNumber(t.number || t.table_number || t.id);
-      return tCanon && tCanon === canonNum;
-    });
-    if (!foundTable) return false;
-    return foundTable.status === 'Available' || foundTable.status === 'AVAILABLE' || foundTable.is_available === true;
+    if (!ord) return false;
+    return clearedOrderIds.has(ord.id) || Boolean(ord.table_cleared) || Boolean(ord.is_table_cleared);
   };
   const headerRef = useRef(null);
   const [gridHeight, setGridHeight] = useState(null);
@@ -131,7 +120,14 @@ export const Kitchen = () => {
   // Determine initial branch from user's assigned branch or fallback to main branch
   const userAssignedBranch = user?.branchId || user?.restaurant || user?.restaurant_id || null;
   const isBranchRestricted = Boolean(user?.role === 'employee' && userAssignedBranch);
-  const [selectedBranch, setSelectedBranch] = useState(userAssignedBranch ? String(userAssignedBranch) : '');
+  const [selectedBranch, setSelectedBranch] = useState(() => {
+    if (userAssignedBranch) return String(userAssignedBranch);
+    try {
+      return localStorage.getItem('foodie_admin_selected_branch') || 'ALL';
+    } catch {
+      return 'ALL';
+    }
+  });
 
   const isBranchUnderConstruction = (b) => {
     if (!b) return false;
@@ -420,15 +416,16 @@ export const Kitchen = () => {
     })();
     const branchEmployee = staffUser?.role === 'employee' && staffUser?.branchId;
     if (!branchEmployee && selectedBranch && selectedBranch !== 'ALL') {
-      const orderBranch = ord.branchId || ord.branch_id || ord.restaurant || ord.restaurant_id || ord.restaurantId;
+      const rawBranch = ord.branchId || ord.branch_id || ord.branch || ord.restaurant || ord.restaurant_id || ord.restaurantId;
+      const orderBranch = (rawBranch && typeof rawBranch === 'object') ? (rawBranch.id || rawBranch.code || rawBranch.name) : rawBranch;
       const selectedBranchObj = branches.find(b => String(b.id) === String(selectedBranch));
 
-      if (orderBranch) {
+      if (orderBranch != null) {
         const isMatch =
           String(orderBranch) === String(selectedBranch) ||
           (selectedBranchObj && (
             String(orderBranch) === String(selectedBranchObj.code) ||
-            String(orderBranch).toLowerCase() === String(selectedBranchObj.name).toLowerCase()
+            String(orderBranch).toLowerCase() === String(selectedBranchObj.name || '').toLowerCase()
           )) ||
           (selectedBranchObj?.isMainBranch && (orderBranch === 1 || String(orderBranch) === '1'));
 
@@ -510,11 +507,11 @@ export const Kitchen = () => {
           <div className="row g-3 align-items-stretch">
             {/* Column 1: New Tickets */}
             <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
-              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
+              <div className="card border-0 rounded-0 shadow-xs overflow-hidden d-flex flex-column h-100 w-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Red Header Banner */}
                 <div 
-                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
-                  style={{ backgroundColor: '#EF4444', borderTopLeftRadius: '14px', borderTopRightRadius: '14px' }}
+                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs rounded-0"
+                  style={{ backgroundColor: '#EF4444' }}
                 >
                   <div className="d-flex align-items-center gap-2">
                     <i className="bi bi-receipt"></i>
@@ -525,13 +522,11 @@ export const Kitchen = () => {
 
                 <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
                   {pendingOrders.length === 0 ? (
-                    !hasAnyActiveTickets ? (
-                      <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
-                        <i className="bi bi-check2-circle text-muted fs-1 mb-2"></i>
-                        <h6 className="fw-bold text-dark mb-1">No New Tickets</h6>
-                        <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Incoming orders will appear here.</p>
-                      </div>
-                    ) : null
+                    <div className="card border-0 bg-white rounded-0 p-4 text-center mt-1 shadow-2xs w-100">
+                      <i className="bi bi-check2-circle text-muted fs-1 mb-2"></i>
+                      <h6 className="fw-bold text-dark mb-1">No New Tickets</h6>
+                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Incoming orders will appear here.</p>
+                    </div>
                   ) : (
                     pendingOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
@@ -613,11 +608,11 @@ export const Kitchen = () => {
 
             {/* Column 2: Preparing */}
             <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
-              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
+              <div className="card border-0 rounded-0 shadow-xs overflow-hidden d-flex flex-column h-100 w-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Orange Header Banner */}
                 <div 
-                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
-                  style={{ backgroundColor: '#F59E0B', borderTopLeftRadius: '14px', borderTopRightRadius: '14px' }}
+                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs rounded-0"
+                  style={{ backgroundColor: '#F59E0B' }}
                 >
                   <div className="d-flex align-items-center gap-2">
                     <i className="bi bi-fire"></i>
@@ -628,15 +623,13 @@ export const Kitchen = () => {
 
                 <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
                   {preparingOrders.length === 0 ? (
-                    !hasAnyActiveTickets ? (
-                      <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
-                        <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-warning" style={{ width: '48px', height: '48px', backgroundColor: '#FEF3C7' }}>
-                          <i className="bi bi-fire fs-3"></i>
-                        </div>
-                        <h6 className="fw-bold text-dark mb-1">No more orders in Preparing</h6>
-                        <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>New orders will appear here.</p>
+                    <div className="card border-0 bg-white rounded-0 p-4 text-center mt-1 shadow-2xs w-100">
+                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-warning" style={{ width: '48px', height: '48px', backgroundColor: '#FEF3C7' }}>
+                        <i className="bi bi-fire fs-3"></i>
                       </div>
-                    ) : null
+                      <h6 className="fw-bold text-dark mb-1">No more orders in Preparing</h6>
+                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>New orders will appear here.</p>
+                    </div>
                   ) : (
                     preparingOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
@@ -714,11 +707,11 @@ export const Kitchen = () => {
 
             {/* Column 3: Ready / Serving */}
             <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
-              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
+              <div className="card border-0 rounded-0 shadow-xs overflow-hidden d-flex flex-column h-100 w-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Cyan / Blue Header Banner */}
                 <div 
-                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
-                  style={{ backgroundColor: '#0284C7', borderTopLeftRadius: '14px', borderTopRightRadius: '14px' }}
+                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs rounded-0"
+                  style={{ backgroundColor: '#0284C7' }}
                 >
                   <div className="d-flex align-items-center gap-2">
                     <i className="bi bi-box-seam"></i>
@@ -729,15 +722,13 @@ export const Kitchen = () => {
 
                 <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
                   {readyOrders.length === 0 ? (
-                    !hasAnyActiveTickets ? (
-                      <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
-                        <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-info" style={{ width: '48px', height: '48px', backgroundColor: '#E0F2FE' }}>
-                          <i className="bi bi-collection-play fs-3"></i>
-                        </div>
-                        <h6 className="fw-bold text-dark mb-1">No more orders in Ready</h6>
-                        <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Orders marked ready will appear here.</p>
+                    <div className="card border-0 bg-white rounded-0 p-4 text-center mt-1 shadow-2xs w-100">
+                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-info" style={{ width: '48px', height: '48px', backgroundColor: '#E0F2FE' }}>
+                        <i className="bi bi-collection-play fs-3"></i>
                       </div>
-                    ) : null
+                      <h6 className="fw-bold text-dark mb-1">No more orders in Ready</h6>
+                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Orders marked ready will appear here.</p>
+                    </div>
                   ) : (
                     readyOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
@@ -815,11 +806,11 @@ export const Kitchen = () => {
 
             {/* Column 4: Completed */}
             <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
-              <div className="card border-0 rounded-4 shadow-xs overflow-hidden d-flex flex-column h-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
+              <div className="card border-0 rounded-0 shadow-xs overflow-hidden d-flex flex-column h-100 w-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Green Header Banner */}
                 <div 
-                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs"
-                  style={{ backgroundColor: '#16A34A', borderTopLeftRadius: '14px', borderTopRightRadius: '14px' }}
+                  className="px-3 py-2.5 d-flex align-items-center justify-content-between text-white fw-bold shadow-2xs rounded-0"
+                  style={{ backgroundColor: '#16A34A' }}
                 >
                   <div className="d-flex align-items-center gap-2">
                     <i className="bi bi-check-circle"></i>
@@ -830,15 +821,13 @@ export const Kitchen = () => {
 
                 <div className="p-2.5 d-flex flex-column gap-2.5 flex-grow-1" style={{ overflowY: 'auto', WebkitOverflowScrolling: 'touch', minHeight: 0 }}>
                   {completedOrders.length === 0 ? (
-                    !hasAnyActiveTickets ? (
-                      <div className="card border-0 bg-white rounded-3 p-4 text-center my-auto shadow-2xs">
-                        <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-success" style={{ width: '48px', height: '48px', backgroundColor: '#DCFCE7' }}>
-                          <i className="bi bi-check2-all fs-3"></i>
-                        </div>
-                        <h6 className="fw-bold text-dark mb-1">All caught up!</h6>
-                        <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Completed orders will be listed here.</p>
+                    <div className="card border-0 bg-white rounded-0 p-4 text-center mt-1 shadow-2xs w-100">
+                      <div className="rounded-circle d-flex align-items-center justify-content-center mx-auto mb-2 text-success" style={{ width: '48px', height: '48px', backgroundColor: '#DCFCE7' }}>
+                        <i className="bi bi-check2-all fs-3"></i>
                       </div>
-                    ) : null
+                      <h6 className="fw-bold text-dark mb-1">All caught up!</h6>
+                      <p className="text-muted small mb-0" style={{ fontSize: '12px' }}>Completed orders will be listed here.</p>
+                    </div>
                   ) : (
                     completedOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);

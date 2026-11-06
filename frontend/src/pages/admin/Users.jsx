@@ -218,7 +218,7 @@ export const Users = () => {
 
     setIsSubmitting(true);
     try {
-      const { saveEmployee } = await import('../../services/adminApi');
+      const { saveEmployee, syncStaffProfile } = await import('../../services/adminApi');
       await saveEmployee({ ...formData, phone: cleanPhone }, editingUser);
       const wasEditing = Boolean(editingUser);
       const editedId = editingUser?.id;
@@ -232,6 +232,14 @@ export const Users = () => {
         setEmployees(rows);
         setViewingUser(rows.find((item) => String(item.id) === String(editedId)) || viewingUser);
       }
+      if (wasEditing && (String(editedId) === String(currentUser?.id) || String(editingUser?.employee_code) === String(currentUser?.employeeCode))) {
+        await syncStaffProfile();
+      }
+      window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_products_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_inventory_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_offers_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
       if (!wasEditing) setCreatedName(formData.name.trim());
     } catch (err) {
       setFormError(err.message || 'The employee could not be saved.');

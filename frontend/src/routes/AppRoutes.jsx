@@ -46,6 +46,7 @@ export const AppRoutes = () => {
       <Route path="/customer/login" element={<CustomerLogin />} />
       <Route path="/welcome" element={<Welcome />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/admin/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
 
       {/* Customer Pages (Open to Guests) */}

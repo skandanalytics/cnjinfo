@@ -276,9 +276,9 @@ export const Branches = () => {
           setCreatedSuccessBranch(created);
         }
       }
-      await fetchBranches(false);
       setIsModalOpen(false);
       setEditingBranch(null);
+      fetchBranches(false);
     } catch (err) {
       setErrorMessage(err.message || 'Failed to save branch.');
     } finally {
@@ -332,22 +332,22 @@ export const Branches = () => {
   const getStatusBadge = (status) => {
     if (status === 'Under Renovation') {
       return (
-        <span className="badge bg-warning text-dark fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
-          <span className="rounded-circle bg-dark d-inline-block" style={{ width: '6px', height: '6px' }}></span> Under Renovation
+        <span className="badge bg-warning text-dark fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center" style={{ fontSize: '11px', gap: '8px' }}>
+          <span className="rounded-circle bg-dark d-inline-block flex-shrink-0" style={{ width: '6px', height: '6px' }}></span> Under Renovation
         </span>
       );
     }
     const isAct = status === 'Active';
     if (isAct) {
       return (
-        <span className="badge bg-success text-white fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
-          <span className="rounded-circle bg-white d-inline-block" style={{ width: '6px', height: '6px' }}></span> Open
+        <span className="badge bg-success text-white fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center" style={{ fontSize: '11px', gap: '8px' }}>
+          <span className="rounded-circle bg-white d-inline-block flex-shrink-0" style={{ width: '6px', height: '6px' }}></span> Active
         </span>
       );
     }
     return (
-      <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
-        <span className="rounded-circle bg-white d-inline-block" style={{ width: '6px', height: '6px' }}></span> Closed
+      <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center" style={{ fontSize: '11px', gap: '8px' }}>
+        <span className="rounded-circle bg-white d-inline-block flex-shrink-0" style={{ width: '6px', height: '6px' }}></span> Inactive
       </span>
     );
   };
@@ -577,8 +577,8 @@ export const Branches = () => {
                   name="openTime"
                   value={formData.openTime}
                   onChange={handleFormChange}
-                  className="form-select form-select-sm rounded-pill fw-normal border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs w-100"
-                  style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
+                  className="form-select rounded-3 border bg-light text-dark shadow-2xs w-100"
+                  style={{ height: '42px', padding: '8px 16px', fontSize: '13.5px', borderColor: '#CBD5E1', cursor: 'pointer' }}
                   required
                 >
                   {TIME_OPTIONS.map((t) => (
@@ -597,8 +597,8 @@ export const Branches = () => {
                   name="closeTime"
                   value={formData.closeTime}
                   onChange={handleFormChange}
-                  className="form-select form-select-sm rounded-pill fw-normal border bg-light ps-3 pe-4 py-2 text-dark shadow-2xs w-100"
-                  style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundPosition: 'right 0.85rem center', cursor: 'pointer' }}
+                  className="form-select rounded-3 border bg-light text-dark shadow-2xs w-100"
+                  style={{ height: '42px', padding: '8px 16px', fontSize: '13.5px', borderColor: '#CBD5E1', cursor: 'pointer' }}
                   required
                 >
                   {TIME_OPTIONS.map((t) => (
@@ -796,7 +796,7 @@ export const Branches = () => {
                     />
 
                     {/* Main Branch & Selected Pills */}
-                    <div className="position-absolute top-0 start-0 m-3 d-flex flex-column gap-1.5 align-items-start">
+                    <div className="position-absolute top-0 start-0 m-3 d-flex flex-column align-items-start" style={{ gap: '8px' }}>
                       {isCurrentSelected && (
                         <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1 shadow-sm d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
                           <FiCheck size={12} /> Active Branch

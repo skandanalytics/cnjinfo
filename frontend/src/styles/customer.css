@@ -168,3 +168,31 @@
   background-color: #fecdd3 !important;
   color: var(--primary-dark, #9f1239) !important;
 }
+
+/* Customer Login Phone Input - Remove pink border & glow */
+.customer-phone-wrapper {
+  background-color: #ffffff !important;
+  border: 1.5px solid #cbd5e1 !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.customer-phone-wrapper:hover {
+  border-color: #94a3b8 !important;
+}
+
+.customer-phone-wrapper.focused,
+.customer-phone-wrapper:focus-within {
+  border-color: #64748b !important;
+  box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.12) !important;
+}
+
+.customer-phone-input,
+.customer-phone-input:focus,
+.customer-phone-input:active,
+.customer-phone-input:hover {
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  background-color: transparent !important;
+}
+

@@ -51,7 +51,14 @@ def is_first_time(customer):
         return False  # anonymous buyers are never first-time
     if isinstance(customer, NewCustomer):
         return True
-    return not Order.objects.filter(customer=customer, status=Order.Status.COMPLETED).exists()
+    # A customer is first-time only if they have NO non-cancelled and non-failed orders,
+    # and NO active redemptions for a first-time coupon.
+    has_orders = Order.objects.filter(customer=customer).exclude(
+        status=Order.Status.CANCELLED
+    ).exclude(
+        payment_status=Order.PaymentStatus.FAILED
+    ).exists()
+    return not has_orders
 
 
 def usage_count(coupon, exclude_order=None):
@@ -89,7 +96,10 @@ def ineligible_reason(coupon, branch, qualifying_amount, customer, first_time, n
             return "This coupon is only for first-time customers."
         if getattr(customer, "pk", None) is not None:
             used = CouponRedemption.objects.filter(coupon=coupon, customer=customer).exclude(
-                order__status=Order.Status.CANCELLED)
+                order__status=Order.Status.CANCELLED
+            ).exclude(
+                order__payment_status=Order.PaymentStatus.FAILED
+            )
             if exclude_order is not None:
                 used = used.exclude(order=exclude_order)
             if used.exists():
@@ -210,7 +220,8 @@ def redeem(order, applied):
             raise CouponError(f"Coupon {coupon.code} has reached its usage limit.")
         if coupon.is_first_time_auto and order.customer_id:
             if CouponRedemption.objects.filter(coupon=coupon, customer=order.customer).exclude(
-                    order__status=Order.Status.CANCELLED).exists():
+                    order__status=Order.Status.CANCELLED).exclude(
+                    order__payment_status=Order.PaymentStatus.FAILED).exists():
                 raise CouponError(f"Coupon {coupon.code} was already used.")
         if now > coupon.valid_to or not coupon.is_active:
             raise CouponError(f"Coupon {coupon.code} is no longer valid.")

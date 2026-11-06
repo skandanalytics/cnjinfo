@@ -224,6 +224,13 @@ export const Checkout = () => {
         if (!resolvedTable && cartView?.table && Number(cartView.table.id) === Number(preferredId)) {
           resolvedTable = cartView.table;
         }
+        if (!resolvedTable) {
+          resolvedTable = {
+            id: Number(preferredId),
+            table_number: getSavedTableNumber() || formatCompactTableLabel(String(preferredId)),
+            location: ''
+          };
+        }
       }
 
       if (!resolvedTable && openTables.length > 0) {
@@ -420,61 +427,12 @@ export const Checkout = () => {
                 </div>
               </div>
 
-              {orderType === DINE_IN && (
-                <div className="mb-2 p-2.5 rounded-3 bg-light border border-light-subtle">
-                  {hasScannedTable() ? (
-                    <div className="d-flex align-items-center justify-content-between">
-                      <span className="small text-secondary fw-semibold">Table:</span>
-                      <span className="fw-bold text-dark font-monospace">
-                        {formatCompactTableLabel(cartView?.table?.table_number || getSavedTableNumber() || String(getSelectedTableId()))}
-                      </span>
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="row row-cols-3 row-cols-sm-6 g-2">
-                        {(allBranchTables.length > 0 ? allBranchTables : tableChoices).map((tbl) => {
-                          const num = tbl.table_number || tbl.number || tbl.id;
-                          const cleanNum = String(num).startsWith('T') ? String(num) : `T${String(num).padStart(2, '0')}`;
-                          const isAvail = tbl.available === true || tbl.status === 'AVAILABLE' || tbl.status === 'Available' || tbl.is_available === true;
-                          const currentTid = cartView?.table?.id || getSelectedTableId();
-                          const isSelected = currentTid && String(currentTid) === String(tbl.id);
-
-                          return (
-                            <div key={tbl.id} className="col">
-                              <button
-                                type="button"
-                                disabled={!isAvail}
-                                onClick={() => isAvail && chooseType(DINE_IN, tbl)}
-                                className={`btn w-100 p-2 rounded-3 text-center transition-all d-flex flex-column align-items-center justify-content-center ${
-                                  isSelected
-                                    ? 'btn-danger text-white shadow-sm'
-                                    : isAvail
-                                    ? 'btn-outline-secondary bg-white text-dark'
-                                    : 'btn-light text-muted opacity-50'
-                                }`}
-                                style={{
-                                  border: isSelected ? '2px solid #F20D2D' : isAvail ? '1.5px solid #CBD5E1' : '1px dashed #CBD5E1',
-                                  cursor: isAvail ? 'pointer' : 'not-allowed',
-                                  minHeight: '46px'
-                                }}
-                                title={isAvail ? `Table ${cleanNum}` : `Table ${cleanNum} (Occupied)`}
-                              >
-                                <span className="fw-bold" style={{ fontSize: '13px', lineHeight: 1.1 }}>
-                                  {cleanNum}
-                                </span>
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {cartView?.table && (
-                        <div className="mt-2 small text-secondary d-flex align-items-center gap-1.5">
-                          <span className="text-dark fw-bold">Selected:</span>
-                          <span className="font-monospace fw-semibold">{formatCompactTableLabel(cartView.table.table_number || cartView.table.id)}</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
+              {orderType === DINE_IN && (cartView?.table || getSavedTableNumber() || getSelectedTableId()) && (
+                <div className="mb-2 p-2.5 rounded-3 bg-light border border-light-subtle d-flex align-items-center justify-content-between">
+                  <span className="small text-secondary fw-semibold">Table:</span>
+                  <span className="fw-bold text-dark font-monospace">
+                    {formatCompactTableLabel(cartView?.table?.table_number || getSavedTableNumber() || String(getSelectedTableId()))}
+                  </span>
                 </div>
               )}
 

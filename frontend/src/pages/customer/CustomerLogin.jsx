@@ -18,6 +18,7 @@ export const CustomerLogin = () => {
   // Step 1: Login, Step 2: OTP, Step 3: Dining Option
   const [countryCode, setCountryCode] = useState('+91');
   const [phone, setPhone] = useState('');
+  const [isPhoneFocused, setIsPhoneFocused] = useState(false);
   const [otpArray, setOtpArray] = useState(['', '', '', '', '', '']);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
@@ -256,19 +257,34 @@ export const CustomerLogin = () => {
   const handleConfirmDining = () => {
     sessionStorage.setItem('foodie_order_type', selectedDining);
     localStorage.setItem('foodie_order_type', selectedDining);
-    if (selectedDining === 'DINE_IN' && selectedTable) {
-      const cleanTableNum = formatCompactTableLabel(selectedTable.table_number || selectedTable.number || selectedTable.id);
-      sessionStorage.setItem('foodie_selected_table', String(selectedTable.id));
-      localStorage.setItem('foodie_selected_table', String(selectedTable.id));
-      sessionStorage.setItem('foodie_table_number', String(cleanTableNum));
-      localStorage.setItem('foodie_table_number', String(cleanTableNum));
-      const tableObj = {
-        tableId: selectedTable.id,
-        id: selectedTable.id,
-        tableNumber: cleanTableNum,
-        orderType: 'DINE_IN',
-        isTakeaway: false
-      };
+    if (selectedDining === 'DINE_IN') {
+      const existingTableStr = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+      let tableObj = null;
+      if (existingTableStr) {
+        try { tableObj = JSON.parse(existingTableStr); } catch (e) {}
+      }
+      if (selectedTable) {
+        const cleanTableNum = formatCompactTableLabel(selectedTable.table_number || selectedTable.number || selectedTable.id);
+        sessionStorage.setItem('foodie_selected_table', String(selectedTable.id));
+        localStorage.setItem('foodie_selected_table', String(selectedTable.id));
+        sessionStorage.setItem('foodie_table_number', String(cleanTableNum));
+        localStorage.setItem('foodie_table_number', String(cleanTableNum));
+        tableObj = {
+          tableId: selectedTable.id,
+          id: selectedTable.id,
+          tableNumber: cleanTableNum,
+          orderType: 'DINE_IN',
+          isTakeaway: false
+        };
+      } else if (!tableObj || !tableObj.tableId) {
+        tableObj = {
+          tableId: null,
+          id: null,
+          tableNumber: '',
+          orderType: 'DINE_IN',
+          isTakeaway: false
+        };
+      }
       sessionStorage.setItem('foodie_table', JSON.stringify(tableObj));
       localStorage.setItem('foodie_table', JSON.stringify(tableObj));
       if (setTable) {
@@ -391,72 +407,6 @@ export const CustomerLogin = () => {
               )}
             </div>
 
-            {selectedDining === 'DINE_IN' && !isQrSession && (
-              <div className="text-start mb-3 p-3 rounded-4 bg-light border border-light-subtle shadow-2xs">
-                <div className="d-flex align-items-center justify-content-between mb-2">
-                  <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>
-                    {openTables.length === 1 ? 'Your Table' : 'Select Your Dining Table'}
-                  </span>
-                  <span className="badge rounded-pill bg-success-subtle text-success fw-semibold" style={{ fontSize: '11px' }}>
-                    {tablesLoading ? 'Checking...' : `${openTables.length} Available`}
-                  </span>
-                </div>
-
-                {tablesLoading ? (
-                  <div className="py-2 text-center text-muted small">Loading available tables...</div>
-                ) : openTables.length === 0 ? (
-                  <div className="p-2 text-center text-danger small rounded bg-white border border-danger-subtle">
-                    No tables available. Please select Takeaway.
-                  </div>
-                ) : (
-                  <div>
-                    <select
-                      value={selectedTable?.id || ''}
-                      onChange={(e) => {
-                        const found = openTables.find(t => String(t.id) === String(e.target.value));
-                        setSelectedTable(found || null);
-                      }}
-                      className="form-select form-select-sm rounded-pill py-2 px-3 fw-semibold border shadow-xs text-dark"
-                      style={{ fontSize: '13px', borderColor: '#CBD5E1', backgroundColor: '#FFFFFF' }}
-                    >
-                      {openTables.map(t => {
-                        const cleanNum = formatCompactTableLabel(t.table_number || t.number || t.id);
-                        const loc = t.location || t.area || 'Indoor';
-                        const cap = t.capacity || 4;
-                        return (
-                          <option key={t.id} value={t.id}>
-                            {cleanNum} — {loc} ({cap} Seats)
-                          </option>
-                        );
-                      })}
-                    </select>
-
-                    <div className="d-flex align-items-center gap-1.5 flex-wrap mt-2.5">
-                      {openTables.slice(0, 8).map(t => {
-                        const cleanNum = formatCompactTableLabel(t.table_number || t.number || t.id);
-                        const isSelected = selectedTable && String(selectedTable.id) === String(t.id);
-                        return (
-                          <button
-                            key={t.id}
-                            type="button"
-                            onClick={() => setSelectedTable(t)}
-                            className={`btn btn-sm rounded-pill px-2.5 py-1 fw-bold transition-all ${
-                              isSelected
-                                ? 'btn-danger text-white shadow-xs'
-                                : 'btn-outline-secondary bg-white text-secondary'
-                            }`}
-                            style={{ fontSize: '11.5px', minWidth: '48px' }}
-                          >
-                            {cleanNum}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
             {/* Selectable Card 2: Takeaway */}
             <div
               onClick={() => setSelectedDining('TAKEAWAY')}
@@ -523,11 +473,12 @@ export const CustomerLogin = () => {
             {/* Mobile Number Input with Send OTP */}
             <form onSubmit={handleSendOTP} noValidate>
               <div 
-                className="d-flex align-items-center bg-white border rounded-3 p-1 mb-2 shadow-xs w-100"
+                className={`d-flex align-items-center bg-white rounded-3 p-1 mb-2 shadow-xs w-100 customer-phone-wrapper ${isPhoneFocused ? 'focused' : ''}`}
                 style={{ 
-                  borderColor: error && !otpSent ? '#DC2626' : '#CBD5E1', 
+                  border: `1.5px solid ${error && !otpSent ? '#DC2626' : (isPhoneFocused ? '#64748B' : '#CBD5E1')}`, 
                   height: '48px',
-                  boxShadow: 'none'
+                  boxShadow: isPhoneFocused ? '0 0 0 3px rgba(100, 116, 139, 0.12)' : 'none',
+                  transition: 'border-color 0.2s ease, box-shadow 0.2s ease'
                 }}
               >
                 <div className="d-flex align-items-center gap-1.5 ps-2.5 text-muted pe-2.5 border-end flex-shrink-0">
@@ -539,7 +490,7 @@ export const CustomerLogin = () => {
                   inputMode="numeric"
                   maxLength={10}
                   disabled={otpSent && otpLoading}
-                  className="form-control border-0 shadow-none ps-2 text-dark fw-semibold w-100"
+                  className="form-control customer-phone-input border-0 shadow-none ps-2 text-dark fw-semibold w-100"
                   style={{ 
                     fontSize: '14px', 
                     backgroundColor: 'transparent',
@@ -549,6 +500,8 @@ export const CustomerLogin = () => {
                   }}
                   placeholder="Mobile number"
                   value={phone}
+                  onFocus={() => setIsPhoneFocused(true)}
+                  onBlur={() => setIsPhoneFocused(false)}
                   onChange={(e) => {
                     setPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
                     setError('');

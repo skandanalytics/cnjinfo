@@ -284,7 +284,7 @@ export const PaymentModal = ({
               {/* RIGHT SECTION: Payment Methods & Action */}
               <div 
                 className="col-12 col-md-6 p-4 d-flex flex-column justify-content-between" 
-                style={{ backgroundColor: '#FFFFFF', minHeight: '440px' }}
+                style={{ backgroundColor: '#FFFFFF', minHeight: '520px' }}
               >
                 <div>
                   <h6 className="fw-bold text-dark small mb-3 text-uppercase text-muted" style={{ letterSpacing: '0.5px', fontSize: '11px' }}>
@@ -335,91 +335,94 @@ export const PaymentModal = ({
                     )}
                   </div>
 
-                  {/* Method View: UPI QR */}
-                  {selectedMethod === 'UPI' && (
-                    <div className="text-center p-3 rounded-3 border bg-light-subtle mb-3">
-                      <div className="mb-2">
-                        <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '10.5px' }}>
-                          ⚡ Instant UPI Scan & Pay
-                        </span>
-                      </div>
+                  {/* Fixed-height Container for Method Details to prevent modal jumping/resizing */}
+                  <div style={{ minHeight: '345px', height: '345px' }} className="d-flex flex-column justify-content-center">
+                    {/* Method View: UPI QR */}
+                    {selectedMethod === 'UPI' && (
+                      <div className="text-center p-3 rounded-3 border bg-light-subtle h-100 d-flex flex-column justify-content-center">
+                        <div className="mb-1.5">
+                          <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '10.5px' }}>
+                            ⚡ Instant UPI Scan & Pay
+                          </span>
+                        </div>
 
-                      <div 
-                        className="mx-auto rounded-3 p-1.5 bg-white border shadow-sm mb-2.5 d-flex align-items-center justify-content-center"
-                        style={{ width: '210px', height: '210px' }}
-                      >
-                        <img 
-                          src="/assets/upi_qr.jpg" 
-                          alt="OmniCard UPI QR" 
-                          className="w-100 h-100 rounded-2"
-                          style={{ objectFit: 'contain' }}
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                          }}
-                        />
-                      </div>
-
-                      <div className="small text-secondary mb-1">
-                        Scan with Google Pay, PhonePe, Paytm or BHIM
-                      </div>
-
-                      <div className="d-flex align-items-center justify-content-center gap-2">
-                        <code className="text-dark fw-bold bg-white px-2 py-0.5 border rounded small">
-                          7981354982@omni
-                        </code>
-                        <button
-                          type="button"
-                          onClick={handleCopyUpi}
-                          className="btn btn-sm btn-link p-0 text-decoration-none fw-semibold"
-                          style={{ fontSize: '12px' }}
+                        <div 
+                          className="mx-auto rounded-3 p-1.5 bg-white border shadow-sm mb-2 d-flex align-items-center justify-content-center"
+                          style={{ width: '190px', height: '190px' }}
                         >
-                          {copiedUpi ? '✓ Copied' : 'Copy UPI ID'}
-                        </button>
-                      </div>
+                          <img 
+                            src="/assets/upi_qr.jpg" 
+                            alt="OmniCard UPI QR" 
+                            className="w-100 h-100 rounded-2"
+                            style={{ objectFit: 'contain' }}
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                            }}
+                          />
+                        </div>
 
-                      <div className="mt-2 text-muted" style={{ fontSize: '11px' }}>
-                        Account Name: <strong className="text-dark">YAMIN PRASANNA REDDY BALIJEPALLI</strong>
-                      </div>
-                    </div>
-                  )}
+                        <div className="small text-secondary mb-1" style={{ fontSize: '11.5px' }}>
+                          Scan with Google Pay, PhonePe, Paytm or BHIM
+                        </div>
 
-                  {/* Method View: Counter / Cash */}
-                  {selectedMethod === 'COUNTER' && (
-                    <div className="p-4 rounded-3 border bg-light-subtle text-center mb-3">
-                      <div className="rounded-circle bg-warning-subtle text-warning-emphasis d-inline-flex p-3 mb-2">
-                        <FiDollarSign size={32} />
-                      </div>
-                      <h6 className="fw-bold text-dark mb-1">
-                        {isStaff ? 'Cash Payment at Counter' : 'Pay Cash at Restaurant Counter'}
-                      </h6>
-                      <p className="text-secondary small mb-0" style={{ fontSize: '12.5px' }}>
-                        {isStaff 
-                          ? 'Collect the physical cash amount from customer at billing counter before confirming.' 
-                          : 'Your order will be sent to the kitchen. Please proceed to the billing counter to pay.'}
-                      </p>
-                      <div className="mt-3 p-2.5 bg-white rounded-3 border text-dark fw-bold">
-                        Payable Amount: <span className="text-danger">{formatCurrency(grandTotal)}</span>
-                      </div>
-                    </div>
-                  )}
+                        <div className="d-flex align-items-center justify-content-center gap-2">
+                          <code className="text-dark fw-bold bg-white px-2 py-0.5 border rounded small">
+                            7981354982@omni
+                          </code>
+                          <button
+                            type="button"
+                            onClick={handleCopyUpi}
+                            className="btn btn-sm btn-link p-0 text-decoration-none fw-semibold"
+                            style={{ fontSize: '12px' }}
+                          >
+                            {copiedUpi ? '✓ Copied' : 'Copy UPI ID'}
+                          </button>
+                        </div>
 
-                  {/* Method View: Card */}
-                  {selectedMethod === 'CARD' && cardEnabled && (
-                    <div className="p-4 rounded-3 border bg-light-subtle text-center mb-3">
-                      <div className="rounded-circle bg-primary-subtle text-primary d-inline-flex p-3 mb-2">
-                        <FiCreditCard size={32} />
+                        <div className="mt-1 text-muted" style={{ fontSize: '11px' }}>
+                          Account Name: <strong className="text-dark">YAMIN PRASANNA REDDY BALIJEPALLI</strong>
+                        </div>
                       </div>
-                      <h6 className="fw-bold text-dark mb-1">Credit / Debit Card Payment</h6>
-                      <p className="text-secondary small mb-0" style={{ fontSize: '12.5px' }}>
-                        {isStaff 
-                          ? 'Swipe or tap customer card on the POS machine, verify successful receipt, then confirm.' 
-                          : 'Use your credit/debit card on the secure payment gateway to complete payment.'}
-                      </p>
-                      <div className="mt-3 p-2.5 bg-white rounded-3 border text-dark fw-bold">
-                        Payable Amount: <span className="text-danger">{formatCurrency(grandTotal)}</span>
+                    )}
+
+                    {/* Method View: Counter / Cash */}
+                    {selectedMethod === 'COUNTER' && (
+                      <div className="p-4 rounded-3 border bg-light-subtle text-center h-100 d-flex flex-column justify-content-center align-items-center">
+                        <div className="rounded-circle bg-warning-subtle text-warning-emphasis d-inline-flex p-3 mb-2">
+                          <FiDollarSign size={32} />
+                        </div>
+                        <h6 className="fw-bold text-dark mb-1">
+                          {isStaff ? 'Cash Payment at Counter' : 'Pay Cash at Restaurant Counter'}
+                        </h6>
+                        <p className="text-secondary small mb-0" style={{ fontSize: '12.5px', maxWidth: '300px' }}>
+                          {isStaff 
+                            ? 'Collect the physical cash amount from customer at billing counter before confirming.' 
+                            : 'Your order will be sent to the kitchen. Please proceed to the billing counter to pay.'}
+                        </p>
+                        <div className="mt-3 p-2.5 bg-white rounded-3 border text-dark fw-bold w-100" style={{ maxWidth: '280px' }}>
+                          Payable Amount: <span className="text-danger">{formatCurrency(grandTotal)}</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    )}
+
+                    {/* Method View: Card */}
+                    {selectedMethod === 'CARD' && cardEnabled && (
+                      <div className="p-4 rounded-3 border bg-light-subtle text-center h-100 d-flex flex-column justify-content-center align-items-center">
+                        <div className="rounded-circle bg-primary-subtle text-primary d-inline-flex p-3 mb-2">
+                          <FiCreditCard size={32} />
+                        </div>
+                        <h6 className="fw-bold text-dark mb-1">Credit / Debit Card Payment</h6>
+                        <p className="text-secondary small mb-0" style={{ fontSize: '12.5px', maxWidth: '300px' }}>
+                          {isStaff 
+                            ? 'Swipe or tap customer card on the POS machine, verify successful receipt, then confirm.' 
+                            : 'Use your credit/debit card on the secure payment gateway to complete payment.'}
+                        </p>
+                        <div className="mt-3 p-2.5 bg-white rounded-3 border text-dark fw-bold w-100" style={{ maxWidth: '280px' }}>
+                          Payable Amount: <span className="text-danger">{formatCurrency(grandTotal)}</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {error && (
                     <div className="alert alert-danger py-2 small mb-3 d-flex align-items-center gap-2">
@@ -463,7 +466,7 @@ export const PaymentModal = ({
                         <FiCheckCircle size={16} />
                         <span>
                           {selectedMethod === 'UPI' 
-                            ? `I Have Paid ${formatCurrency(grandTotal)}` 
+                            ? `Paid ${formatCurrency(grandTotal)}` 
                             : selectedMethod === 'COUNTER' 
                               ? `Confirm Cash Order (${formatCurrency(grandTotal)})` 
                               : `Pay with Card (${formatCurrency(grandTotal)})`}

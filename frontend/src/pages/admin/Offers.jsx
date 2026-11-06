@@ -776,6 +776,26 @@ export const Offers = () => {
             required
             error={(discount !== '' && minOrder !== '' && !isNaN(parseFloat(discount)) && !isNaN(parseFloat(minOrder)) && parseFloat(minOrder) <= parseFloat(discount)) ? 'Minimum order value must be greater than the discount value.' : undefined}
           />
+
+          {/* Show calculated discount and final payable preview */}
+          {discount && minOrder && !isNaN(parseFloat(discount)) && !isNaN(parseFloat(minOrder)) && (() => {
+            const minVal = parseFloat(minOrder);
+            const discVal = parseFloat(discount);
+            const discAmt = couponType === 'percentage' ? (minVal * discVal) / 100 : discVal;
+            const finalPayable = Math.max(0, minVal - discAmt);
+            return (
+              <div className="p-2.5 rounded-3 mb-3 d-flex align-items-center justify-content-between border" style={{ backgroundColor: '#FFF5F5', borderColor: '#FECDD3', fontSize: '12px' }}>
+                <div>
+                  <span className="text-secondary d-block">Discount: <strong className="text-danger">₹{discAmt.toFixed(2)}</strong></span>
+                  <span className="text-dark fw-bold">Amount after coupon: <strong className="text-success fs-6">₹{finalPayable.toFixed(2)}</strong></span>
+                </div>
+                <span className="badge bg-danger text-white rounded-pill px-2.5 py-1">
+                  {couponType === 'percentage' ? `${discVal}% OFF` : `₹${discVal} OFF`}
+                </span>
+              </div>
+            );
+          })()}
+
           <Input
             label="Valid Until"
             type="date"

@@ -181,12 +181,31 @@ export const Orders = () => {
 
       const tableMatch = directTableMatch || numericTableMatch;
 
-      // Order ID matching
-      const idMatch = isSimpleNumber
-        ? (orderIdStr === rawSearch || orderIdStr === `#${rawSearch}` || orderIdStr.startsWith(rawSearch))
-        : (orderIdStr.includes(rawSearch) || `#${orderIdStr}`.includes(rawSearch));
+      // Order ID matching (matches canonical ID, orderNumber, or display number like 30.1)
+      const displayNo = String(formatOrderDisplayNumber(o, o.id) || '').toLowerCase();
+      const parentIdStr = String(o.parent_order_id || o.parent_order || o.parentOrderId || '').toLowerCase();
+      const hasContinuationMatch = (o.continuations || []).some(c => {
+        const cDisp = String(formatOrderDisplayNumber(c, c.id) || '').toLowerCase();
+        return cDisp.includes(rawSearch) || String(c.id).includes(rawSearch);
+      });
+      const subOrderMatch =
+        displayNo.startsWith(rawSearch + '.') ||
+        displayNo.includes(rawSearch) ||
+        parentIdStr === rawSearch ||
+        parentIdStr === cleanSearchDigits ||
+        hasContinuationMatch;
 
-      matchesSearch = tableMatch || idMatch;
+      const customerMatch =
+        (o.customerName && o.customerName.toLowerCase().includes(rawSearch)) ||
+        (o.customer_name && o.customer_name.toLowerCase().includes(rawSearch)) ||
+        (o.customerPhone && o.customerPhone.includes(rawSearch)) ||
+        (o.customer_phone && o.customer_phone.includes(rawSearch));
+
+      const idMatch = isSimpleNumber
+        ? (orderIdStr === rawSearch || orderIdStr === `#${rawSearch}` || orderIdStr.startsWith(rawSearch) || displayNo === rawSearch || subOrderMatch)
+        : (orderIdStr.includes(rawSearch) || `#${orderIdStr}`.includes(rawSearch) || displayNo.includes(rawSearch) || `#${displayNo}`.includes(rawSearch) || subOrderMatch);
+
+      matchesSearch = tableMatch || idMatch || customerMatch;
     }
 
     let matchesTab = activeTab === 'All';
@@ -516,7 +535,7 @@ export const Orders = () => {
                         )}
                       </td>
                       <td className="text-end pe-4 py-3">
-                        <div className="d-flex align-items-center justify-content-end" style={{ gap: '10px' }}>
+                        <div className="d-flex align-items-center justify-content-end" style={{ gap: '12px' }}>
                           <button
                             type="button"
                             onClick={() => setSelectedOrder(order)}

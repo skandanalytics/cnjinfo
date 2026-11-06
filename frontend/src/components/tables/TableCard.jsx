@@ -67,9 +67,9 @@ export const TableCard = ({
     <div 
       className={`card shadow-xs transition-all position-relative overflow-hidden ${isInactive ? 'opacity-75' : ''}`}
       style={{
-        borderRadius: '16px',
-        backgroundColor: isOccupied ? '#FFF6F6' : '#F6FBF7',
-        border: isOccupied ? '1.5px solid #FCDAD9' : '1.5px solid #D6EFE0',
+        borderRadius: '0px',
+        backgroundColor: isOccupied ? '#FEF2F2' : '#F0FDF4',
+        border: isOccupied ? '1.5px solid #FECACA' : '1.5px solid #BBF7D0',
         padding: '14px 16px',
         cursor: 'default'
       }}

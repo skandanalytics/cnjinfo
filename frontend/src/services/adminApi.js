@@ -141,6 +141,42 @@ export async function staffLogin(code, password) {
   return { token: data.access, refresh: data.refresh, user };
 }
 
+export async function syncStaffProfile() {
+  try {
+    const data = await staffJson('/auth/me/');
+    if (!data) return null;
+    const emp = data.employee;
+    const raw = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
+    let existing = {};
+    try { existing = JSON.parse(raw)?.user || {}; } catch {}
+    const updatedUser = {
+      ...existing,
+      id: data.id || existing.id,
+      name: data.name || existing.name,
+      phone: data.phone || existing.phone,
+      email: data.email || existing.email || '',
+      role: emp?.is_admin_level ? 'admin' : 'employee',
+      employeeCode: emp?.employee_code || existing.employeeCode || '',
+      designation: emp?.job_title || emp?.role || existing.designation || '',
+      department: emp?.department || existing.department || '',
+      branchId: emp?.branch?.id || null,
+      branchName: emp?.branch?.name || '',
+      backendRole: emp?.role || existing.backendRole || '',
+    };
+    const payload = JSON.stringify({ user: updatedUser, isAuthenticated: true });
+    sessionStorage.setItem('foodie_auth_admin', payload);
+    localStorage.setItem('foodie_auth_admin', payload);
+    if (updatedUser.branchId) {
+      branchMemo = updatedUser.branchId;
+      localStorage.setItem('foodie_admin_selected_branch', String(updatedUser.branchId));
+      window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: String(updatedUser.branchId) } }));
+    }
+    return updatedUser;
+  } catch (err) {
+    return null;
+  }
+}
+
 export async function staffLogout() {
   const refresh = sessionStorage.getItem('foodie_staff_refresh') || localStorage.getItem('foodie_staff_refresh');
   if (refresh) {

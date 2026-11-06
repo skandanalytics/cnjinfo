@@ -281,9 +281,24 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
                 .first()
             )
             if active_root:
-                parent_order = active_root
-                last_idx = Order.objects.filter(parent_order=parent_order).aggregate(models.Max('continuation_index'))['continuation_index__max'] or 0
-                continuation_idx = last_idx + 1
+                # Prevent cross-customer table reuse: another customer cannot arbitrarily piggyback
+                # unless they are the same customer or part of the same dining session.
+                is_same_customer = False
+                if user and getattr(user, 'is_authenticated', False) and active_root.customer_id == getattr(user, 'id', None):
+                    is_same_customer = True
+                elif customer_phone and active_root.customer_phone == customer_phone:
+                    is_same_customer = True
+                elif getattr(user, 'phone', None) and active_root.customer_phone == user.phone:
+                    is_same_customer = True
+                elif assisted:
+                    is_same_customer = True
+
+                if is_same_customer:
+                    parent_order = active_root
+                    last_idx = Order.objects.filter(parent_order=parent_order).aggregate(models.Max('continuation_index'))['continuation_index__max'] or 0
+                    continuation_idx = last_idx + 1
+                else:
+                    raise OrderError("Table is currently occupied by another customer.", "table_occupied", 409)
     view = evaluate(cart)
     if not view["can_checkout"]:
         raise OrderError("Your cart needs attention before checkout.", "cart_invalid", 409)
@@ -642,6 +657,12 @@ def change_status(order_id, new_status, actor, reason=""):
         order.cancel_reason = reason.strip()
         restore_for_order(order)
     if new_status == Order.Status.COMPLETED or (order.order_type == Order.Type.TAKEAWAY and new_status == Order.Status.SERVED):
+        # Check if any continuation suborder is still in progress (PENDING or PREPARING)
+        root = order.parent_order if order.parent_order_id else order
+        active_suborders = root.continuations.filter(status__in=[Order.Status.PENDING, Order.Status.PREPARING]).exclude(pk=order.pk)
+        if active_suborders.exists():
+            raise OrderError("Cannot complete order while sub-orders are still preparing.", "suborder_in_progress", 400)
+
         if not order.completed_at:
             order.completed_at = timezone.now()
         # Complete all related session orders (root and active continuations) for dine-in tables

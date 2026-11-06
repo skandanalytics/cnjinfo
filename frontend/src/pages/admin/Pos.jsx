@@ -1466,10 +1466,10 @@ export const Pos = () => {
                   <FiChevronLeft size={20} className="text-secondary" />
                 </button>
                 <div>
-                  <h4 className="fw-bold text-dark mb-0" style={{ fontSize: '20px', letterSpacing: '-0.3px' }}>
+                  <h4 className="fw-bold text-dark mb-0" style={{ fontSize: '24px', letterSpacing: '-0.3px' }}>
                     POS / Take Order
                   </h4>
-                  <p className="text-secondary small mb-0 mt-0.5" style={{ fontSize: '12.5px', color: '#64748B' }}>
+                  <p className="text-secondary small mb-0 mt-0.5" style={{ fontSize: '13px', color: '#64748B' }}>
                     Create a new order for dine-in or takeaway
                   </p>
                 </div>
@@ -1477,188 +1477,194 @@ export const Pos = () => {
 
               </div>
 
-              {/* Search dishes input & Availability dropdown aligned to the right */}
-              <div className="d-flex align-items-center gap-2">
-                <div className="position-relative" style={{ width: '280px', maxWidth: '100%' }}>
-                  <FiSearch 
-                    className="position-absolute text-muted" 
-                    style={{ left: '14px', top: '13px', fontSize: '15px' }} 
-                  />
-                  <input
-                    type="text"
-                    className="form-control rounded-pill ps-5 bg-white border shadow-xs"
+              {/* Search dishes input & Availability dropdown aligned to the right (Hidden when no dishes in branch per Bug 4) */}
+              {dishes.length > 0 && (
+                <div className="d-flex align-items-center gap-2">
+                  <div className="position-relative" style={{ width: '280px', maxWidth: '100%' }}>
+                    <FiSearch 
+                      className="position-absolute text-danger" 
+                      style={{ left: '14px', top: '13px', fontSize: '15px' }} 
+                    />
+                    <input
+                      type="text"
+                      className="form-control rounded-pill ps-5 bg-white border shadow-xs"
+                      style={{
+                        height: '42px',
+                        fontSize: '13px',
+                        borderColor: '#E2E8F0',
+                        paddingRight: searchQuery ? '36px' : '14px'
+                      }}
+                      placeholder="Search dishes by name or category..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        className="btn btn-link position-absolute p-0 text-muted border-0"
+                        style={{ right: '12px', top: '11px' }}
+                        onClick={() => setSearchQuery('')}
+                      >
+                        <FiX size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Availability Filter beside Search Bar */}
+                  <select
+                    className="form-select rounded-pill shadow-xs fw-semibold border"
                     style={{
+                      width: 'auto',
+                      minWidth: '140px',
                       height: '42px',
-                      fontSize: '13px',
                       borderColor: '#E2E8F0',
-                      paddingRight: searchQuery ? '36px' : '14px'
-                    }}
-                    placeholder="Search dishes by name or category..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
-                  {searchQuery && (
-                    <button
-                      type="button"
-                      className="btn btn-link position-absolute p-0 text-muted border-0"
-                      style={{ right: '12px', top: '11px' }}
-                      onClick={() => setSearchQuery('')}
-                    >
-                      <FiX size={16} />
-                    </button>
-                  )}
-                </div>
-
-                {/* Availability Filter beside Search Bar */}
-                <select
-                  className="form-select rounded-pill shadow-xs fw-semibold border"
-                  style={{
-                    width: 'auto',
-                    minWidth: '140px',
-                    height: '42px',
-                    borderColor: '#E2E8F0',
-                    fontSize: '12.5px',
-                    backgroundColor: '#FFFFFF',
-                    color: '#334155',
-                    cursor: 'pointer'
-                  }}
-                  value={availabilityFilter}
-                  onChange={(e) => setAvailabilityFilter(e.target.value)}
-                  aria-label="Filter dishes by availability"
-                >
-                  <option value="ALL">All Status</option>
-                  <option value="IN_STOCK">In Stock</option>
-                  <option value="LOW_STOCK">Low Stock</option>
-                  <option value="OUT_OF_STOCK">Out of Stock</option>
-                </select>
-              </div>
-            </div>
-
-            {/* 2. Category Selectable Buttons with Icon and Category Name (Checkbox-like toggle) */}
-            <div className="d-flex align-items-center gap-2 overflow-x-auto pb-2 scrollbar-hidden mb-3">
-              {/* All Categories Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedCategory('ALL');
-                  setSelectedCategories([]);
-                }}
-                className={`btn text-nowrap d-flex align-items-center gap-2 px-3 py-1.5 fw-semibold transition-all rounded-pill ${
-                  selectedCategories.length === 0 && selectedCategory === 'ALL'
-                    ? 'btn-danger text-white shadow-xs'
-                    : 'bg-white text-dark border shadow-xs'
-                }`}
-                style={{
-                  fontSize: '13px',
-                  height: '36px',
-                  borderColor: selectedCategories.length === 0 && selectedCategory === 'ALL' ? '#F20D2D' : '#E2E8F0',
-                  cursor: 'pointer'
-                }}
-                title="All Categories"
-              >
-                <span>All Dishes ({dishes.length})</span>
-              </button>
-
-              {categories.filter(c => c !== 'ALL').map((cat, idx) => {
-                const count = categoryCounts[cat] || 0;
-                const isCatActive = selectedCategories.includes(cat);
-
-                const handlePillClick = () => {
-                  setSelectedCategory('ALL'); // Multi-select mode
-                  setSelectedCategories((prev) => {
-                    if (prev.includes(cat)) {
-                      return prev.filter(c => c !== cat);
-                    } else {
-                      return [...prev, cat];
-                    }
-                  });
-                };
-
-                return (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={handlePillClick}
-                    className={`btn text-nowrap d-flex align-items-center gap-2 px-3 py-1.5 fw-semibold transition-all rounded-pill ${
-                      isCatActive
-                        ? 'btn-danger text-white shadow-xs'
-                        : 'bg-white text-dark border shadow-xs'
-                    }`}
-                    style={{
-                      fontSize: '13px',
-                      height: '36px',
-                      borderColor: isCatActive ? '#F20D2D' : '#E2E8F0',
+                      fontSize: '12.5px',
+                      backgroundColor: '#FFFFFF',
+                      color: '#334155',
                       cursor: 'pointer'
                     }}
-                    title={`${cat} (${count})`}
+                    value={availabilityFilter}
+                    onChange={(e) => setAvailabilityFilter(e.target.value)}
+                    aria-label="Filter dishes by availability"
                   >
-                    <span>{cat} ({count})</span>
-                  </button>
-                );
-              })}
+                    <option value="ALL">All Status</option>
+                    <option value="IN_STOCK">In Stock</option>
+                    <option value="LOW_STOCK">Low Stock</option>
+                    <option value="OUT_OF_STOCK">Out of Stock</option>
+                  </select>
+                </div>
+              )}
             </div>
 
-            {/* 3. Filter Toolbar Row: Food Type (Icon Only, Checkbox Toggle) */}
-            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-              <div className="d-flex align-items-center gap-2 flex-wrap">
-                <span className="small fw-bold text-secondary me-1" style={{ fontSize: '12px' }}>Food Type:</span>
-                
-                {/* Food Type Buttons (Icon Only, Checkbox Toggle) */}
-                <div className="d-inline-flex align-items-center gap-1.5 p-1 bg-white rounded-pill border border-light-subtle shadow-xs">
-                  <button
-                    type="button"
-                    onClick={() => setFoodTypeFilter({ veg: false, 'non-veg': false, vegan: false })}
-                    className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
-                      !foodTypeFilter.veg && !foodTypeFilter['non-veg'] && !foodTypeFilter.vegan ? 'btn-danger text-white shadow-xs' : 'btn-light text-secondary'
-                    }`}
-                    style={{ width: '32px', height: '32px' }}
-                    title="All Food Types"
-                    aria-label="All Food Types"
-                  >
-                    <FiGrid size={15} />
-                  </button>
+            {/* 2. Category Selectable Buttons with Icon and Category Name (Hidden when no dishes per Bug 4) */}
+            {dishes.length > 0 && (
+              <div className="d-flex align-items-center gap-2 overflow-x-auto pb-2 scrollbar-hidden mb-3">
+                {/* All Categories Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCategory('ALL');
+                    setSelectedCategories([]);
+                  }}
+                  className={`btn text-nowrap d-flex align-items-center gap-2 px-3 py-1.5 fw-semibold transition-all rounded-pill ${
+                    selectedCategories.length === 0 && selectedCategory === 'ALL'
+                      ? 'btn-danger text-white shadow-xs'
+                      : 'bg-white text-dark border shadow-xs'
+                  }`}
+                  style={{
+                    fontSize: '13px',
+                    height: '36px',
+                    borderColor: selectedCategories.length === 0 && selectedCategory === 'ALL' ? '#F20D2D' : '#E2E8F0',
+                    cursor: 'pointer'
+                  }}
+                  title="All Categories"
+                >
+                  <span>All Dishes ({dishes.length})</span>
+                </button>
 
-                  <button
-                    type="button"
-                    onClick={() => setFoodTypeFilter(prev => ({ ...prev, veg: !prev.veg }))}
-                    className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
-                      foodTypeFilter.veg ? 'btn-success text-white shadow-xs' : 'btn-light'
-                    }`}
-                    style={{ width: '32px', height: '32px' }}
-                    title="Vegetarian"
-                    aria-label="Vegetarian"
-                  >
-                    <span className="veg-badge" style={{ width: '15px', height: '15px' }}></span>
-                  </button>
+                {categories.filter(c => c !== 'ALL').map((cat, idx) => {
+                  const count = categoryCounts[cat] || 0;
+                  const isCatActive = selectedCategories.includes(cat);
 
-                  <button
-                    type="button"
-                    onClick={() => setFoodTypeFilter(prev => ({ ...prev, 'non-veg': !prev['non-veg'] }))}
-                    className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
-                      foodTypeFilter['non-veg'] ? 'btn-danger text-white shadow-xs' : 'btn-light'
-                    }`}
-                    style={{ width: '32px', height: '32px' }}
-                    title="Non-Vegetarian"
-                    aria-label="Non-Vegetarian"
-                  >
-                    <span className="non-veg-badge" style={{ width: '15px', height: '15px' }}></span>
-                  </button>
+                  const handlePillClick = () => {
+                    setSelectedCategory('ALL'); // Multi-select mode
+                    setSelectedCategories((prev) => {
+                      if (prev.includes(cat)) {
+                        return prev.filter(c => c !== cat);
+                      } else {
+                        return [...prev, cat];
+                      }
+                    });
+                  };
 
-                  <button
-                    type="button"
-                    onClick={() => setFoodTypeFilter(prev => ({ ...prev, vegan: !prev.vegan }))}
-                    className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
-                      foodTypeFilter.vegan ? 'btn-success text-white shadow-xs' : 'btn-light'
-                    }`}
-                    style={{ width: '32px', height: '32px' }}
-                    title="Vegan"
-                    aria-label="Vegan"
-                  >
-                    <span className="vegan-badge" style={{ width: '15px', height: '15px' }}></span>
-                  </button>
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={handlePillClick}
+                      className={`btn text-nowrap d-flex align-items-center gap-2 px-3 py-1.5 fw-semibold transition-all rounded-pill ${
+                        isCatActive
+                          ? 'btn-danger text-white shadow-xs'
+                          : 'bg-white text-dark border shadow-xs'
+                      }`}
+                      style={{
+                        fontSize: '13px',
+                        height: '36px',
+                        borderColor: isCatActive ? '#F20D2D' : '#E2E8F0',
+                        cursor: 'pointer'
+                      }}
+                      title={`${cat} (${count})`}
+                    >
+                      <span>{cat} ({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* 3. Filter Toolbar Row: Food Type (Hidden when no dishes per Bug 4) */}
+            {dishes.length > 0 && (
+              <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  <span className="small fw-bold text-secondary me-1" style={{ fontSize: '12px' }}>Food Type:</span>
+                  
+                  {/* Food Type Buttons (Icon Only, Checkbox Toggle) */}
+                  <div className="d-inline-flex align-items-center gap-1.5 p-1 bg-white rounded-pill border border-light-subtle shadow-xs">
+                    <button
+                      type="button"
+                      onClick={() => setFoodTypeFilter({ veg: false, 'non-veg': false, vegan: false })}
+                      className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                        !foodTypeFilter.veg && !foodTypeFilter['non-veg'] && !foodTypeFilter.vegan ? 'btn-danger text-white shadow-xs' : 'btn-light text-secondary'
+                      }`}
+                      style={{ width: '32px', height: '32px' }}
+                      title="All Food Types"
+                      aria-label="All Food Types"
+                    >
+                      <FiGrid size={15} />
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFoodTypeFilter(prev => ({ ...prev, veg: !prev.veg }))}
+                      className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                        foodTypeFilter.veg ? 'btn-success text-white shadow-xs' : 'btn-light'
+                      }`}
+                      style={{ width: '32px', height: '32px' }}
+                      title="Vegetarian"
+                      aria-label="Vegetarian"
+                    >
+                      <span className="veg-badge" style={{ width: '15px', height: '15px' }}></span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFoodTypeFilter(prev => ({ ...prev, 'non-veg': !prev['non-veg'] }))}
+                      className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                        foodTypeFilter['non-veg'] ? 'btn-danger text-white shadow-xs' : 'btn-light'
+                      }`}
+                      style={{ width: '32px', height: '32px' }}
+                      title="Non-Vegetarian"
+                      aria-label="Non-Vegetarian"
+                    >
+                      <span className="non-veg-badge" style={{ width: '15px', height: '15px' }}></span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setFoodTypeFilter(prev => ({ ...prev, vegan: !prev.vegan }))}
+                      className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                        foodTypeFilter.vegan ? 'btn-success text-white shadow-xs' : 'btn-light'
+                      }`}
+                      style={{ width: '32px', height: '32px' }}
+                      title="Vegan"
+                      aria-label="Vegan"
+                    >
+                      <span className="vegan-badge" style={{ width: '15px', height: '15px' }}></span>
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
 
             {/* 4. Food Cards Responsive 4-Column Grid */}
             <div className="flex-grow-1 min-h-0">
@@ -1672,21 +1678,11 @@ export const Pos = () => {
                     <FiSearch size={36} />
                   </div>
                   <h6 className="fw-bold text-dark mb-1">No Dishes Found</h6>
-                  <p className="text-muted small mb-3">Try adjusting your category, food type, or search term.</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery('');
-                      setSelectedCategory('ALL');
-                      setSelectedCategories([]);
-                      setSelectedFoodType('ALL');
-                      setFoodTypeFilter({ veg: false, 'non-veg': false, vegan: false });
-                      setAvailabilityFilter('ALL');
-                    }}
-                    className="btn btn-sm btn-outline-danger rounded-pill px-3"
-                  >
-                    Clear All Filters
-                  </button>
+                  <p className="text-muted small mb-0">
+                    {dishes.length === 0 
+                      ? 'No dishes are configured for the selected branch.' 
+                      : 'Try adjusting your category, food type, or search term.'}
+                  </p>
                 </div>
               ) : (
                 <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xl-4 g-3 pb-4">
@@ -1711,97 +1707,61 @@ export const Pos = () => {
                     return (
                       <div key={dish.id} className="col">
                         <div 
-                          className="card h-100 border-0 shadow-xs transition-all overflow-hidden"
+                          className="card h-100 border-0 shadow-xs transition-all overflow-hidden pos-dish-card"
                           style={{
-                            borderRadius: '16px',
+                            borderRadius: '12px',
                             backgroundColor: '#FFFFFF',
                             border: '1px solid #E2E8F0',
                             transition: 'transform 0.2s ease, box-shadow 0.2s ease',
                           }}
                         >
-                          {/* Image Box (140px) */}
-                          <div className="position-relative w-100" style={{ height: '140px', backgroundColor: '#F8FAFC' }}>
-                            {dish.image ? (
-                              <img
-                                src={dish.image}
-                                alt={dish.name}
-                                className="w-100 h-100 object-fit-cover"
-                                onError={(e) => { e.target.style.display = 'none'; }}
-                              />
-                            ) : (
-                              <div className="w-100 h-100 d-flex align-items-center justify-content-center text-secondary">
-                                <span className="fs-1">🍲</span>
-                              </div>
-                            )}
-
-                            {/* Top-Left Badge: Bestseller / Popular */}
-                            {isBestseller ? (
-                              <span 
-                                className="position-absolute shadow-xs"
-                                style={{
-                                  top: '10px',
-                                  left: '10px',
-                                  backgroundColor: '#F20D2D',
-                                  color: '#FFFFFF',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  padding: '3px 9px',
-                                  borderRadius: '20px',
-                                  letterSpacing: '0.2px'
-                                }}
-                              >
-                                Bestseller
-                              </span>
-                            ) : isPopular ? (
-                              <span 
-                                className="position-absolute shadow-xs"
-                                style={{
-                                  top: '10px',
-                                  left: '10px',
-                                  backgroundColor: '#F20D2D',
-                                  color: '#FFFFFF',
-                                  fontSize: '11px',
-                                  fontWeight: '600',
-                                  padding: '3px 9px',
-                                  borderRadius: '20px',
-                                  letterSpacing: '0.2px'
-                                }}
-                              >
-                                Popular
-                              </span>
-                            ) : null}
-
-                            {/* Top-Right Badge: Veg / Non-Veg Indicator */}
-                            <div 
-                              className="position-absolute shadow-xs d-flex align-items-center justify-content-center"
-                              style={{
-                                top: '10px',
-                                right: '10px',
-                                width: '20px',
-                                height: '20px',
-                                backgroundColor: '#FFFFFF',
-                                border: isVeg ? '1.5px solid #22c55e' : '1.5px solid #ef4444',
-                                borderRadius: '4px'
-                              }}
-                              title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
-                            >
-                              {isVeg ? (
-                                <div style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
-                              ) : (
-                                <div style={{
-                                  width: 0,
-                                  height: 0,
-                                  borderLeft: '4px solid transparent',
-                                  borderRight: '4px solid transparent',
-                                  borderBottom: '7px solid #ef4444'
-                                }} />
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Card Content */}
-                          <div className="card-body p-3 d-flex flex-column justify-content-between">
+{/* Header row with Veg/Non-Veg icon & optional Bestseller/Popular pill (Dish images hidden in POS) */}
+                          <div className="card-body p-3 d-flex flex-column justify-content-between h-100">
                             <div>
+                              <div className="d-flex align-items-center justify-content-between mb-2">
+                                <div 
+                                  className="shadow-2xs d-flex align-items-center justify-content-center bg-white"
+                                  style={{
+                                    width: '18px',
+                                    height: '18px',
+                                    border: isVeg ? '1.5px solid #22c55e' : '1.5px solid #ef4444',
+                                    borderRadius: '3px'
+                                  }}
+                                  title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
+                                >
+                                  {isVeg ? (
+                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#22c55e' }} />
+                                  ) : (
+                                    <div style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#ef4444' }} />
+                                  )}
+                                </div>
+
+                                {isBestseller ? (
+                                  <span 
+                                    className="badge rounded-pill fw-semibold shadow-2xs"
+                                    style={{
+                                      backgroundColor: '#FEE2E2',
+                                      color: '#DC2626',
+                                      fontSize: '10.5px',
+                                      padding: '2px 8px'
+                                    }}
+                                  >
+                                    Bestseller
+                                  </span>
+                                ) : isPopular ? (
+                                  <span 
+                                    className="badge rounded-pill fw-semibold shadow-2xs"
+                                    style={{
+                                      backgroundColor: '#FEF3C7',
+                                      color: '#D97706',
+                                      fontSize: '10.5px',
+                                      padding: '2px 8px'
+                                    }}
+                                  >
+                                    Popular
+                                  </span>
+                                ) : null}
+                              </div>
                               <h6 className="fw-bold text-dark mb-0 text-truncate" title={dish.name} style={{ fontSize: '15px' }}>
                                 {dish.name}
                               </h6>
@@ -1823,7 +1783,7 @@ export const Pos = () => {
                                 </div>
 
                                 {/* Stock status pill/dot in price row where it never collides with buttons */}
-                                <div className="d-inline-flex align-items-center gap-1.5" title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}>
+                                <div className="d-inline-flex align-items-center" style={{ gap: '8px' }} title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}>
                                   <span
                                     className="rounded-circle flex-shrink-0"
                                     style={{
@@ -1847,19 +1807,17 @@ export const Pos = () => {
                                 <button
                                   type="button"
                                   onClick={() => handleOpenCustomize(dish)}
-                                  className="btn btn-sm px-2.5 py-1 fw-medium rounded-pill bg-white flex-shrink-0 d-inline-flex align-items-center gap-1"
+                                  className="btn btn-sm px-2 py-1 fw-medium rounded-pill bg-white flex-shrink-0 d-inline-flex align-items-center justify-content-center"
                                   style={{ 
+                                    width: '32px',
                                     height: '32px', 
-                                    fontSize: '11.5px', 
                                     border: '1.5px solid #F20D2D', 
                                     color: '#F20D2D',
-                                    whiteSpace: 'nowrap'
                                   }}
-                                  title="Special instructions & customizations"
+                                  title="Customize & Add Special Instructions"
                                   disabled={isOutOfStock}
                                 >
-                                  <FiEdit2 size={12} />
-                                  <span>Customize</span>
+                                  <FiEdit2 size={13} />
                                 </button>
                               </div>
 
@@ -2073,13 +2031,13 @@ export const Pos = () => {
                 {/* Customer Mobile (required for order record if new order) */}
                 <div className="col-12 mt-1">
                   <div className="input-group input-group-sm">
-                    <span className="input-group-text bg-light border-light-subtle text-muted px-2.5" style={{ height: '32px' }}>
-                      <FiPhone size={12} />
+                    <span className="input-group-text bg-light border-light-subtle text-muted px-2.5" style={{ height: '38px', borderRadius: '10px 0 0 10px' }}>
+                      <FiPhone size={14} />
                     </span>
                     <input
                       type="tel"
                       className="form-control form-control-sm border-light-subtle shadow-xs"
-                      style={{ height: '32px', fontSize: '12px' }}
+                      style={{ height: '38px', borderRadius: '0 10px 10px 0', fontSize: '12.5px' }}
                       placeholder="Customer Mobile (e.g. 9876543210)"
                       value={customerPhone}
                       onChange={(e) => {
@@ -2247,6 +2205,11 @@ export const Pos = () => {
                             <div className="text-secondary small" style={{ fontSize: '11px', color: '#64748B' }}>
                               {formatCurrency(itemUnitPrice)}
                             </div>
+                            {item.dish.hasDiscount && item.dish.price > item.dish.sellingPrice && (
+                              <div className="text-success fw-semibold" style={{ fontSize: '10.5px' }}>
+                                -{formatCurrency((item.dish.price - item.dish.sellingPrice) * item.quantity)} off
+                              </div>
+                            )}
                             {item.specialInstructions && (
                               <div className="mt-1 small text-danger fw-medium" style={{ fontSize: '10.5px' }}>
                                 <span className="text-secondary me-1">Note:</span>{item.specialInstructions}
@@ -2740,18 +2703,19 @@ export const Pos = () => {
                                   if (isOccupied) return;
                                   handleSelectTable(table);
                                 }}
-                                className={`p-3 rounded-4 border text-start transition-all d-flex flex-column justify-content-between ${
+                                className={`p-3 border text-start transition-all d-flex flex-column justify-content-between ${
                                   isOccupied 
-                                    ? 'border-danger-subtle bg-light opacity-65'
+                                    ? 'opacity-85'
                                     : isSelected 
-                                    ? 'border-danger bg-danger-subtle shadow-xs cursor-pointer' 
-                                    : 'border-light-subtle bg-white hover-shadow cursor-pointer'
+                                    ? 'shadow-xs cursor-pointer' 
+                                    : 'hover-shadow cursor-pointer'
                                 }`}
                                 style={{ 
                                   cursor: isOccupied ? 'not-allowed' : 'pointer', 
                                   minHeight: '52px',
-                                  backgroundColor: isOccupied ? '#FFF5F5' : '#FFFFFF',
-                                  borderColor: isOccupied ? '#FECDD3' : '#E2E8F0'
+                                  borderRadius: '0px',
+                                  backgroundColor: isOccupied ? '#FEF2F2' : '#F0FDF4',
+                                  border: isOccupied ? '1.5px solid #FECACA' : isSelected ? '2px solid #16A34A' : '1.5px solid #BBF7D0'
                                 }}
                                 title={isOccupied ? `${shortName} is ${statusText} (Cannot be selected)` : `Select ${shortName}`}
                               >
@@ -2993,9 +2957,20 @@ export const Pos = () => {
               <div className="d-flex align-items-center justify-content-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     const ord = placedOrder;
                     setPlacedOrder(null);
+                    const rootId = ord?.parent_order_id || ord?.parent_order || ord?.parentOrderId || parentOrder?.id;
+                    if (rootId) {
+                      try {
+                        const { fetchBillPreview } = await import('../../services/adminApi');
+                        const preview = await fetchBillPreview(rootId);
+                        if (preview) {
+                          setViewingEBill(preview);
+                          return;
+                        }
+                      } catch (e) {}
+                    }
                     setViewingEBill(ord);
                   }}
                   className="btn btn-sm btn-outline-dark rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1"

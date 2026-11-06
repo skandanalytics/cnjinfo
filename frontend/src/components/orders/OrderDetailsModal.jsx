@@ -116,8 +116,8 @@ export const OrderDetailsModal = ({
               if (onViewEBill) onViewEBill(currentOrder);
               else if (onProceedToBill) onProceedToBill(currentOrder);
             }}
-            className="btn btn-outline-danger fw-bold d-flex align-items-center gap-1.5 rounded-pill px-3 py-2"
-            style={{ fontSize: '13px' }}
+            className="btn btn-outline-danger fw-bold d-flex align-items-center rounded-pill px-3.5 py-2"
+            style={{ fontSize: '13px', gap: '8px' }}
           >
             <FiEye size={15} />
             <span>{isCompleted ? 'View E-Bill' : 'Proceed to Bill'}</span>
@@ -127,8 +127,8 @@ export const OrderDetailsModal = ({
             <button
               type="button"
               onClick={() => onContinueOrder(currentOrder)}
-              className="btn btn-danger fw-bold d-flex align-items-center gap-1.5 rounded-pill px-3 py-2 shadow-xs"
-              style={{ fontSize: '13px' }}
+              className="btn btn-danger fw-bold d-flex align-items-center rounded-pill px-3.5 py-2 shadow-xs"
+              style={{ fontSize: '13px', gap: '8px' }}
             >
               <FiPlus size={15} />
               <span>Continue Order</span>
@@ -215,6 +215,11 @@ export const OrderDetailsModal = ({
                     </span>
                   )}
                   {item.name || 'Dish Item'} <strong className="text-danger ms-1">x{item.quantity || 1}</strong>
+                  {(item.discount > 0 || item.dish_discount > 0 || item.discount_amount > 0) && (
+                    <div className="text-success fw-medium mt-0.5" style={{ fontSize: '11px' }}>
+                      -{formatCurrency(item.dish_discount || item.discount || item.discount_amount)} off
+                    </div>
+                  )}
                   {item.instructions && <div className="text-muted fw-normal mt-1" style={{ fontSize: '11px' }}>Instructions: {item.instructions}</div>}
                   {item.extraIngredients && item.extraIngredients.length > 0 && (
                     <div className="text-muted fw-normal mt-1" style={{ fontSize: '11px' }}>
@@ -240,6 +245,12 @@ export const OrderDetailsModal = ({
               <span className="text-secondary">Subtotal</span>
               <span className="text-dark fw-bold">{formatCurrency(currentOrder.combined_items_subtotal ?? currentOrder.subtotal)}</span>
             </div>
+            {(currentOrder.dish_discount_total > 0 || currentOrder.dish_discount > 0 || currentOrder.menu_discount > 0) && (
+              <div className="d-flex align-items-center justify-content-between mb-1 text-success">
+                <span>Menu Discounts</span>
+                <span className="fw-bold">-{formatCurrency(currentOrder.dish_discount_total || currentOrder.dish_discount || currentOrder.menu_discount)}</span>
+              </div>
+            )}
             {currentOrder.discount > 0 && (
               <div className="d-flex align-items-center justify-content-between mb-1 text-success">
                 <span>Voucher Discount</span>

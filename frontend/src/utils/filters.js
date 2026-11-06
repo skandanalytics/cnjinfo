@@ -124,14 +124,9 @@ export const filterAndSortProducts = (products, options = {}) => {
   let result = products.filter((p) => {
     if (!p) return false;
 
-    // Search against item name and category safely
+    // Search strictly against dish name only (case-insensitive, trimmed, partial match)
     const nameStr = String(p.name || '').toLowerCase();
-    const catStr = String(p.category || p.category_name || '').toLowerCase();
-
-    const matchesSearch =
-      !searchTerm ||
-      nameStr.includes(searchTerm) ||
-      catStr.includes(searchTerm);
+    const matchesSearch = !searchTerm || nameStr.includes(searchTerm);
 
     // Category Filter (OR logic across selected categories)
     const matchesCategory =

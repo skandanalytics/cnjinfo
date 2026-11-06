@@ -72,68 +72,38 @@ export const AuthProvider = ({ children }) => {
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
-  // 60-Minute Admin Inactivity Auto-Logout
-  useEffect(() => {
-    if (!authState.isAuthenticated || authState.user?.role !== 'admin') {
-      return undefined;
-    }
-
-    const INACTIVITY_TIMEOUT_MS = 60 * 60 * 1000; // 60 minutes
-    const LAST_ACTIVITY_KEY = 'foodie_admin_last_activity';
-
-    // Initialize last activity timestamp if absent
-    if (!localStorage.getItem(LAST_ACTIVITY_KEY)) {
-      localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
-    }
-
-    let throttleTimer = null;
-    const recordActivity = () => {
-      if (throttleTimer) return;
-      throttleTimer = setTimeout(() => {
-        throttleTimer = null;
-      }, 1000); // Throttle writes to localStorage to at most once per second
-      localStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
-    };
-
-    const qualifyingEvents = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
-    qualifyingEvents.forEach((evt) => {
-      window.addEventListener(evt, recordActivity, { passive: true });
-    });
-
-    const checkInactivity = () => {
-      const last = Number(localStorage.getItem(LAST_ACTIVITY_KEY) || Date.now());
-      const elapsed = Date.now() - last;
-      if (elapsed >= INACTIVITY_TIMEOUT_MS) {
-        localStorage.removeItem(LAST_ACTIVITY_KEY);
-        try {
-          localStorage.setItem('foodie_admin_logout_trigger', String(Date.now()));
-        } catch (e) {}
-        logout({ scope: 'staff' });
-        if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-          window.location.href = '/login?expired=1';
-        }
-      }
-    };
-
-    // Check periodically every 15 seconds
-    const intervalId = setInterval(checkInactivity, 15000);
-
-    return () => {
-      clearInterval(intervalId);
-      if (throttleTimer) clearTimeout(throttleTimer);
-      qualifyingEvents.forEach((evt) => {
-        window.removeEventListener(evt, recordActivity);
-      });
-    };
-  }, [authState.isAuthenticated, authState.user?.role]);
-
   useEffect(() => {
     if (!loading) return undefined;
     let active = true;
     import('../services/staffClient').then(({ staffJson, clearStaffSession }) => {
       staffJson('/auth/me/')
-        .then(() => {
-          if (active) setLoading(false);
+        .then((data) => {
+          if (!active) return;
+          if (data && data.employee) {
+            const emp = data.employee;
+            setAuthState((prev) => {
+              const u = prev.user || {};
+              const updated = {
+                ...u,
+                id: data.id || u.id,
+                name: data.name || u.name,
+                phone: data.phone || u.phone,
+                email: data.email || u.email || '',
+                role: emp.is_admin_level ? 'admin' : 'employee',
+                employeeCode: emp.employee_code || u.employeeCode || '',
+                designation: emp.job_title || emp.role || u.designation || '',
+                department: emp.department || u.department || '',
+                branchId: emp.branch?.id || null,
+                branchName: emp.branch?.name || '',
+                backendRole: emp.role || u.backendRole || '',
+              };
+              const payload = JSON.stringify({ user: updated, isAuthenticated: true });
+              sessionStorage.setItem('foodie_auth_admin', payload);
+              localStorage.setItem('foodie_auth_admin', payload);
+              return { user: updated, isAuthenticated: true };
+            });
+          }
+          setLoading(false);
         })
         .catch(() => {
           if (!active) return;
@@ -145,6 +115,19 @@ export const AuthProvider = ({ children }) => {
     });
     return () => { active = false; };
   }, [loading]);
+
+  const refreshStaffProfile = async () => {
+    try {
+      const { syncStaffProfile } = await import('../services/adminApi');
+      const updated = await syncStaffProfile();
+      if (updated) {
+        setAuthState({ user: updated, isAuthenticated: true });
+      }
+      return updated;
+    } catch {
+      return null;
+    }
+  };
 
   const saveSession = (userObj, token, refresh) => {
     // Save unauthenticated guest cart temporarily for seamless login cart merging ONLY for genuine guest browsing
@@ -338,7 +321,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated, loading, login, signup, logout, sendOTP, verifyOTP }}>
+    <AuthContext.Provider value={{ user, isAuthenticated, loading, login, signup, logout, sendOTP, verifyOTP, refreshStaffProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -11,7 +11,7 @@ import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const AdminLayout = ({ children, fullHeight = false, contentClassName = "" }) => {
   const { toggleSidebar, notifications, markAllRead, markAsRead, clearAll } = useContext(AppContext);
-  const { user, logout } = useAuth();
+  const { user, logout, refreshStaffProfile } = useAuth();
   const navigate = useNavigate();
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [showNotifDropdown, setShowNotifDropdown] = useState(false);
@@ -29,6 +29,29 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
   const [selectedBranch, setSelectedBranch] = useState(() => {
     return getSelectedAdminBranch() || 'ALL';
   });
+
+  // Always keep employee assigned branch synchronized with user.branchId
+  useEffect(() => {
+    if (!isSuperAdmin && user?.branchId) {
+      const bId = String(user.branchId);
+      setSelectedBranch(bId);
+      localStorage.setItem('foodie_admin_selected_branch', bId);
+    }
+  }, [isSuperAdmin, user?.branchId]);
+
+  // Sync profile on mount and window focus to guarantee fresh branch assignments
+  useEffect(() => {
+    if (typeof refreshStaffProfile === 'function') {
+      refreshStaffProfile();
+    }
+    const handleFocus = () => {
+      if (typeof refreshStaffProfile === 'function') {
+        refreshStaffProfile();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
+  }, []);
 
   // Filter notifications by selected branch for Super Admin
   const branchFilteredNotifications = React.useMemo(() => {
@@ -79,13 +102,15 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
     window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
   };
 
-  const assignedBranchName = user?.branchName || (branches.find(b => String(b.id) === String(user?.branchId || user?.branch))?.name) || '';
   const currentBranchObj = branches.find(b => String(b.id) === String(selectedBranch));
+  const assignedBranchObj = branches.find(b => String(b.id) === String(user?.branchId || user?.branch)) || currentBranchObj;
+  const assignedBranchName = user?.branchName || assignedBranchObj?.name || '';
+  const assignedBranchCode = assignedBranchObj?.code || '';
   const activeBranchText = isSuperAdmin
     ? (selectedBranch === 'ALL' || !selectedBranch
         ? 'All Branches'
         : (currentBranchObj ? `${currentBranchObj.name} (${currentBranchObj.code})` : (branches.length === 0 ? 'All Branches' : 'All Branches')))
-    : (assignedBranchName || (currentBranchObj ? `${currentBranchObj.name} (${currentBranchObj.code})` : ''));
+    : (assignedBranchName ? (assignedBranchCode ? `${assignedBranchName} (${assignedBranchCode})` : assignedBranchName) : (currentBranchObj ? `${currentBranchObj.name} (${currentBranchObj.code})` : ''));
 
   useEffect(() => {
     if (!notifications || notifications.length === 0) return;

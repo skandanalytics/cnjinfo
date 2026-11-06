@@ -68,30 +68,21 @@ export const DishCard = ({
         borderRadius: '16px'
       }}
     >
-      {/* Top Image Section with Overlaid Badges */}
-      <div className="position-relative flex-shrink-0" style={{ height: '170px' }}>
-        <img 
-          src={getImageUrl(dish.image)} 
-          alt={dish.name} 
-          className="w-100 h-100" 
-          style={{ 
-            objectFit: 'cover',
-            borderTopLeftRadius: '16px',
-            borderTopRightRadius: '16px',
-            filter: isOutOfStock ? 'grayscale(90%) opacity(0.85)' : 'none'
-          }}
-          onError={(event) => {
-            event.currentTarget.onerror = null;
-            event.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
+      {/* Dish Image Box with Badges (Visible and functional in Menu Management) */}
+      <div className="position-relative w-100" style={{ height: '145px', backgroundColor: '#F8FAFC' }}>
+        <img
+          src={getImageUrl(dish.image) || FOOD_IMAGE_PLACEHOLDER}
+          alt={dish.name}
+          className="w-100 h-100 object-fit-cover"
+          onError={(e) => {
+            e.currentTarget.src = FOOD_IMAGE_PLACEHOLDER;
           }}
         />
 
-{/* Order count badge removed as per requirement */}
-
-        {/* Top-Right: Veg / Non-Veg Indicator Icon */}
+        {/* Veg/Non-Veg Indicator (Top Left) */}
         <div 
-          className="position-absolute bg-white p-1 rounded-2 shadow-xs d-flex align-items-center justify-content-center" 
-          style={{ zIndex: 2, top: '10px', right: '10px', width: '22px', height: '22px', border: '1px solid #E2E8F0' }}
+          className="position-absolute shadow-2xs d-flex align-items-center justify-content-center bg-white p-1 rounded-2"
+          style={{ top: '10px', left: '10px', width: '22px', height: '22px', border: '1px solid rgba(226, 232, 240, 0.8)' }}
           title={foodType}
         >
           {foodType.includes('non') ? (
@@ -105,14 +96,13 @@ export const DishCard = ({
           )}
         </div>
 
-        {/* Out of Stock Overlay */}
-        {isOutOfStock && (
-          <div className="position-absolute top-50 start-50 translate-middle text-center w-100 px-2" style={{ zIndex: 3 }}>
-            <span className="badge bg-dark text-white fw-bold px-3 py-1.5 shadow-sm rounded-pill border border-secondary" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
-              OUT OF STOCK
-            </span>
-          </div>
-        )}
+        {/* Stock Badge (Top Right) */}
+        <span
+          className="position-absolute badge rounded-pill fw-semibold px-2.5 py-1 shadow-2xs"
+          style={{ ...stockBadgeStyle, top: '10px', right: '10px', fontSize: '11px' }}
+        >
+          {stockLabel}
+        </span>
       </div>
 
       {/* Card Content (Matches Reference Image 2) */}

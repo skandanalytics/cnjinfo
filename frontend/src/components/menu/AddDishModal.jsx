@@ -293,6 +293,7 @@ export const AddDishModal = ({
 
     setLoading(true);
     try {
+      onClose();
       await onAdd({
         name: capitalizedName,
         price: origPrice,
@@ -328,7 +329,6 @@ export const AddDishModal = ({
         fileInputRef.current.value = '';
       }
       setErrorMsg('');
-      onClose();
     } catch (err) {
       console.error('Error creating dish:', err);
       setLoading(false);
