@@ -52,7 +52,11 @@ export const Tables = () => {
   const [qrEnabled, setQrEnabled] = useState(true);
   const [tablesLoadError, setTablesLoadError] = useState('');
   const [vacateNotice, setVacateNotice] = useState(null);
+  const [tableNotice, setTableNotice] = useState(null);
   const [trackingTable, setTrackingTable] = useState(null);
+
+  const isFetchingRef = React.useRef(false);
+  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_selected_branch') || '') : '');
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
@@ -89,6 +93,8 @@ export const Tables = () => {
   };
 
   const fetchTables = async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setLoading(true);
     setTablesLoadError('');
     try {
@@ -107,8 +113,10 @@ export const Tables = () => {
       setHasDishes(orderable);
     } catch {
       setHasDishes(true);
+    } finally {
+      setLoading(false);
+      isFetchingRef.current = false;
     }
-    setLoading(false);
   };
 
   const fetchTablesSilently = async () => {
@@ -134,6 +142,9 @@ export const Tables = () => {
     fetchTables();
     const handleUpdated = () => fetchTablesSilently();
     const handleBranchSync = (e) => {
+      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_selected_branch') ?? '');
+      if (lastBranchRef.current === nextBranch) return;
+      lastBranchRef.current = nextBranch;
       if (e?.detail?.branchId && e.detail.branchId !== 'ALL') {
         setTargetBranchId(Number(e.detail.branchId));
       }
@@ -279,7 +290,12 @@ export const Tables = () => {
           display_order_number: table.active_order.display_order_number || String(orderId),
         });
       } else {
-        window.alert('Failed to load order details for this table.');
+        const canonTableNum = tableService.getCanonicalTableNumber(table?.number || table?.table_number || table?.id);
+        setTableNotice({
+          title: 'Order Details Unavailable',
+          message: `Failed to load order details for Table ${canonTableNum}. Please check the Orders screen.`,
+          tableNumber: canonTableNum,
+        });
         setTrackingTable(null);
         setTrackingOrder(null);
       }
@@ -289,7 +305,7 @@ export const Tables = () => {
   };
 
   const handleTrackTableOrder = async (table) => {
-    const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
+    let activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
     if (!activeOrderId) {
       // Find from orders context if not directly on table
       const activeOrd = (orders || []).find(o => {
@@ -302,9 +318,33 @@ export const Tables = () => {
         return (tId && tId === String(table.id)) || (oCanon && oCanon === tCanon);
       });
       if (activeOrd?.id) {
-        return loadTrackingForTable(activeOrd.id, table);
+        activeOrderId = activeOrd.parent_order_id || activeOrd.parent_order || activeOrd.id;
       }
-      window.alert('No active order found for this table.');
+    }
+
+    if (!activeOrderId && (table.status === 'Occupied' || table.status === 'OCCUPIED' || table.is_occupied)) {
+      // If table is Occupied, check orders list for the latest non-cancelled session root on this table
+      const sessionOrd = (orders || []).find(o => {
+        if (!o) return false;
+        const s = String(o.status || '').toLowerCase().trim();
+        if (s === 'cancelled' || s === 'canceled' || s === 'rejected') return false;
+        const tId = String(o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : (typeof o.table === 'number' ? o.table : ''))).trim();
+        const oCanon = tableService.getCanonicalTableNumber(o.tableNumber || o.table_number || o.table || '');
+        const tCanon = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
+        return (tId && tId === String(table.id)) || (oCanon && oCanon === tCanon);
+      });
+      if (sessionOrd?.id) {
+        activeOrderId = sessionOrd.parent_order_id || sessionOrd.parent_order || sessionOrd.id;
+      }
+    }
+
+    if (!activeOrderId) {
+      const canonTableNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
+      setTableNotice({
+        title: 'Active Order Not Found',
+        message: `No active order or dining session could be retrieved for Table ${canonTableNum}. The session may have already been settled or cancelled.`,
+        tableNumber: canonTableNum,
+      });
       return;
     }
     await loadTrackingForTable(activeOrderId, table);
@@ -313,7 +353,10 @@ export const Tables = () => {
   const handleContinueFromModal = (ord) => {
     const rawStatus = String(ord?.backendStatus || ord?.status || '').toUpperCase();
     if (rawStatus === 'COMPLETED' || rawStatus === 'CANCELLED') {
-      window.alert('This order has proceeded to bill and cannot be continued.');
+      setTableNotice({
+        title: 'Session Billed',
+        message: 'This order has already proceeded to bill and cannot accept additional items.',
+      });
       return;
     }
     const targetTableId = ord?.tableId || ord?.table_id || trackingTable?.id;
@@ -332,34 +375,31 @@ export const Tables = () => {
     navigate(`${targetUrl}?${params.toString()}`);
   };
 
-  const handleProceedToBillFromModal = async (ord) => {
+  const handleProceedToBillFromModal = (ord) => {
     setTrackingTable(null);
     setTrackingOrder(null);
-    try {
-      const { fetchBillPreview } = await import('../../services/adminApi');
-      const rootId = ord.parent_order_id || ord.parent_order || ord.id;
-      const preview = await fetchBillPreview(rootId);
-      setViewingBillOrder({
-        ...ord,
-        ...preview,
-        items: preview.items || ord.items,
-        combined_items: preview.items,
-        total: preview.total_amount || ord.total,
-        total_amount: preview.total_amount || ord.total_amount,
-      });
-    } catch (e) {
-      setViewingBillOrder(ord);
-    }
+    const rootId = ord?.parent_order_id || ord?.parent_order || ord?.id;
+    if (!rootId) return;
+    const targetUrl = isAdmin ? '/admin/orders' : '/employee/orders';
+    navigate(`${targetUrl}?orderId=${rootId}`);
   };
 
   const handleTakeOrder = async (table) => {
     if (table.is_active === false) {
-      window.alert('This table is inactive and cannot take a new order.');
+      setTableNotice({
+        title: 'Table Inactive',
+        message: 'This table is currently inactive and cannot take a new order.',
+      });
       return;
     }
     const targetUrl = isAdmin ? '/admin/pos' : '/employee/pos';
     const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
-    if ((table.status === 'Occupied' || table.is_occupied) && activeOrderId) {
+    if ((table.status === 'Occupied' || table.status === 'OCCUPIED' || table.is_occupied) && activeOrderId) {
+      const rawStatus = String(table.active_order?.status || '').toUpperCase();
+      if (rawStatus === 'COMPLETED' || rawStatus === 'CANCELLED') {
+        // Open the order tracking modal so staff can see the completed order and view invoice
+        return handleTrackTableOrder(table);
+      }
       const activePhone = table.active_order?.customer_phone || table.active_order?.customerPhone || '';
       const activeName = table.active_order?.customer_name || table.active_order?.customerName || '';
       const params = new URLSearchParams();
@@ -391,12 +431,21 @@ export const Tables = () => {
   const ONGOING_ORDER_STATUSES = ['pending', 'preparing', 'ready', 'serving', 'in_progress', 'accepted'];
 
   const getActiveOrderForTable = (table) => {
+    // 1. Authoritative active order from backend table object
+    if (table.active_order) {
+      return table.active_order;
+    }
+    // 2. If table is available, never associate with past closed orders
+    if (table.status === 'Available' || table.status === 'AVAILABLE' || table.status === 'Reserved' || table.status === 'RESERVED') {
+      return null;
+    }
+    // 3. Fallback for occupied tables matching loaded orders
     const canonNum = tableService.getCanonicalTableNumber(table.number || table.table_number || table.id);
     const tableIdStr = String(table.id || '').trim();
     return (orders || []).find(o => {
       if (!o) return false;
       const s = String(o.status || '').toLowerCase().trim();
-      if (!ONGOING_ORDER_STATUSES.includes(s)) return false;
+      if (!ONGOING_ORDER_STATUSES.includes(s) && s !== 'completed') return false;
 
       const rawVal = o.tableNumber || o.table_number || o.table_no || (typeof o.table === 'object' ? (o.table?.number || o.table?.table_number || o.table?.id) : o.table);
       const oCanon = tableService.getCanonicalTableNumber(rawVal || '');
@@ -407,9 +456,9 @@ export const Tables = () => {
   };
 
   const isTableOccupied = (t) => {
-    const isDirectlyOccupied = t.status === 'Occupied' || t.status === 'OCCUPIED' || Boolean(t.is_occupied);
-    const activeOrder = getActiveOrderForTable(t);
-    return isDirectlyOccupied || Boolean(activeOrder);
+    // The backend DiningTable.status and has_active_order is the single authoritative source of truth.
+    // An Available table is clean and available - never override with stale orders from previous screens.
+    return t.status === 'Occupied' || t.status === 'OCCUPIED' || Boolean(t.is_occupied) || Boolean(t.has_active_order);
   };
 
   const availableCount = tables.filter(t => !isTableOccupied(t) && t.status !== 'Inactive').length;
@@ -472,13 +521,19 @@ export const Tables = () => {
 
   const handleTakeawayOrder = async () => {
     if (!hasDishes) {
-      window.alert('Takeaway ordering is unavailable because no dishes are currently available.');
+      setTableNotice({
+        title: 'Takeaway Ordering Unavailable',
+        message: 'Takeaway ordering is unavailable because no dishes are currently available.',
+      });
       return;
     }
     try {
       await startStaffOrder({ orderType: 'TAKEAWAY' });
     } catch (err) {
-      window.alert(err.message || 'Takeaway ordering could not be started.');
+      setTableNotice({
+        title: 'Takeaway Order Error',
+        message: err.message || 'Takeaway ordering could not be started.',
+      });
     }
   };
 
@@ -727,6 +782,28 @@ export const Tables = () => {
         </div>
       </Modal>
 
+      <Modal
+        isOpen={Boolean(tableNotice)}
+        title={tableNotice?.title || 'Table Notice'}
+        onClose={() => setTableNotice(null)}
+        size="sm"
+        footerActions={(
+          <Button variant="primary" onClick={() => setTableNotice(null)}>
+            Close
+          </Button>
+        )}
+      >
+        <div className="text-center px-2">
+          <div className="d-inline-flex align-items-center justify-content-center rounded-circle mb-3" style={{ width: 56, height: 56, background: '#fee2e2' }}>
+            <FiAlertTriangle size={28} className="text-danger" />
+          </div>
+          <p className="text-secondary small mb-2">{tableNotice?.message}</p>
+          {tableNotice?.tableNumber && (
+            <p className="fw-bold text-dark mb-0">Table {tableNotice.tableNumber}</p>
+          )}
+        </div>
+      </Modal>
+
       {/* Track Existing Order Popup Modal */}
       {trackingTable && trackingOrder && (
         <TrackOrderModal
@@ -761,11 +838,17 @@ export const Tables = () => {
               window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
               fetchTables();
               setViewingBillOrder(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
-              window.alert(`Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`);
+              setTableNotice({
+                title: 'Order Completed',
+                message: `Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} has been marked as Completed.`,
+              });
             } catch (err) {
               console.error('Failed to complete order on Proceed to Bill:', err);
               const msg = err?.response?.data?.detail || err?.message || 'Could not complete order.';
-              window.alert(msg);
+              setTableNotice({
+                title: 'Proceed to Bill Error',
+                message: msg,
+              });
               throw err;
             }
           }}

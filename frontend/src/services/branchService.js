@@ -1,10 +1,21 @@
-import { explain, listBranches, removeBranch, saveBranch } from './adminApi';
+import api from './api';
+import { explain, listBranches, removeBranch, saveBranch, isStaffScreen } from './adminApi';
 
 export const branchService = {
-  getBranches: async () => listBranches(),
+  getBranches: async () => {
+    if (typeof window !== 'undefined' && !isStaffScreen()) {
+      try {
+        const res = await api.get('/public/branches/');
+        return Array.isArray(res.data) ? res.data : (res.data?.results || []);
+      } catch (e) {
+        return [];
+      }
+    }
+    return listBranches();
+  },
 
   getBranchById: async (id) => {
-    const branches = await listBranches();
+    const branches = await branchService.getBranches();
     return branches.find((b) => Number(b.id) === Number(id)) || null;
   },
 

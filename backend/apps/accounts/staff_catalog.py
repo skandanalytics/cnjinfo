@@ -25,6 +25,7 @@ CATALOG = {
     "Management": {
         "MANAGER": ["Branch Manager"],
         "ADMIN": ["Restaurant Administrator"],
+        "SUPER_ADMIN": ["Owner", "Super Administrator", "General Manager"],
     },
 }
 
@@ -37,6 +38,8 @@ def parse_bill_access(value):
 
 def validate_assignment(department, role, job_title, bill_access):
     """Return an error dict, or None when the combination is acceptable."""
+    if role == "SUPER_ADMIN":
+        return None
     if department not in CATALOG:
         return None
     roles = CATALOG[department]

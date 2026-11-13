@@ -31,22 +31,22 @@ const RupeeIcon = ({ size = 20, className = "" }) => (
 );
 
 const METHOD_INFO = {
-  UPI: { 
+  RAZORPAY_UPI: { 
     icon: FiSmartphone, 
-    title: 'UPI', 
-    hint: 'Pay with any UPI app',
+    title: 'Razorpay UPI', 
+    hint: 'Google Pay, PhonePe, Paytm, BHIM & UPI QR',
     badge: 'Fast & Secure'
   },
-  CARD: { 
+  RAZORPAY_CARD: { 
     icon: FiCreditCard, 
-    title: 'Credit / Debit Card', 
-    hint: 'Visa, Mastercard, Rupay',
+    title: 'Razorpay Card', 
+    hint: 'Visa, Mastercard, RuPay, Amex',
     badge: null
   },
   COUNTER: { 
     icon: RupeeIcon, 
     title: 'Pay at Counter', 
-    hint: 'Pay at the restaurant',
+    hint: 'Pay at the restaurant (Staff approval required)',
     badge: null
   },
 };
@@ -64,10 +64,8 @@ export const Payment = () => {
   const [isOrderPaid, setIsOrderPaid] = useState(false);
   const [cartReview, setCartReview] = useState(null);
   const [preparing, setPreparing] = useState(true);
-  const [paymentMethod, setPaymentMethod] = useState('UPI');
+  const [paymentMethod, setPaymentMethod] = useState('RAZORPAY_UPI');
   const [cardEnabled, setCardEnabled] = useState(true);
-  const [copiedUpi, setCopiedUpi] = useState(false);
-  const [showUpiModal, setShowUpiModal] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const submitted = useRef(false);
@@ -135,7 +133,7 @@ export const Payment = () => {
     return () => { active = false; };
   }, [existingOrderId, fallbackOrderType, navigate]);
 
-  const methods = cardEnabled ? ['UPI', 'CARD', 'COUNTER'] : ['UPI', 'COUNTER'];
+  const methods = cardEnabled ? ['RAZORPAY_UPI', 'RAZORPAY_CARD', 'COUNTER'] : ['RAZORPAY_UPI', 'COUNTER'];
 
   // Calculate pricing & total amount depending on Mode A or Mode B
   let pricing = null;
@@ -184,10 +182,6 @@ export const Payment = () => {
   const handleProceedClick = (e) => {
     if (e && e.preventDefault) e.preventDefault();
     if (loading || submitted.current || isOrderPaid) return;
-    if (paymentMethod === 'UPI') {
-      setShowUpiModal(true);
-      return;
-    }
     handlePaySubmit();
   };
 
@@ -212,7 +206,6 @@ export const Payment = () => {
     }
 
     if (paymentMethod === 'COUNTER') {
-      setShowUpiModal(false);
       navigate(`/customer/order-confirmation?order=${order.id}`, {
         replace: true,
         state: { orderId: order.id, paymentResult: { status: 'PENDING', method: 'COUNTER' } },
@@ -220,25 +213,7 @@ export const Payment = () => {
       return;
     }
 
-    if (paymentMethod === 'UPI') {
-      setShowUpiModal(false);
-      setLoading(false);
-      submitted.current = false;
-      navigate(`/customer/order-confirmation?order=${order.id}`, {
-        replace: true,
-        state: {
-          orderId: order.id,
-          paymentResult: {
-            status: 'PENDING',
-            method: 'UPI',
-            message: 'Pending restaurant staff verification',
-          },
-        },
-      });
-      return;
-    }
-
-    // Online payment via CARD / Gateway
+    // All online payment options (RAZORPAY, UPI, CARD) route securely through Razorpay Standard Checkout
     let paymentResult = null;
     try {
       paymentResult = await payOrderOnline(order, paymentMethod, user);
@@ -333,7 +308,7 @@ export const Payment = () => {
                       return (
                         <div
                           key={code}
-                          onClick={() => { if (!loading) { setPaymentMethod(code); setError(''); if (code !== 'UPI') setShowUpiModal(false); } }}
+                          onClick={() => { if (!loading) { setPaymentMethod(code); setError(''); } }}
                           className="p-3.5 rounded-4 d-flex align-items-center justify-content-between transition-all shadow-xs cursor-pointer"
                           style={{
                             cursor: loading ? 'not-allowed' : 'pointer',
@@ -415,11 +390,9 @@ export const Payment = () => {
                           <span>Processing...</span>
                         </>
                       ) : (
-                        paymentMethod === 'UPI'
-                          ? `Proceed to Payment · ${formatCurrency(totalAmount)}`
-                          : (paymentMethod === 'COUNTER' 
-                              ? `Place Order · ${formatCurrency(totalAmount)}` 
-                              : `Pay ${formatCurrency(totalAmount)}`)
+                        paymentMethod === 'COUNTER' 
+                          ? `Place Order · ${formatCurrency(totalAmount)}` 
+                          : `Pay with Razorpay · ${formatCurrency(totalAmount)}`
                       )}
                     </button>
                   </div>
@@ -428,149 +401,6 @@ export const Payment = () => {
 
             </div>
           </form>
-        )}
-
-        {/* Responsive UPI QR Popup / Modal */}
-        {showUpiModal && (
-          <div 
-            className="modal fade show d-block" 
-            tabIndex="-1" 
-            style={{ backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)', zIndex: 1055 }}
-          >
-            <div className="modal-dialog modal-dialog-centered" style={{ maxWidth: '420px', margin: '1.25rem auto' }}>
-              <div 
-                className="modal-content border-0 shadow-lg text-center"
-                style={{ borderRadius: '24px', overflow: 'hidden' }}
-              >
-                {/* Modal Header */}
-                <div className="p-3 border-bottom d-flex align-items-center justify-content-between bg-white">
-                  <div className="d-flex align-items-center gap-2 text-start">
-                    <span 
-                      className="rounded-circle d-flex align-items-center justify-content-center text-white"
-                      style={{ width: '32px', height: '32px', backgroundColor: '#F20D2D' }}
-                    >
-                      <FiSmartphone size={16} />
-                    </span>
-                    <div>
-                      <div className="fw-bold text-dark" style={{ fontSize: '15px' }}>UPI Payment</div>
-                      <div className="text-secondary small" style={{ fontSize: '11px' }}>Scan & Pay from any UPI app</div>
-                    </div>
-                  </div>
-                  <button 
-                    type="button" 
-                    onClick={() => { if (!loading) setShowUpiModal(false); }}
-                    disabled={loading}
-                    className="btn btn-sm btn-light rounded-circle p-1 d-flex align-items-center justify-content-center"
-                    style={{ width: '32px', height: '32px' }}
-                  >
-                    <FiX size={18} />
-                  </button>
-                </div>
-
-                {/* Modal Body */}
-                <div className="p-4 bg-white">
-                  {/* Amount Badge */}
-                  <div className="mb-3">
-                    <span className="text-secondary small fw-medium d-block mb-1" style={{ fontSize: '12px' }}>
-                      Exact Payable Amount
-                    </span>
-                    <span 
-                      className="fw-bold px-3 py-1.5 rounded-pill d-inline-block"
-                      style={{ 
-                        fontSize: '24px', 
-                        color: '#F20D2D', 
-                        backgroundColor: '#FFF5F5',
-                        border: '1.5px solid #FEE2E2'
-                      }}
-                    >
-                      {formatCurrency(totalAmount)}
-                    </span>
-                  </div>
-
-                  {/* QR Code Container */}
-                  <div 
-                    className="mx-auto rounded-3 p-1.5 bg-white border shadow-sm mb-3 d-flex align-items-center justify-content-center"
-                    style={{ width: '220px', height: '220px' }}
-                  >
-                    <img 
-                      src="/assets/upi_qr.jpg" 
-                      alt="OmniCard UPI QR" 
-                      className="w-100 h-100 rounded-2"
-                      style={{ objectFit: 'contain' }}
-                      onError={(e) => {
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  </div>
-
-                  <div className="small text-secondary mb-2 fw-medium" style={{ fontSize: '12px' }}>
-                    Scan with Google Pay, PhonePe, Paytm or BHIM
-                  </div>
-
-                  {/* UPI ID & Copy button */}
-                  <div className="d-flex align-items-center justify-content-center gap-2 mb-2">
-                    <code className="text-dark fw-bold bg-light px-2.5 py-1 border rounded-pill small" style={{ fontSize: '12px' }}>
-                      7981354982@omni
-                    </code>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        navigator.clipboard?.writeText('7981354982@omni');
-                        setCopiedUpi(true);
-                        setTimeout(() => setCopiedUpi(false), 2500);
-                      }}
-                      className="btn btn-sm btn-outline-secondary rounded-pill px-2.5 py-0.5 d-flex align-items-center gap-1 fw-semibold"
-                      style={{ fontSize: '11px' }}
-                    >
-                      <FiCopy size={12} />
-                      {copiedUpi ? 'Copied!' : 'Copy'}
-                    </button>
-                  </div>
-
-                  <div className="text-muted small mb-3" style={{ fontSize: '11px' }}>
-                    OmniCard Account: <strong className="text-dark">YAMIN PRASANNA REDDY BALIJEPALLI</strong>
-                  </div>
-
-                  {error && (
-                    <div className="alert alert-danger small py-2 mb-3 text-start" role="alert">
-                      {error}
-                    </div>
-                  )}
-
-                  {/* Payment Done Button */}
-                  <button
-                    type="button"
-                    onClick={handlePaySubmit}
-                    disabled={loading}
-                    className="btn btn-danger w-100 rounded-pill py-2.5 fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2"
-                    style={{
-                      height: '46px',
-                      backgroundColor: '#F20D2D',
-                      borderColor: '#F20D2D',
-                      fontSize: '14.5px',
-                      boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)'
-                    }}
-                  >
-                    {loading ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
-                        <span>Confirming Payment...</span>
-                      </>
-                    ) : (
-                      <>
-                        <FiCheckCircle size={17} />
-                        <span>Payment Done</span>
-                      </>
-                    )}
-                  </button>
-
-                  <div className="text-muted mt-2" style={{ fontSize: '11px' }}>
-                    Click "Payment Done" after completing transaction on your UPI app.
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         )}
       </main>
     </CustomerLayout>

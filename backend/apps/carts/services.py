@@ -173,25 +173,55 @@ def apply_coupon(cart, code):
         raise CartError("Invalid coupon code.", "coupon_invalid")
     if not coupon.is_active:
         raise CartError("This coupon is inactive.", "coupon_inactive")
-    # Dry-run the pricing with this code to learn whether it is acceptable right now.
-    result = evaluate(cart, code_override=[coupon.code])
+
+    from apps.coupons.services import is_first_time
+    customer = cart.user if cart.user_id else None
+    first = is_first_time(customer)
+
+    current_coupons = list(cart.coupons.all())
+    # Determine candidate coupon set:
+    if first:
+        # First-time customer can stack 1 New User coupon + 1 regular coupon
+        if coupon.is_first_time_auto:
+            # Replace existing new user coupon, keep any existing regular coupon
+            remaining_coupons = [c for c in current_coupons if not c.is_first_time_auto]
+            candidate_coupons = [coupon] + remaining_coupons
+        else:
+            # Replace existing regular coupon, keep any existing new user coupon
+            new_user_existing = [c for c in current_coupons if c.is_first_time_auto]
+            candidate_coupons = new_user_existing + [coupon]
+    else:
+        # Returning customer: at most 1 coupon (cannot use new user coupon)
+        if coupon.is_first_time_auto:
+            raise CartError("This coupon is only for first-time customers.", "first_time_only")
+        candidate_coupons = [coupon]
+
+    candidate_codes = [c.code for c in candidate_coupons]
+    result = evaluate(cart, code_override=candidate_codes)
     if result["pricing"] is None:
         raise CartError("Fix the problems in your cart before applying a coupon.", "cart_invalid")
-    for rej in result["pricing"]["rejected_coupons"]:
+    for rej in result["pricing"].get("rejected_coupons", []):
         if rej["code"].upper() == coupon.code.upper():
             raise CartError(rej["reason"], "coupon_rejected")
-    cart.coupons.set([coupon])  # one manually entered coupon at a time
+
+    # Save accepted coupons to cart
+    accepted_codes = {c["code"].upper() for c in result["pricing"].get("coupons", [])}
+    accepted_coupons = [c for c in candidate_coupons if c.code.upper() in accepted_codes]
+    cart.coupons.set(accepted_coupons)
     if cart.skip_auto_coupons:
         cart.skip_auto_coupons = False
         cart.save(update_fields=["skip_auto_coupons", "updated_at"])
     return cart
 
 
-def remove_coupon(cart):
-    attached = list(cart.coupons.all())
-    cart.coupons.clear()
-    # Dismissing an automatic coupon, or the implicit one that was not stored on the cart, keeps it off.
-    if not attached or any(c.auto_apply for c in attached):
+def remove_coupon(cart, code=None):
+    if code:
+        code_upper = str(code).strip().upper()
+        target = cart.coupons.filter(code__iexact=code_upper).first()
+        if target:
+            cart.coupons.remove(target)
+    else:
+        cart.coupons.clear()
         cart.skip_auto_coupons = True
         cart.save(update_fields=["skip_auto_coupons", "updated_at"])
 

@@ -735,7 +735,9 @@ export const tableService = {
         const res = await cleanTable(id);
         try {
           window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
+          window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
           localStorage.setItem('foodie_tables_sync_trigger', Date.now().toString());
+          localStorage.setItem('foodie_orders_sync_trigger', Date.now().toString());
         } catch (e) { }
         return res;
       } catch (err) {

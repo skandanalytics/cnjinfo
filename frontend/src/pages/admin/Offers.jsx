@@ -79,7 +79,12 @@ export const Offers = () => {
   const [deleteCouponLoading, setDeleteCouponLoading] = useState(false);
   const [toastInfo, setToastInfo] = useState({ show: false, message: '', type: 'remove' });
 
+  const isFetchingRef = React.useRef(false);
+  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_selected_branch') || '') : '');
+
   const fetchData = async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     setLoading(true);
     try {
       const [couponData, dishData] = await Promise.all([
@@ -97,8 +102,10 @@ export const Offers = () => {
       setDiscountedDishes(onOffer);
     } catch (e) {
       console.error("Error loading offers data:", e);
+    } finally {
+      setLoading(false);
+      isFetchingRef.current = false;
     }
-    setLoading(false);
   };
 
   const fetchDataSilently = async () => {
@@ -138,7 +145,10 @@ export const Offers = () => {
     const handleStorage = (event) => {
       if (event.key === 'foodie_data_sync' || event.key === 'foodie_inventory_sync_trigger') handleSync();
     };
-    const handleBranchSync = () => {
+    const handleBranchSync = (e) => {
+      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_selected_branch') ?? '');
+      if (lastBranchRef.current === nextBranch) return;
+      lastBranchRef.current = nextBranch;
       fetchData();
     };
     window.addEventListener('foodie_branch_selected', handleBranchSync);
@@ -343,7 +353,6 @@ export const Offers = () => {
       <AdminLayout>
         <div className="py-5 text-center">
           <Loader />
-          <p className="text-muted small mt-2">Loading offers...</p>
         </div>
       </AdminLayout>
     );
@@ -439,7 +448,6 @@ export const Offers = () => {
       {loading ? (
         <div className="py-5 text-center">
           <Loader />
-          <p className="text-muted small mt-2">Loading offers...</p>
         </div>
       ) : activeTab === 'dishes' ? (
         <div 

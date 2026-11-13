@@ -15,6 +15,7 @@ from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 
 from apps.accounts.models import Employee, User
+from apps.accounts.permissions import get_active_employee
 from apps.carts.models import Cart
 from apps.carts.services import purge_carts
 
@@ -344,6 +345,24 @@ def _is_last_superadmin(obj):
     return False
 
 
+def _is_protected_admin(obj):
+    if isinstance(obj, Employee):
+        return (
+            obj.role == Employee.Role.SUPER_ADMIN
+            or str(obj.employee_code).upper() == "SKAND"
+            or getattr(obj.user, "is_superuser", False)
+        )
+    if isinstance(obj, User):
+        return (
+            obj.is_superuser
+            or (hasattr(obj, "employee") and (
+                obj.employee.role == Employee.Role.SUPER_ADMIN
+                or str(obj.employee.employee_code).upper() == "SKAND"
+            ))
+        )
+    return False
+
+
 def delete_records(key, ids):
     model = model_for_key(key)
     if model is None:
@@ -364,8 +383,8 @@ def delete_records(key, ids):
         if obj is None:
             blocked.append({"id": pk, "detail": "Record was not found."})
             continue
-        if _is_last_superadmin(obj):
-            blocked.append({"id": pk, "detail": "The last active super administrator cannot be deleted here."})
+        if _is_last_superadmin(obj) or _is_protected_admin(obj):
+            blocked.append({"id": pk, "detail": "Protected Super Admin and SKAND Owner accounts cannot be deleted here."})
             continue
         try:
             with transaction.atomic():
@@ -391,6 +410,9 @@ def _reset_cache_key(user_id):
 
 
 def authorize_reset(user, password):
+    emp = get_active_employee(user)
+    if not (getattr(user, "is_superuser", False) or (emp and emp.role == Employee.Role.SUPER_ADMIN)):
+        raise MaintenanceError("Only the Super Admin Owner can authorize a database reset.", 403)
     if not user.check_password(password or ""):
         raise MaintenanceError("Password was not accepted.", 401)
     raw = os.urandom(24).hex()
@@ -415,6 +437,9 @@ def reset_application_data(user, password, confirmation, token):
         raise MaintenanceError("Type the confirmation phrase exactly.")
     if not user.check_password(password or ""):
         raise MaintenanceError("Password was not accepted.", 401)
+    emp = get_active_employee(user)
+    if not (getattr(user, "is_superuser", False) or (emp and emp.role == Employee.Role.SUPER_ADMIN)):
+        raise MaintenanceError("Only the Super Admin Owner can reset application data.", 403)
     expected = cache.get(_reset_cache_key(user.id))
     provided = hashlib.sha256(str(token or "").encode()).hexdigest()
     if not expected or not hmac.compare_digest(str(expected), provided):
@@ -430,10 +455,33 @@ def reset_application_data(user, password, confirmation, token):
             removed["carts.Cart"] = purge_carts(Cart.objects.all())
             for model in ordered:
                 label = model_key(model)
-                count, _ = model.objects.all().delete()
-                if label == "carts.Cart":
+                if label == "accounts.Employee":
+                    # Clear branch association from protected employees so Branch can be safely deleted
+                    Employee.objects.filter(
+                        Q(role=Employee.Role.SUPER_ADMIN) | Q(employee_code__iexact="SKAND") | Q(user__is_superuser=True)
+                    ).filter(branch__isnull=False).update(branch=None)
+
+                    # Delete only non-protected staff
+                    to_delete = Employee.objects.exclude(
+                        Q(role=Employee.Role.SUPER_ADMIN) | Q(employee_code__iexact="SKAND") | Q(user__is_superuser=True)
+                    )
+                    count, _ = to_delete.delete()
+                    removed[label] = count
+                elif label == "accounts.User":
+                    # Delete non-protected users (customers and non-admin staff)
+                    to_delete = User.objects.exclude(
+                        Q(is_superuser=True) |
+                        Q(employee__role=Employee.Role.SUPER_ADMIN) |
+                        Q(employee__employee_code__iexact="SKAND") |
+                        Q(pk=user.pk)
+                    )
+                    count, _ = to_delete.delete()
+                    removed[label] = count
+                elif label == "carts.Cart":
+                    count, _ = model.objects.all().delete()
                     removed[label] += count
                 else:
+                    count, _ = model.objects.all().delete()
                     removed[label] = count
             try:
                 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken, OutstandingToken

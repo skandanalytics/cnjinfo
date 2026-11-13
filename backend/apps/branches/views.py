@@ -92,23 +92,6 @@ class TableViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, views
     search_fields = ["table_number", "location"]
 
     def get_queryset(self):
-        # Auto-reconcile idle occupied tables: any occupied table with no active or unpaid orders becomes AVAILABLE
-        try:
-            active_table_ids = Order.objects.filter(
-                Q(status__in=Order.ACTIVE_STATUSES) | ~Q(payment_status=Order.PaymentStatus.PAID),
-                Q(table__isnull=False) | Q(parent_order__table__isnull=False)
-            ).exclude(status=Order.Status.CANCELLED).values_list("table_id", flat=True)
-            idle_occupied = DiningTable.objects.filter(
-                status=DiningTable.Status.OCCUPIED
-            ).exclude(id__in=active_table_ids)
-            idle_ids = list(idle_occupied.values_list("id", flat=True))
-            if idle_ids:
-                DiningTable.objects.filter(id__in=idle_ids).update(status=DiningTable.Status.AVAILABLE)
-                from apps.realtime.publish import publish_catalog_event
-                for b_id in DiningTable.objects.filter(id__in=idle_ids).values_list("branch_id", flat=True).distinct():
-                    publish_catalog_event(b_id, "table", "updated")
-        except Exception:
-            pass
         return super().get_queryset()
 
     def _active_orders(self, table):
@@ -165,13 +148,54 @@ class TableViewSet(CatalogBroadcastMixin, AuditedMixin, BranchScopedMixin, views
 
     @action(detail=True, methods=["post"], url_path="clean", permission_classes=[IsStaffMember])
     def clean(self, request, pk=None):
-        """Mark table as cleaned / cleared, resetting status to AVAILABLE immediately."""
+        """Mark table as cleaned / cleared, resetting status to AVAILABLE immediately.
+        REQ-16: Table Cleaned persistence and order completion guard."""
+        from django.utils import timezone
+        from apps.orders.models import Order, OrderStatusHistory
         table = self.get_object()
         with transaction.atomic():
             table = DiningTable.objects.select_for_update().get(pk=table.pk)
+
+            # 1. Guard: Check if any order for this table is still in progress (PENDING, PREPARING, READY)
+            in_progress = Order.objects.filter(
+                Q(table=table) | Q(parent_order__table=table),
+                status__in=[Order.Status.PENDING, Order.Status.PREPARING, Order.Status.READY]
+            )
+            if in_progress.exists():
+                return Response(
+                    {"detail": "Cannot clean table while orders are still preparing or ready to serve.", "code": "orders_incomplete"},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # 2. Complete any remaining SERVED orders for this table session
+            served_orders = Order.objects.filter(
+                Q(table=table) | Q(parent_order__table=table),
+                status=Order.Status.SERVED
+            )
+            for ord_obj in served_orders:
+                prev_st = ord_obj.status
+                ord_obj.status = Order.Status.COMPLETED
+                if not ord_obj.completed_at:
+                    ord_obj.completed_at = timezone.now()
+                ord_obj.save(update_fields=["status", "completed_at", "updated_at"])
+                OrderStatusHistory.objects.create(
+                    order=ord_obj,
+                    from_status=prev_st,
+                    to_status=Order.Status.COMPLETED,
+                    note="Session closed and table cleaned",
+                    changed_by=request.user
+                )
+                from apps.realtime.publish import publish_order_event
+                try:
+                    publish_order_event(ord_obj)
+                except Exception:
+                    pass
+
+            # 3. Update table status to AVAILABLE persistently
             cur = table.status
             table.status = DiningTable.Status.AVAILABLE
             table.save(update_fields=["status", "updated_at"])
+
         self.audit("clean_table", table, {"from": cur, "to": "AVAILABLE"})
         from apps.realtime.publish import publish_catalog_event
         publish_catalog_event(table.branch_id, "table", "updated")

@@ -3,7 +3,7 @@ import Modal from '../common/Modal';
 import Button from '../common/Button';
 import { FiDownload, FiPrinter } from 'react-icons/fi';
 import { isStaffScreen } from '../../services/staffClient';
-import { formatOrderDisplayNumber } from '../../utils/orderNumber';
+import { formatOrderDisplayNumber, combineBillItems } from '../../utils/orderNumber';
 
 const PAYMENT_STATUS_LABEL = {
   PAID: 'Paid',
@@ -314,15 +314,10 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
             </tr>
           </thead>
           <tbody>
-            {((activeSource.combined_items && activeSource.combined_items.length > 0) ? activeSource.combined_items : (activeSource.items || [])).map((item, index) => (
+            {combineBillItems((activeSource.combined_items && activeSource.combined_items.length > 0) ? activeSource.combined_items : (activeSource.items || [])).map((item, index) => (
               <tr key={item.id || index}>
                 <td>
                   <div className="fw-semibold">
-                    {item.order_display_number && (
-                      <span className="badge bg-light text-dark border me-1.5 px-1.5 py-0.5" style={{ fontSize: '10px' }}>
-                        #{item.order_display_number}
-                      </span>
-                    )}
                     {item.name || 'Dish'}
                   </div>
                   {Array.isArray(item.customizations) && item.customizations.length > 0 && (

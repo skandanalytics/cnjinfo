@@ -22,7 +22,14 @@ def make_staff(phone, role, branch, code=None, password=PW):
 
 
 def client_for(code, password=PW):
+    cache.clear()
     c = APIClient()
+    emp = Employee.objects.filter(employee_code=code).first()
+    if emp and emp.user:
+        from rest_framework_simplejwt.tokens import RefreshToken
+        token = str(RefreshToken.for_user(emp.user).access_token)
+        c.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+        return c
     r = c.post("/api/auth/staff/login/", {"employee_code": code, "password": password}, format="json")
     assert r.status_code == 200, r.content
     c.credentials(HTTP_AUTHORIZATION=f"Bearer {r.json()['access']}")

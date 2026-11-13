@@ -4,6 +4,7 @@ Accept means PENDING -> PREPARING (decision Q2). Stock is deducted when the orde
 when it is cancelled (decision Q8). A table is marked OCCUPIED on a dine-in order and is released on cancel
 only when no other unfinished order still uses it. Completing an order does not vacate the table; staff do that.
 """
+from decimal import Decimal
 from uuid import uuid4
 
 from django.db import IntegrityError, models, transaction
@@ -24,6 +25,8 @@ from .realtime import publish_order_event
 # status -> statuses it may move to
 TRANSITIONS = {
     Order.Status.PENDING: {Order.Status.PREPARING, Order.Status.COMPLETED, Order.Status.CANCELLED},
+    Order.Status.PLACED: {Order.Status.PREPARING, Order.Status.COMPLETED, Order.Status.CANCELLED},
+    "PLACED": {Order.Status.PREPARING, Order.Status.COMPLETED, Order.Status.CANCELLED},
     Order.Status.PREPARING: {Order.Status.READY, Order.Status.SERVED, Order.Status.COMPLETED, Order.Status.CANCELLED},
     Order.Status.READY: {Order.Status.SERVED, Order.Status.COMPLETED},
     Order.Status.SERVED: {Order.Status.COMPLETED},
@@ -76,6 +79,28 @@ def _invoice_contact(order):
     method = ""
     if chosen:
         method = max(chosen, key=lambda payment: payment.id).get_method_display()
+    if not method and order.parent_order_id and getattr(order, "parent_order", None):
+        parent_payments = list(order.parent_order.payments.all())
+        p_succ = [p for p in parent_payments if p.status == "SUCCESS"]
+        p_chosen = p_succ or parent_payments
+        if p_chosen:
+            method = max(p_chosen, key=lambda p: p.id).get_method_display()
+    elif not method and hasattr(order, "continuations") and order.continuations.exists():
+        from apps.payments.models import Payment
+        sub_payments = list(Payment.objects.filter(order__in=order.continuations.all()))
+        s_succ = [p for p in sub_payments if p.status == "SUCCESS"]
+        s_chosen = s_succ or sub_payments
+        if s_chosen:
+            method = max(s_chosen, key=lambda p: p.id).get_method_display()
+
+    if not method and order.payment_status == Order.PaymentStatus.PAID:
+        method = "Cash"
+    elif method in ("Pay on Counter", "COUNTER"):
+        method = "Cash"
+    elif method == "Razorpay UPI":
+        method = "UPI"
+    elif method == "Razorpay Card":
+        method = "Card"
     customer_name = ""
     if order.customer_id and getattr(order, "customer", None):
         customer_name = order.customer.name or ""
@@ -123,9 +148,11 @@ def serialize_order(order):
     items = [{
         "id": i.id, "order_id": order.id, "order_display_number": order.display_number,
         "food_id": i.food_id, "name": i.food_name, "quantity": i.quantity,
-        "unit_price": str(i.unit_price), "customizations": i.customizations,
+        "price": str(i.unit_price), "unit_price": str(i.unit_price),
+        "customizations": i.customizations,
         "customization_per_unit": str(i.customization_per_unit),
-        "dish_discount_per_unit": str(i.dish_discount_per_unit), "line_total": str(i.line_total),
+        "dish_discount_per_unit": str(i.dish_discount_per_unit),
+        "line_total": str(i.line_total), "lineTotal": str(i.line_total),
         "special_instructions": i.special_instructions,
     } for i in order.items.all()]
     history = [{"from": h.from_status, "to": h.to_status, "note": h.note, "at": h.created_at}
@@ -136,6 +163,10 @@ def serialize_order(order):
     combined_items = list(items)
     combined_total = order.total_amount
     combined_items_subtotal = order.items_subtotal
+    combined_dish_discount = order.dish_discount_total
+    combined_taxable_amount = order.taxable_amount
+    combined_gst_amount = order.gst_amount
+    combined_service_charge_amount = order.service_charge_amount
     has_continuations = False
 
     if order.parent_order_id is None:
@@ -145,14 +176,20 @@ def serialize_order(order):
             c_items = [{
                 "id": i.id, "order_id": cont.id, "order_display_number": cont.display_number,
                 "food_id": i.food_id, "name": i.food_name, "quantity": i.quantity,
-                "unit_price": str(i.unit_price), "customizations": i.customizations,
+                "price": str(i.unit_price), "unit_price": str(i.unit_price),
+                "customizations": i.customizations,
                 "customization_per_unit": str(i.customization_per_unit),
-                "dish_discount_per_unit": str(i.dish_discount_per_unit), "line_total": str(i.line_total),
+                "dish_discount_per_unit": str(i.dish_discount_per_unit),
+                "line_total": str(i.line_total), "lineTotal": str(i.line_total),
                 "special_instructions": i.special_instructions,
             } for i in cont.items.all()]
             combined_items.extend(c_items)
             combined_total += cont.total_amount
             combined_items_subtotal += cont.items_subtotal
+            combined_dish_discount += cont.dish_discount_total
+            combined_taxable_amount += cont.taxable_amount
+            combined_gst_amount += cont.gst_amount
+            combined_service_charge_amount += cont.service_charge_amount
             continuations_data.append({
                 "id": cont.id,
                 "order_number": cont.order_number,
@@ -164,6 +201,15 @@ def serialize_order(order):
                 "created_at": cont.created_at,
             })
 
+    redemptions = list(order.coupon_redemptions.select_related("coupon").all())
+    applied_coupon_codes = [r.coupon_code for r in redemptions]
+    applied_coupon_code = ", ".join(applied_coupon_codes) if applied_coupon_codes else ""
+    applied_coupons_data = [{
+        "code": r.coupon_code,
+        "discount": str(r.discount_amount),
+        "is_first_time": r.coupon.is_first_time_auto if r.coupon else False
+    } for r in redemptions]
+
     return {
         "id": order.id, "order_number": order.order_number,
         "display_order_number": order.display_number,
@@ -174,9 +220,22 @@ def serialize_order(order):
         "combined_items": combined_items,
         "combined_total": str(combined_total),
         "combined_items_subtotal": str(combined_items_subtotal),
+        "combined_dish_discount_total": str(combined_dish_discount),
+        "combined_taxable_amount": str(combined_taxable_amount),
+        "combined_gst_amount": str(combined_gst_amount),
+        "combined_service_charge_amount": str(combined_service_charge_amount),
+        "coupon_code": applied_coupon_code,
+        "coupon_codes": applied_coupon_codes,
+        "applied_coupons": applied_coupons_data,
+        "coupon": applied_coupon_code,
+        "voucher": applied_coupon_code,
+        "voucherCode": applied_coupon_code,
         "branch_id": order.branch_id,
         "branch_name": order.branch_name,
         "order_type": order.order_type, "status": order.status, "payment_status": order.payment_status,
+        "refund_status": getattr(order, "refund_status", "NOT_APPLICABLE"),
+        "refunded_amount": str(getattr(order, "refunded_amount", Decimal("0.00"))),
+        "parent_order_display_number": (order.parent_order.display_number if order.parent_order_id and getattr(order, "parent_order", None) else None),
         "table": ({"id": order.table_id, "label": order.table_label, "capacity": order.table.capacity if order.table else None}
                   if order.table_id or order.table_label else None),
         "table_id": order.table_id,
@@ -332,9 +391,9 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
         source=Order.Source.EMPLOYEE if assisted else Order.Source.CUSTOMER,
         placed_by=user if assisted else None, placed_by_name=(user.name or user.phone) if assisted else "",
         status=Order.Status.PENDING,
-        # COUNTER stays UNPAID until staff records it. Online stays PENDING here; the Payment row is
+        # COUNTER/CASH stays UNPAID until staff records it. Online stays PENDING here; the Payment row is
         # created when the customer starts payment. Missing Razorpay keys do not block placing the order.
-        payment_status=(Order.PaymentStatus.UNPAID if payment_method == "COUNTER" else Order.PaymentStatus.PENDING),
+        payment_status=(Order.PaymentStatus.UNPAID if payment_method in ("COUNTER", "CASH") else Order.PaymentStatus.PENDING),
         idempotency_key=idempotency_key or None,
         items_subtotal=priced["items_subtotal"], customization_total=priced["customization_total"],
         dish_discount_total=priced["dish_discount_total"], coupon_discount_total=priced["coupon_discount_total"],
@@ -548,18 +607,24 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
         customer_phone = customer.phone
 
     lines = [Line(row["food"], row["quantity"], row.get("options", []), row.get("special_instructions", "")) for row in item_rows]
-    if isinstance(coupon_code, list):
-        coupon_codes = [str(c).strip() for c in coupon_code if str(c).strip()]
-    elif coupon_code and coupon_code.strip():
-        coupon_codes = [c.strip() for c in str(coupon_code).split(",") if c.strip()]
-    else:
+    if order_type == Order.Type.DINE_IN:
+        # Per REQ-3: Dine-in orders created in POS do not receive POS coupon discounts.
+        # Coupons for dine-in are only applied at session completion in Orders / Billing.
         coupon_codes = []
-
-    # If explicit 'NONE' passed, do not auto-apply coupons
-    allow_auto = True
-    if any(str(c).upper() == "NONE" for c in coupon_codes):
-        coupon_codes = [c for c in coupon_codes if str(c).upper() != "NONE"]
         allow_auto = False
+    else:
+        if isinstance(coupon_code, list):
+            coupon_codes = [str(c).strip() for c in coupon_code if str(c).strip()]
+        elif coupon_code and coupon_code.strip():
+            coupon_codes = [c.strip() for c in str(coupon_code).split(",") if c.strip()]
+        else:
+            coupon_codes = []
+
+        # If explicit 'NONE' passed, do not auto-apply coupons
+        allow_auto = True
+        if any(str(c).upper() == "NONE" for c in coupon_codes):
+            coupon_codes = [c for c in coupon_codes if str(c).upper() != "NONE"]
+            allow_auto = False
 
     try:
         priced = price_order(branch, lines, order_type, customer, coupon_codes, allow_auto=allow_auto, service_tax_enabled=service_tax_enabled)
@@ -613,12 +678,23 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
         except CouponError as exc:
             raise OrderError(str(exc), "coupon_invalid", 409)
     if mark_paid:
+        resolved_method = Payment.Method.CASH
+        clean_method = str(payment_method or "").strip().upper()
+        if clean_method in ("RAZORPAY_UPI", "UPI"):
+            resolved_method = Payment.Method.RAZORPAY_UPI
+        elif clean_method in ("RAZORPAY_CARD", "CARD"):
+            resolved_method = Payment.Method.RAZORPAY_CARD
+        elif clean_method in ("CASH", "COUNTER"):
+            resolved_method = Payment.Method.CASH
+        elif hasattr(Payment.Method, clean_method):
+            resolved_method = clean_method
+
         try:
             with transaction.atomic():
                 Payment.objects.create(
                     order=order,
                     amount=order.total_amount,
-                    method=Payment.Method.COUNTER,
+                    method=resolved_method,
                     status=Payment.Status.SUCCESS,
                     recorded_by=staff_user,
                     paid_at=timezone.now(),
@@ -641,14 +717,132 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
 
 
 @transaction.atomic
+def reject_order(order_id, actor, scope="INDIVIDUAL", reason=""):
+    """
+    Authoritative order rejection workflow.
+    Validates:
+      - block_completed: Completed and served orders cannot be rejected.
+      - block_entire: If any order in session is completed or served, entire-session rejection is blocked.
+      - never_restore: Stock is not restored automatically.
+      - release_pending: Table is released when all session orders are cancelled, even if refund is pending.
+      - remaining_session: Coupon eligibility evaluated against remaining active session orders.
+    """
+    order = Order.objects.select_for_update().get(pk=order_id)
+    if order.status == Order.Status.CANCELLED:
+        return order
+
+    # Rule: block_completed
+    if order.status in (Order.Status.COMPLETED, Order.Status.SERVED):
+        raise OrderError(
+            f"Order #{order.display_number} is {order.status.lower()} and cannot be rejected.",
+            "block_completed",
+            400,
+        )
+
+    root = order.parent_order if order.parent_order_id else order
+
+    if str(scope).upper() == "ENTIRE_SESSION":
+        # Rule: block_entire
+        all_session = [root] + list(root.continuations.select_for_update().all())
+        ineligible = [o for o in all_session if o.status in (Order.Status.COMPLETED, Order.Status.SERVED)]
+        if ineligible:
+            blocked_refs = ", ".join(f"#{o.display_number} ({o.status})" for o in ineligible)
+            raise OrderError(
+                f"Cannot reject entire session because the following order(s) are completed or served: {blocked_refs}. You may reject eligible orders individually.",
+                "block_entire",
+                400,
+            )
+
+        # Reject all eligible orders in session
+        for ord_item in all_session:
+            if ord_item.status != Order.Status.CANCELLED:
+                previous = ord_item.status
+                ord_item.status = Order.Status.CANCELLED
+                ord_item.cancel_reason = reason.strip()
+                if ord_item.payment_status == Order.PaymentStatus.PAID:
+                    ord_item.refund_status = Order.RefundStatus.PENDING
+                else:
+                    ord_item.refund_status = Order.RefundStatus.NOT_APPLICABLE
+                ord_item.save(update_fields=["status", "cancel_reason", "refund_status", "updated_at"])
+                OrderStatusHistory.objects.create(
+                    order=ord_item,
+                    from_status=previous,
+                    to_status=Order.Status.CANCELLED,
+                    changed_by=actor,
+                    note=reason.strip() or "Session rejected by administrator",
+                )
+                publish_order_event(ord_item)
+
+        # Rule: remaining_session for coupon
+        from apps.coupons.models import CouponRedemption
+        CouponRedemption.objects.filter(order=root).delete()
+        root.coupon_discount_total = Decimal("0.00")
+        root.save(update_fields=["coupon_discount_total", "updated_at"])
+
+        # Release table
+        target_table = root.table
+        if target_table:
+            _release_if_idle(target_table)
+
+        return root
+    else:
+        # scope == "INDIVIDUAL"
+        previous = order.status
+        order.status = Order.Status.CANCELLED
+        order.cancel_reason = reason.strip()
+        if order.payment_status == Order.PaymentStatus.PAID:
+            order.refund_status = Order.RefundStatus.PENDING
+        else:
+            order.refund_status = Order.RefundStatus.NOT_APPLICABLE
+        order.save(update_fields=["status", "cancel_reason", "refund_status", "updated_at"])
+        OrderStatusHistory.objects.create(
+            order=order,
+            from_status=previous,
+            to_status=Order.Status.CANCELLED,
+            changed_by=actor,
+            note=reason.strip() or "Order rejected by administrator",
+        )
+        publish_order_event(order)
+
+        # Rule: remaining_session for coupon
+        all_valid = [root] + list(root.continuations.exclude(status=Order.Status.CANCELLED))
+        valid_non_cancelled = [o for o in all_valid if o.status != Order.Status.CANCELLED]
+        if not valid_non_cancelled or (root.id == order.id and not root.continuations.exclude(status=Order.Status.CANCELLED).exists()):
+            from apps.coupons.models import CouponRedemption
+            CouponRedemption.objects.filter(order=root).delete()
+            root.coupon_discount_total = Decimal("0.00")
+            root.save(update_fields=["coupon_discount_total", "updated_at"])
+        elif root.coupon_discount_total > 0:
+            redemption = root.coupon_redemptions.first()
+            if redemption and redemption.coupon:
+                c = redemption.coupon
+                session_subtotal = sum((o.items_subtotal for o in valid_non_cancelled), Decimal("0.00"))
+                session_customization = sum((o.customization_total for o in valid_non_cancelled), Decimal("0.00"))
+                session_dish_discount = sum((o.dish_discount_total for o in valid_non_cancelled), Decimal("0.00"))
+                qualifying = session_subtotal + session_customization - session_dish_discount
+                if c.min_order_amount and qualifying < c.min_order_amount:
+                    from apps.coupons.models import CouponRedemption
+                    CouponRedemption.objects.filter(order=root).delete()
+                    root.coupon_discount_total = Decimal("0.00")
+                    root.save(update_fields=["coupon_discount_total", "updated_at"])
+
+        # Release table only if all session orders are now idle/closed
+        target_table = order.table or (root.table if root else None)
+        if target_table:
+            _release_if_idle(target_table)
+
+        return order
+
+
+@transaction.atomic
 def change_status(order_id, new_status, actor, reason=""):
+    if new_status == Order.Status.CANCELLED:
+        return reject_order(order_id, actor, scope="INDIVIDUAL", reason=reason)
     order = Order.objects.select_for_update().get(pk=order_id)
     if new_status == order.status:
         return order
     if new_status not in TRANSITIONS.get(order.status, ()):
         raise OrderError(f"Cannot move an order from {order.status} to {new_status}.", "invalid_transition", 409)
-    if new_status == Order.Status.CANCELLED and not reason.strip():
-        raise OrderError("A reason is required to cancel an order.", "reason_required")
     previous = order.status
     order.status = new_status
     if new_status == Order.Status.PREPARING and order.accepted_by_id is None:
@@ -687,8 +881,8 @@ def change_status(order_id, new_status, actor, reason=""):
     order.save()
     OrderStatusHistory.objects.create(order=order, from_status=previous, to_status=new_status, changed_by=actor,
                                       note=reason.strip() or "Status updated via Proceed to Bill")
-    if new_status in (Order.Status.CANCELLED, Order.Status.COMPLETED):
-        # Automatically make the table AVAILABLE when all orders on it are completed or cancelled
+    if new_status == Order.Status.CANCELLED:
+        # Automatically make the table AVAILABLE only when all orders on it are cancelled
         target_table = order.table or (order.parent_order.table if order.parent_order else None)
         if target_table:
             _release_if_idle(target_table)

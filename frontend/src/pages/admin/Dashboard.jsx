@@ -10,6 +10,7 @@ import TopDishes from '../../components/dashboard/TopDishes';
 import Loader from '../../components/common/Loader';
 import { analyticsService } from '../../services/analyticsService';
 import { dashboardService } from '../../services/dashboardService';
+import { restaurantService } from '../../services/restaurantService';
 import { FiTrendingUp, FiShoppingBag, FiLayers, FiAlertCircle, FiCalendar } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 
@@ -21,10 +22,37 @@ export const Dashboard = () => {
   const [topDishes, setTopDishes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedPeriod, setSelectedPeriod] = useState('Weekly');
-  const [selectedDate, setSelectedDate] = useState(() => {
+
+  const todayStrIso = useMemo(() => new Date().toISOString().split('T')[0], []);
+  const [openingDateIso, setOpeningDateIso] = useState(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    restaurantService.getRestaurants().then((branches) => {
+      if (!isMounted || !Array.isArray(branches) || branches.length === 0) return;
+      const sortedByCreated = [...branches].sort((a, b) => {
+        const da = new Date(a.created_at || a.createdAt || Date.now());
+        const db = new Date(b.created_at || b.createdAt || Date.now());
+        return da - db;
+      });
+      const earliest = sortedByCreated[0]?.created_at || sortedByCreated[0]?.createdAt;
+      if (earliest) {
+        setOpeningDateIso(new Date(earliest).toISOString().split('T')[0]);
+      }
+    }).catch(() => {});
+    return () => { isMounted = false; };
+  }, []);
+
+  const minDateIso = useMemo(() => {
+    if (openingDateIso) return openingDateIso;
     const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
     return d.toISOString().split('T')[0];
-  });
+  }, [openingDateIso]);
+
+  const [fromDate, setFromDate] = useState(todayStrIso);
+  const [toDate, setToDate] = useState(todayStrIso);
+
   const [revenueDetails, setRevenueDetails] = useState({
     revenuePeriod: "Weekly Revenue",
     revenueAmount: 0,
@@ -39,17 +67,27 @@ export const Dashboard = () => {
   const selectedPeriodRef = React.useRef(selectedPeriod);
   const syncDebounceTimerRef = React.useRef(null);
   const isFetchingRef = React.useRef(false);
+  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_selected_branch') || '') : '');
+  const activeDatesRef = React.useRef({ fromDate: todayStrIso, toDate: todayStrIso });
 
   useEffect(() => {
     selectedPeriodRef.current = selectedPeriod;
   }, [selectedPeriod]);
 
-  const fetchAnalytics = useCallback(async (isInitial = true) => {
-    if (isFetchingRef.current && !isInitial) return;
+  useEffect(() => {
+    activeDatesRef.current = { fromDate, toDate };
+  }, [fromDate, toDate]);
+
+  const fetchAnalytics = useCallback(async (isInitial = true, rangeOpts = null) => {
+    if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     if (isInitial) setLoading(true);
     try {
-      const bundle = await analyticsService.getDashboardBundle();
+      const activeRange = rangeOpts || activeDatesRef.current;
+      const bundle = await analyticsService.getDashboardBundle({
+        fromDate: activeRange?.fromDate,
+        toDate: activeRange?.toDate,
+      });
       cachedOrdersRef.current = bundle.allOrders || null;
       let details = {
         revenuePeriod: "Weekly Revenue",
@@ -106,7 +144,10 @@ export const Dashboard = () => {
       }, 300);
     };
 
-    const handleBranchSync = () => {
+    const handleBranchSync = (e) => {
+      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_selected_branch') ?? '');
+      if (lastBranchRef.current === nextBranch) return;
+      lastBranchRef.current = nextBranch;
       fetchAnalytics(true);
     };
     window.addEventListener('foodie_branch_selected', handleBranchSync);
@@ -127,14 +168,6 @@ export const Dashboard = () => {
     };
   }, [fetchAnalytics]);
 
-
-  const todayStrIso = useMemo(() => new Date().toISOString().split('T')[0], []);
-  const minDateIso = useMemo(() => {
-    const d = new Date();
-    d.setFullYear(d.getFullYear() - 1);
-    return d.toISOString().split('T')[0];
-  }, []);
-
   const isInitialMount = React.useRef(true);
   useEffect(() => {
     if (isInitialMount.current) {
@@ -153,45 +186,31 @@ export const Dashboard = () => {
     updatePeriodRevenue();
   }, [selectedPeriod]);
 
-  // Filter metrics according to selectedDate (ALWAYS defined before any conditional return)
-  const filteredMetrics = useMemo(() => {
-    if (!cachedOrdersRef.current) return null;
-    const targetOrders = cachedOrdersRef.current.filter(o => {
-      const orderDate = o.created_at || o.createdAt || o.placedAt || o.date;
-      if (!orderDate) return false;
-      const d = new Date(orderDate);
-      if (isNaN(d.getTime())) return false;
-      return d.toISOString().split('T')[0] === selectedDate;
-    });
+  const handleFromDateChange = (val) => {
+    setFromDate(val);
+    let nextTo = toDate;
+    if (val && toDate && val > toDate) {
+      nextTo = val;
+      setToDate(val);
+    }
+    fetchAnalytics(true, { fromDate: val, toDate: nextTo });
+  };
 
-    const successful = targetOrders.filter(o => {
-      const ps = (o.payment_status || o.paymentStatus || '').toUpperCase();
-      const st = (o.status || o.order_status || '').toUpperCase();
-      return ps !== 'FAILED' && st !== 'CANCELLED' && st !== 'REJECTED';
-    });
+  const handleToDateChange = (val) => {
+    setToDate(val);
+    let nextFrom = fromDate;
+    if (val && fromDate && fromDate > val) {
+      nextFrom = val;
+      setFromDate(val);
+    }
+    fetchAnalytics(true, { fromDate: nextFrom, toDate: val });
+  };
 
-    const dayRevenue = successful.reduce((sum, o) => {
-      const val = parseFloat(o.total || o.total_amount || o.totalAmount || 0);
-      return sum + (isNaN(val) ? 0 : val);
-    }, 0);
-
-    const pending = targetOrders.filter(o => {
-      const st = (o.status || o.order_status || '').toUpperCase();
-      return st === 'PENDING' || st === 'PLACED';
-    }).length;
-
-    const inProgress = targetOrders.filter(o => {
-      const st = (o.status || o.order_status || '').toUpperCase();
-      return st === 'PREPARING' || st === 'READY' || st === 'COOKING';
-    }).length;
-
-    return {
-      totalRevenue: dayRevenue,
-      pendingOrders: pending,
-      activeOrders: inProgress,
-      count: targetOrders.length
-    };
-  }, [selectedDate, summary]);
+  const handleResetDates = () => {
+    setFromDate(todayStrIso);
+    setToDate(todayStrIso);
+    fetchAnalytics(true, { fromDate: todayStrIso, toDate: todayStrIso });
+  };
 
   if (loading) {
     return (
@@ -201,31 +220,62 @@ export const Dashboard = () => {
     );
   }
 
-  const todayFormatted = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const isTodayFiltered = fromDate === todayStrIso && toDate === todayStrIso;
 
   return (
     <AdminLayout>
       <PageHeader
         title="Dashboard"
-        subtitle="Welcome back! Here's what's happening today."
+        subtitle={isTodayFiltered ? "Welcome back! Here's what's happening today." : `Showing metrics from ${fromDate} to ${toDate}.`}
         actions={
-          <div className="d-flex align-items-center gap-2">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
             <div 
-              className="d-flex align-items-center gap-2 px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
+              className="d-flex align-items-center gap-1.5 px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
               style={{ height: '38px', backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
             >
               <FiCalendar className="text-danger flex-shrink-0" size={15} />
+              <span className="text-secondary small fw-medium me-1">From:</span>
               <input
                 type="date"
-                value={selectedDate}
-                max={todayStrIso}
+                value={fromDate}
+                max={toDate || todayStrIso}
                 min={minDateIso}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                onChange={(e) => handleFromDateChange(e.target.value)}
                 className="border-0 bg-transparent text-dark fw-bold shadow-none p-0"
                 style={{ fontSize: '13px', cursor: 'pointer', outline: 'none' }}
-                title="Select Date for Metrics (Past 1 Year Available)"
+                title="Select From Date"
               />
             </div>
+
+            <div 
+              className="d-flex align-items-center gap-1.5 px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
+              style={{ height: '38px', backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
+            >
+              <FiCalendar className="text-danger flex-shrink-0" size={15} />
+              <span className="text-secondary small fw-medium me-1">To:</span>
+              <input
+                type="date"
+                value={toDate}
+                min={fromDate || minDateIso}
+                max={todayStrIso}
+                onChange={(e) => handleToDateChange(e.target.value)}
+                className="border-0 bg-transparent text-dark fw-bold shadow-none p-0"
+                style={{ fontSize: '13px', cursor: 'pointer', outline: 'none' }}
+                title="Select To Date"
+              />
+            </div>
+
+            {!isTodayFiltered && (
+              <button
+                type="button"
+                onClick={handleResetDates}
+                className="btn btn-sm btn-outline-secondary rounded-pill px-3 fw-semibold shadow-xs"
+                style={{ height: '38px', fontSize: '12.5px' }}
+                title="Reset date filter back to Today"
+              >
+                Reset
+              </button>
+            )}
           </div>
         }
       />
@@ -235,7 +285,7 @@ export const Dashboard = () => {
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Total Revenue"
-            value={formatCurrency(selectedDate === todayStrIso ? (summary?.totalRevenue ?? revenueDetails?.revenueAmount ?? 0) : (filteredMetrics?.totalRevenue ?? 0))}
+            value={formatCurrency(summary?.totalRevenue ?? revenueDetails?.revenueAmount ?? 0)}
             icon={FiTrendingUp}
             color="success"
             pillText={`${revenueDetails?.percentageChange || '+0.0%'} from last week`}
@@ -245,7 +295,7 @@ export const Dashboard = () => {
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Pending Orders"
-            value={selectedDate === todayStrIso ? (summary?.pendingOrders ?? 0) : (filteredMetrics?.pendingOrders ?? 0)}
+            value={summary?.pendingOrders ?? 0}
             icon={FiAlertCircle}
             color="danger"
             pillText={`+${summary?.pendingOrders ?? 0} new`}
@@ -255,7 +305,7 @@ export const Dashboard = () => {
         <div className="col-12 col-sm-6 col-lg-3">
           <StatCard
             title="Orders In Progress"
-            value={selectedDate === todayStrIso ? (summary?.activeOrders ?? 0) : (filteredMetrics?.activeOrders ?? 0)}
+            value={summary?.activeOrders ?? 0}
             icon={FiShoppingBag}
             color="warning"
             pillText={`${summary?.activeOrders ?? 0} in kitchen`}

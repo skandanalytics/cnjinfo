@@ -28,6 +28,15 @@ const Row = ({ label, children, testId }) => (
   </div>
 );
 
+const formatPaymentMethodLabel = (method) => {
+  if (!method) return '';
+  const m = String(method).toUpperCase();
+  if (m === 'RAZORPAY_UPI' || m === 'UPI') return 'Razorpay UPI';
+  if (m === 'RAZORPAY_CARD' || m === 'CARD') return 'Razorpay Card';
+  if (m === 'CASH' || m === 'COUNTER') return 'Cash / Counter';
+  return method;
+};
+
 export const OrderConfirmation = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -385,7 +394,7 @@ export const OrderConfirmation = () => {
               <span className="fw-bold text-dark" data-testid="payment-status">
                 {isPaid ? (
                   <span className="badge bg-success-subtle text-success rounded-pill px-2.5 py-1">
-                    Paid {raw.payment_method ? `(${raw.payment_method})` : ''}
+                    Paid {raw.payment_method ? `(${formatPaymentMethodLabel(raw.payment_method)})` : ''}
                   </span>
                 ) : (String(raw.payment_status || '').toUpperCase() === 'PENDING' || String(raw.payment_method || '').toUpperCase() === 'UPI') ? (
                   <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2.5 py-1">

@@ -282,12 +282,12 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 
 class ChangePasswordView(APIView):
-    """The signed-in staff member changes only their own password."""
+    """The signed-in staff member or superuser changes only their own password."""
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        if request.user.user_type != "EMPLOYEE":
+        if request.user.user_type != "EMPLOYEE" and not request.user.is_superuser:
             return Response({"detail": "Only a staff account can change this password."}, status=403)
         serializer = ChangePasswordSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)

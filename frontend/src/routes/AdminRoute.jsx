@@ -4,16 +4,26 @@ import { useAuth } from '../hooks/useAuth';
 import Loader from '../components/common/Loader';
 import api from '../config/api';
 
+let cachedSetupRequired = null;
+
 export const AdminRoute = ({ children, allowEmployee = true }) => {
   const { user, isAuthenticated, loading } = useAuth();
-  const [setupRequired, setSetupRequired] = useState(null);
+  const [setupRequired, setSetupRequired] = useState(() => cachedSetupRequired);
   const location = useLocation();
 
   useEffect(() => {
+    if (cachedSetupRequired !== null) return;
     let active = true;
     api.get('/db/status/')
-      .then((res) => { if (active) setSetupRequired(Boolean(res.data?.setup_required)); })
-      .catch(() => { if (active) setSetupRequired(false); });
+      .then((res) => {
+        const val = Boolean(res.data?.setup_required);
+        cachedSetupRequired = val;
+        if (active) setSetupRequired(val);
+      })
+      .catch(() => {
+        cachedSetupRequired = false;
+        if (active) setSetupRequired(false);
+      });
     return () => { active = false; };
   }, []);
 

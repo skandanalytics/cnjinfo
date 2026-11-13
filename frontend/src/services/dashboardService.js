@@ -85,6 +85,12 @@ export const dashboardService = {
     let revenueData = [];
 
     // Helper for grouping and filtering successful/non-cancelled orders
+    const getOrderNetRevenue = (o) => {
+      const gross = getOrderAmount(o);
+      const refunded = parseSafeAmount(o.refunded_amount || o.refundedAmount || 0);
+      return Math.max(0, gross - refunded);
+    };
+
     const successfulOrders = allOrders.filter(o => {
       const payStatus = (o.payment_status || o.paymentStatus || '').toUpperCase();
       const orderStatus = (o.status || o.order_status || '').toUpperCase();
@@ -93,20 +99,19 @@ export const dashboardService = {
 
     const normalizedPeriod = (period || '').toLowerCase();
 
-    if (normalizedPeriod.includes('today') || normalizedPeriod.includes('daily')) {
-      revenuePeriod = "Today's Revenue";
-      const todayStr = now.toDateString();
-      const yesterdayDate = new Date(now);
-      yesterdayDate.setDate(now.getDate() - 1);
-      const yesterdayStr = yesterdayDate.toDateString();
+    // Check if the order set is single-day
+    const distinctDates = Array.from(new Set(successfulOrders.map(o => getOrderDate(o).toDateString())));
+    const isSingleDay = distinctDates.length <= 1;
 
-      const todayOrders = successfulOrders.filter(o => getOrderDate(o).toDateString() === todayStr);
-      const yesterdayOrders = successfulOrders.filter(o => getOrderDate(o).toDateString() === yesterdayStr);
+    if (normalizedPeriod.includes('today') || normalizedPeriod.includes('daily') || isSingleDay) {
+      revenuePeriod = isSingleDay && distinctDates.length === 1 && distinctDates[0] !== now.toDateString()
+        ? `${distinctDates[0]} Revenue`
+        : "Today's Revenue";
 
-      revenueAmount = todayOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
-      previousPeriodAmount = yesterdayOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
+      const targetDateStr = distinctDates[0] || now.toDateString();
+      const targetOrders = successfulOrders.filter(o => getOrderDate(o).toDateString() === targetDateStr);
 
-      comparison = "vs yesterday";
+      revenueAmount = targetOrders.reduce((sum, o) => sum + getOrderNetRevenue(o), 0);
 
       // 8 time slots from 8 AM to 10 PM
       const slots = [
@@ -122,28 +127,38 @@ export const dashboardService = {
 
       revenueData = slots.map(s => ({ label: s.label, value: 0, sales: 0, count: 0 }));
 
-      todayOrders.forEach(o => {
+      targetOrders.forEach(o => {
         const orderDate = getOrderDate(o);
         const hr = orderDate.getHours();
         let slotIdx = Math.floor((hr - 8) / 2);
         if (slotIdx < 0) slotIdx = 0;
         if (slotIdx >= slots.length) slotIdx = slots.length - 1;
-        const val = getOrderAmount(o);
+        const val = getOrderNetRevenue(o);
         revenueData[slotIdx].value += val;
         revenueData[slotIdx].sales += val;
         revenueData[slotIdx].count += 1;
       });
+
+      comparison = "hourly distribution";
     } else if (normalizedPeriod.includes('week')) {
       revenuePeriod = "Weekly Revenue";
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       
-      // Last 7 days ending today
+      // Determine date bounds of available orders
+      const orderTimestamps = successfulOrders.map(o => getOrderDate(o).getTime());
+      const minOrderTime = orderTimestamps.length > 0 ? Math.min(...orderTimestamps) : now.getTime();
+      const maxOrderTime = orderTimestamps.length > 0 ? Math.max(...orderTimestamps) : now.getTime();
+      
+      const spanDays = Math.max(1, Math.ceil((maxOrderTime - minOrderTime) / (1000 * 60 * 60 * 24)));
+      const daysCount = Math.min(14, Math.max(7, spanDays));
+
       const days = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date(now);
-        d.setDate(now.getDate() - i);
+      const endRef = new Date(maxOrderTime);
+      for (let i = daysCount - 1; i >= 0; i--) {
+        const d = new Date(endRef);
+        d.setDate(endRef.getDate() - i);
         days.push({
-          label: dayNames[d.getDay()],
+          label: `${dayNames[d.getDay()]} ${d.getDate()}`,
           dateStr: d.toDateString(),
           value: 0,
           sales: 0,
@@ -151,31 +166,20 @@ export const dashboardService = {
         });
       }
 
-      // Previous 7 days
-      const prev7Days = [];
-      for (let i = 13; i >= 7; i--) {
-        const d = new Date(now);
-        d.setDate(now.getDate() - i);
-        prev7Days.push({ dateStr: d.toDateString(), sales: 0 });
-      }
-
+      revenueAmount = 0;
       successfulOrders.forEach(o => {
         const oDateStr = getOrderDate(o).toDateString();
         const curMatch = days.find(d => d.dateStr === oDateStr);
-        const val = getOrderAmount(o);
+        const val = getOrderNetRevenue(o);
         if (curMatch) {
           curMatch.value += val;
           curMatch.sales += val;
           curMatch.count += 1;
-          revenueAmount += val;
         }
-        const prevMatch = prev7Days.find(d => d.dateStr === oDateStr);
-        if (prevMatch) {
-          previousPeriodAmount += val;
-        }
+        revenueAmount += val;
       });
 
-      comparison = "vs last week";
+      comparison = "vs selected period";
       revenueData = days;
     } else if (normalizedPeriod.includes('quarter')) {
       revenuePeriod = "Quarterly Revenue";

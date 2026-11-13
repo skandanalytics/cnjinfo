@@ -17,76 +17,49 @@ export const isFirstTimeCustomer = async (user = null) => {
     }
 
     const userId = customerUser?.id;
-    const userPhone = customerUser?.phone || (typeof window !== 'undefined' ? (localStorage.getItem('foodie_customer_phone') || sessionStorage.getItem('foodie_customer_phone')) : null);
+    const userPhone = customerUser?.phone;
     const userEmail = customerUser?.email;
 
-    // 1. Query backend user metadata if available
-    if (customerUser) {
-      if (typeof customerUser.order_count === 'number' && customerUser.order_count > 0) return false;
-      if (typeof customerUser.orders_count === 'number' && customerUser.orders_count > 0) return false;
-      if (customerUser.has_placed_order === true) return false;
-    }
+    // Helper: evaluate whether an order represents a retained successful completed purchase
+    const isRetainedPaidPurchase = (ord) => {
+      if (!ord) return false;
+      const payStatus = String(ord.payment_status || ord.paymentStatus || '').toUpperCase();
+      const ordStatus = String(ord.status || ord.order_status || '').toUpperCase();
+      const refundStatus = String(ord.refund_status || ord.refundStatus || '').toUpperCase();
 
-    // 2. Query backend API orders for user ID / phone / email as primary source of truth
+      const isPaid = payStatus === 'PAID' || payStatus === 'SUCCESS';
+      if (!isPaid) return false; // Unpaid or rejected orders do not count
+
+      // A successfully paid order that was subsequently cancelled and fully refunded does not count
+      if (ordStatus === 'CANCELLED' && refundStatus === 'FULLY_REFUNDED') {
+        return false;
+      }
+
+      // Any other paid order (active, completed, or cancelled with only partial/no refund) is a retained purchase
+      return true;
+    };
+
+    // 1. Query backend user orders via orderService
     const targetId = userId || userPhone || userEmail;
     if (targetId) {
       try {
         const { orderService } = await import('./orderService');
         if (orderService && typeof orderService.getOrders === 'function') {
           const userOrders = await orderService.getOrders(targetId, false, true).catch(() => []);
-          if (Array.isArray(userOrders) && userOrders.length > 0) {
-            return false; // Backend order history exists -> returning customer
+          if (Array.isArray(userOrders) && userOrders.some(isRetainedPaidPurchase)) {
+            return false;
           }
         }
       } catch (e) {}
     }
 
-    if (typeof window !== 'undefined') {
+    // 2. Query authenticated orders endpoint directly as secondary confirmation
+    if (hasCustomerToken) {
       try {
-        const res = hasCustomerToken ? await api.get('/orders/', { bypassCache: true }).catch(() => null) : null;
+        const res = await api.get('/orders/', { bypassCache: true }).catch(() => null);
         const rawOrders = res?.data?.data || (Array.isArray(res?.data) ? res.data : (res?.data?.results || []));
-        if (Array.isArray(rawOrders) && rawOrders.length > 0) {
-          const cleanTargetPhone = userPhone ? String(userPhone).replace(/\D/g, '').slice(-10) : null;
-          const cleanTargetEmail = userEmail ? String(userEmail).toLowerCase().trim() : null;
-          const cleanTargetUserId = userId ? String(userId) : null;
-
-          const hasMatchingBackendOrder = rawOrders.some(ord => {
-            if (!ord) return false;
-            const oUserId = ord.user?.id || ord.user_id || ord.user;
-            const oPhone = ord.phone || ord.customerPhone || ord.customer_phone || ord.mobile;
-            const oEmail = ord.email || ord.customerEmail || ord.customer_email;
-
-            if (cleanTargetUserId && oUserId && String(oUserId) === cleanTargetUserId) return true;
-            if (cleanTargetPhone && oPhone && String(oPhone).replace(/\D/g, '').slice(-10) === cleanTargetPhone) return true;
-            if (cleanTargetEmail && oEmail && String(oEmail).toLowerCase().trim() === cleanTargetEmail) return true;
-            return false;
-          });
-
-          if (hasMatchingBackendOrder) return false;
-        }
-      } catch (e) {}
-
-      // 3. Local storage fallback check (guest users or offline fallback)
-      try {
-        const cleanPhone = userPhone ? String(userPhone).replace(/\D/g, '').slice(-10) : null;
-        const phoneKey = cleanPhone ? `foodie_customer_order_ids_${cleanPhone}` : null;
-        const userKey = userId ? `foodie_customer_order_ids_${userId}` : null;
-
-        const guestSaved = JSON.parse(localStorage.getItem('foodie_guest_order_ids') || '[]');
-        const phoneSaved = phoneKey ? JSON.parse(localStorage.getItem(phoneKey) || '[]') : [];
-        const userSaved = userKey ? JSON.parse(localStorage.getItem(userKey) || '[]') : [];
-        const allPlaced = JSON.parse(localStorage.getItem('foodie_all_placed_orders') || '[]');
-
-        if (customerUser) {
-          if (phoneSaved.length > 0 || userSaved.length > 0) return false;
-        } else {
-          if (guestSaved.length > 0 || (Array.isArray(allPlaced) && allPlaced.length > 0)) return false;
-        }
-
-        const lastPlaced = localStorage.getItem('foodie_last_placed_order') || sessionStorage.getItem('foodie_last_placed_order');
-        if (lastPlaced) {
-          const parsed = JSON.parse(lastPlaced);
-          if (parsed && (parsed.id || parsed.order_id)) return false;
+        if (Array.isArray(rawOrders) && rawOrders.some(isRetainedPaidPurchase)) {
+          return false;
         }
       } catch (e) {}
     }

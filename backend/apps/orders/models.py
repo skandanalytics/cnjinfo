@@ -15,6 +15,7 @@ class Order(models.Model):
     # Canonical statuses (decision Q2: Accept moves PENDING -> PREPARING). Transitions are enforced in the service layer.
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
+        PLACED = "PLACED", "Placed"
         PREPARING = "PREPARING", "Preparing"
         READY = "READY", "Ready"
         SERVED = "SERVED", "Served"
@@ -22,7 +23,7 @@ class Order(models.Model):
         CANCELLED = "CANCELLED", "Cancelled"
 
     # Orders that still occupy a table / kitchen.
-    ACTIVE_STATUSES = (Status.PENDING, Status.PREPARING, Status.READY, Status.SERVED)
+    ACTIVE_STATUSES = (Status.PENDING, Status.PLACED, Status.PREPARING, Status.READY, Status.SERVED)
 
     class PaymentStatus(models.TextChoices):  # independent of order status
         UNPAID = "UNPAID", "Unpaid"
@@ -30,6 +31,13 @@ class Order(models.Model):
         PAID = "PAID", "Paid"
         FAILED = "FAILED", "Failed"
         REFUNDED = "REFUNDED", "Refunded"
+
+    class RefundStatus(models.TextChoices):
+        NOT_APPLICABLE = "NOT_APPLICABLE", "Not Applicable"
+        PENDING = "PENDING", "Refund Pending"
+        PARTIALLY_REFUNDED = "PARTIALLY_REFUNDED", "Partially Refunded"
+        FULLY_REFUNDED = "FULLY_REFUNDED", "Fully Refunded"
+        FAILED = "FAILED", "Refund Failed"
 
     class Source(models.TextChoices):
         CUSTOMER = "CUSTOMER", "Customer"
@@ -60,6 +68,8 @@ class Order(models.Model):
                                     related_name="accepted_orders")
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
     payment_status = models.CharField(max_length=10, choices=PaymentStatus.choices, default=PaymentStatus.UNPAID)
+    refund_status = models.CharField(max_length=20, choices=RefundStatus.choices, default=RefundStatus.NOT_APPLICABLE)
+    refunded_amount = models.DecimalField(max_digits=12, decimal_places=2, default=Decimal("0.00"), validators=[MinValueValidator(Decimal("0.00"))])
     number_of_diners = models.PositiveSmallIntegerField(null=True, blank=True)
     special_instructions = models.CharField(max_length=500, blank=True)
     cancel_reason = models.CharField(max_length=255, blank=True)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   FiX, 
   FiSmartphone, 
@@ -10,25 +10,29 @@ import {
   FiUser, 
   FiPhone, 
   FiMapPin, 
-  FiTag 
+  FiTag,
+  FiRefreshCw
 } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import api from '../../config/api';
+import { 
+  startRazorpayStandardCheckout, 
+  checkOrderPaymentStatus 
+} from '../../services/customerCheckout';
 
 /**
- * Universal Two-Section Payment Modal for POS and Customer Ordering.
+ * Modernized Two-Section Payment Modal for POS and Admin/Employee Billing.
  *
  * Left Section:
  *  - Customer Details (Name, Phone, Branch, Table/Takeaway, Order Type)
  *  - Order Items with customization / special instructions
  *  - Price Breakdown: Subtotal, Customizations, Dish Discount, Coupon Discount with Name, Taxable, GST, Service Charge, Total Payable
  *
- * Right Section:
- *  - Payment Methods (UPI with temporary QR image, Cash / Counter, Card conditional on card_enabled setting)
- *  - Selected Method Content:
- *      * UPI: displays /assets/upi_qr.jpg, Amount, and "I Have Paid / Confirm Payment"
- *      * Cash / Counter: instructions to collect/pay cash at counter and "Confirm Cash Payment"
- *      * Card: card payment details / POS swipe instructions and "Confirm Card Payment"
+ * Right Section (Razorpay Standard Integration):
+ *  - Methods:
+ *      * UPI: Dynamic Razorpay UPI session & QR, auto-verification, zero static/manual IDs
+ *      * Cash: Collect physical cash and record as CASH
+ *      * Card: Razorpay Card Checkout (Visa, Mastercard, RuPay, Amex)
  */
 export const PaymentModal = ({
   isOpen,
@@ -41,7 +45,10 @@ export const PaymentModal = ({
 }) => {
   const [selectedMethod, setSelectedMethod] = useState('UPI');
   const [cardEnabled, setCardEnabled] = useState(true);
-  const [copiedUpi, setCopiedUpi] = useState(false);
+  const [paymentState, setPaymentState] = useState('IDLE'); // IDLE | PROCESSING | PAID | FAILED
+  const [paymentMessage, setPaymentMessage] = useState('');
+  const [localError, setLocalError] = useState('');
+  const pollTimerRef = useRef(null);
 
   useEffect(() => {
     let active = true;
@@ -52,7 +59,6 @@ export const PaymentModal = ({
         }
       })
       .catch(() => {
-        // Fallback: check staff endpoint if isStaff
         if (isStaff) {
           import('../../services/staffClient')
             .then(({ staffJson }) => staffJson('/settings/'))
@@ -65,9 +71,17 @@ export const PaymentModal = ({
     return () => { active = false; };
   }, [isStaff]);
 
+  // Clean up polling timer on unmount or close
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+    };
+  }, []);
+
   if (!isOpen || !orderDetails) return null;
 
   const {
+    orderId,
     customerName,
     customerPhone,
     branchName,
@@ -92,15 +106,168 @@ export const PaymentModal = ({
 
   const isTakeaway = orderType === 'TAKEAWAY' || orderType === 'Takeaway';
 
-  const handleCopyUpi = () => {
-    navigator.clipboard?.writeText('7981354982@omni');
-    setCopiedUpi(true);
-    setTimeout(() => setCopiedUpi(false), 2500);
+  // Real-time polling if order is already saved in backend
+  const startStatusPolling = (targetOrderId) => {
+    if (!targetOrderId) return;
+    if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+
+    pollTimerRef.current = setInterval(async () => {
+      try {
+        const res = await checkOrderPaymentStatus(targetOrderId);
+        if (res && res.is_paid) {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          setPaymentState('PAID');
+          setPaymentMessage('Payment successfully received & verified!');
+          setTimeout(() => {
+            if (onConfirmPayment) {
+              onConfirmPayment('RAZORPAY_UPI', { status: 'PAID' });
+            }
+          }, 1200);
+        }
+      } catch (e) {
+        /* ignore polling errors */
+      }
+    }, 2500);
   };
 
-  const handleConfirm = () => {
+  // Launch Razorpay UPI Checkout flow
+  const handleLaunchRazorpayUpi = async () => {
+    setLocalError('');
+    setPaymentState('PROCESSING');
+    setPaymentMessage('Launching Razorpay UPI session...');
+
+    const amountInPaise = Math.round(grandTotal * 100);
+    if (amountInPaise < 100) {
+      setLocalError('Amount must be at least ₹1.00 for online checkout.');
+      setPaymentState('IDLE');
+      return;
+    }
+
+    if (orderId) {
+      startStatusPolling(orderId);
+    }
+
+    try {
+      const res = await startRazorpayStandardCheckout({
+        amount: amountInPaise,
+        currency: 'INR',
+        orderId: orderId || null,
+        orderNumber: orderDetails.orderNumber || orderId || null,
+        notes: {
+          customer_name: customerName || '',
+          customer_phone: customerPhone || '',
+          branch: branchName || '',
+        },
+        paymentMethod: 'RAZORPAY_UPI',
+        customer: {
+          name: customerName,
+          phone: customerPhone,
+        },
+        onSuccess: (result) => {
+          if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+          setPaymentState('PAID');
+          setPaymentMessage('✓ Payment verified via Razorpay UPI!');
+          setTimeout(() => {
+            if (onConfirmPayment) {
+              onConfirmPayment('RAZORPAY_UPI', result);
+            }
+          }, 1000);
+        },
+        onFailure: (result) => {
+          setPaymentState('FAILED');
+          setLocalError(result.message || 'UPI Payment was not completed.');
+        },
+        onDismiss: () => {
+          if (paymentState !== 'PAID') {
+            setPaymentState('IDLE');
+          }
+        },
+      });
+
+      if (res?.status === 'PAID') {
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+        setPaymentState('PAID');
+        setPaymentMessage('✓ Payment verified via Razorpay UPI!');
+        setTimeout(() => {
+          if (onConfirmPayment) {
+            onConfirmPayment('RAZORPAY_UPI', res);
+          }
+        }, 1000);
+      }
+    } catch (err) {
+      setPaymentState('FAILED');
+      setLocalError(err.message || 'Could not initiate Razorpay UPI checkout.');
+    }
+  };
+
+  // Launch Razorpay Card Checkout flow
+  const handleLaunchRazorpayCard = async () => {
+    setLocalError('');
+    setPaymentState('PROCESSING');
+    setPaymentMessage('Launching Razorpay Card checkout...');
+
+    const amountInPaise = Math.round(grandTotal * 100);
+    if (amountInPaise < 100) {
+      setLocalError('Amount must be at least ₹1.00 for card checkout.');
+      setPaymentState('IDLE');
+      return;
+    }
+
+    try {
+      const res = await startRazorpayStandardCheckout({
+        amount: amountInPaise,
+        currency: 'INR',
+        orderId: orderId || null,
+        orderNumber: orderDetails.orderNumber || orderId || null,
+        notes: {
+          customer_name: customerName || '',
+          customer_phone: customerPhone || '',
+          branch: branchName || '',
+        },
+        paymentMethod: 'RAZORPAY_CARD',
+        customer: {
+          name: customerName,
+          phone: customerPhone,
+        },
+        onSuccess: (result) => {
+          setPaymentState('PAID');
+          setPaymentMessage('✓ Card payment verified successfully!');
+          setTimeout(() => {
+            if (onConfirmPayment) {
+              onConfirmPayment('RAZORPAY_CARD', result);
+            }
+          }, 1000);
+        },
+        onFailure: (result) => {
+          setPaymentState('FAILED');
+          setLocalError(result.message || 'Card payment failed.');
+        },
+        onDismiss: () => {
+          if (paymentState !== 'PAID') {
+            setPaymentState('IDLE');
+          }
+        },
+      });
+
+      if (res?.status === 'PAID') {
+        setPaymentState('PAID');
+        setPaymentMessage('✓ Card payment verified successfully!');
+        setTimeout(() => {
+          if (onConfirmPayment) {
+            onConfirmPayment('RAZORPAY_CARD', res);
+          }
+        }, 1000);
+      }
+    } catch (err) {
+      setPaymentState('FAILED');
+      setLocalError(err.message || 'Could not initiate Razorpay Card checkout.');
+    }
+  };
+
+  // Confirm cash payment
+  const handleConfirmCash = () => {
     if (onConfirmPayment) {
-      onConfirmPayment(selectedMethod);
+      onConfirmPayment('CASH');
     }
   };
 
@@ -129,7 +296,7 @@ export const PaymentModal = ({
               type="button" 
               className="btn-close shadow-none" 
               onClick={onClose} 
-              disabled={loading}
+              disabled={loading || paymentState === 'PROCESSING'}
               aria-label="Close" 
             />
           </div>
@@ -138,154 +305,144 @@ export const PaymentModal = ({
           <div className="modal-body p-0">
             <div className="row g-0">
 
-              {/* LEFT SECTION: Order Details, Items & Bill Breakdown */}
-              <div 
-                className="col-12 col-md-6 p-4 border-end" 
-                style={{ backgroundColor: '#FAFAFA', maxHeight: '72vh', overflowY: 'auto' }}
-              >
-                {/* Customer & Branch Context Card */}
-                <div className="bg-white p-3 rounded-3 border mb-3 shadow-2xs">
-                  <div className="d-flex align-items-center justify-content-between mb-2">
-                    <span className="badge bg-light text-dark border fw-bold px-2.5 py-1" style={{ fontSize: '11px' }}>
-                      {isTakeaway ? '🥡 Takeaway' : `🍽️ Dine-In${tableLabel ? ` (Table ${tableLabel})` : ''}`}
-                    </span>
-                    {branchName && (
+              {/* LEFT COLUMN: Customer & Order Breakdown */}
+              <div className="col-12 col-lg-7 p-4 border-end" style={{ backgroundColor: '#FFFFFF' }}>
+                {/* Customer Details Pill Card */}
+                <div className="p-3 rounded-3 mb-3 border bg-light-subtle">
+                  <div className="d-flex align-items-center justify-content-between mb-2 pb-2 border-bottom">
+                    <div className="d-flex align-items-center gap-2">
+                      <div className="rounded-circle bg-danger-subtle text-danger p-1.5 d-flex align-items-center justify-content-center" style={{ width: '28px', height: '28px' }}>
+                        <FiUser size={14} />
+                      </div>
+                      <span className="fw-bold text-dark" style={{ fontSize: '13.5px' }}>
+                        {customerName || 'Walk-in Customer'}
+                      </span>
+                    </div>
+                    {customerPhone && (
                       <span className="text-secondary small d-flex align-items-center gap-1" style={{ fontSize: '12px' }}>
-                        <FiMapPin size={12} className="text-danger" /> {branchName}
+                        <FiPhone size={12} /> {customerPhone}
                       </span>
                     )}
                   </div>
 
-                  {(customerName || customerPhone) && (
-                    <div className="small text-secondary pt-1 border-top border-light mt-2 d-flex flex-wrap gap-3">
-                      {customerName && (
-                        <span className="d-flex align-items-center gap-1 text-dark fw-medium">
-                          <FiUser size={13} className="text-secondary" /> {customerName}
-                        </span>
-                      )}
-                      {customerPhone && (
-                        <span className="d-flex align-items-center gap-1 text-dark fw-medium">
-                          <FiPhone size={13} className="text-secondary" /> {customerPhone}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                  <div className="d-flex align-items-center justify-content-between small text-secondary" style={{ fontSize: '12px' }}>
+                    <span className="d-flex align-items-center gap-1">
+                      <FiMapPin size={12} className="text-danger" /> {branchName || 'Main Branch'}
+                    </span>
+                    <span className="badge bg-secondary-subtle text-dark border px-2 py-0.5 rounded-pill">
+                      {isTakeaway ? '🥡 Takeaway' : `🪑 ${tableLabel ? `Table ${tableLabel}` : 'Dine In'}`}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Items List */}
-                <div className="mb-3">
-                  <h6 className="fw-bold text-dark small mb-2 text-uppercase text-muted" style={{ letterSpacing: '0.5px', fontSize: '11px' }}>
-                    Order Items ({items.length})
-                  </h6>
-                  <div className="d-flex flex-column gap-2">
-                    {items.map((item, idx) => {
-                      const dishName = item.dish?.name || item.name || item.title || 'Food Item';
-                      const qty = Number(item.quantity || 1);
-                      const price = Number(item.dish?.price ?? item.price ?? 0);
-                      const lineTotal = Number(item.line_total ?? (price * qty));
-                      const customDetails = (item.options || item.customizations || []).map(o => o.name || o).join(', ');
+                {/* Items List (Scrollable) */}
+                <h6 className="fw-bold text-dark small mb-2 text-uppercase text-muted" style={{ letterSpacing: '0.5px', fontSize: '11px' }}>
+                  Ordered Items ({items.length})
+                </h6>
+                <div 
+                  className="rounded-3 border mb-3 p-2 bg-white"
+                  style={{ maxHeight: '160px', overflowY: 'auto' }}
+                >
+                  {items.length === 0 ? (
+                    <div className="text-center text-muted small py-3">No items in order</div>
+                  ) : (
+                    items.map((item, idx) => {
+                      const dishName = item.dish?.name || item.name || `Item ${idx + 1}`;
+                      const qty = item.quantity || 1;
+                      const lineTotal = item.line_total || ((Number(item.dish?.price || item.price || 0)) * qty);
+                      const options = item.options || [];
+                      const note = item.specialInstructions || item.special_instructions || '';
 
                       return (
-                        <div key={idx} className="bg-white p-2.5 rounded-3 border d-flex align-items-start justify-content-between gap-2">
-                          <div className="min-w-0 flex-grow-1">
-                            <div className="d-flex align-items-center gap-2">
-                              <span className="badge bg-light text-dark border px-1.5 py-0.5 rounded fw-bold" style={{ fontSize: '11px' }}>
-                                {qty}x
-                              </span>
-                              <span className="fw-semibold text-dark text-truncate" style={{ fontSize: '13px' }} title={dishName}>
-                                {dishName}
-                              </span>
+                        <div key={idx} className="d-flex justify-content-between align-items-start py-1.5 px-2 border-bottom last:border-bottom-0" style={{ fontSize: '12.5px' }}>
+                          <div className="flex-grow-1 pe-2">
+                            <div className="fw-semibold text-dark">
+                              <span className="text-danger fw-bold me-1.5">{qty}×</span>
+                              {dishName}
                             </div>
-                            {customDetails && (
-                              <div className="text-secondary mt-0.5 ps-4" style={{ fontSize: '11px' }}>
-                                + {customDetails}
+                            {options.length > 0 && (
+                              <div className="text-muted small" style={{ fontSize: '11px' }}>
+                                + {options.map(o => o.name || o).join(', ')}
                               </div>
                             )}
-                            {item.specialInstructions && (
-                              <div className="text-warning-emphasis mt-0.5 ps-4 fst-italic" style={{ fontSize: '11px' }}>
-                                note: "{item.specialInstructions}"
+                            {note && (
+                              <div className="text-secondary fst-italic small" style={{ fontSize: '11px' }}>
+                                "{note}"
                               </div>
                             )}
                           </div>
-                          <span className="fw-bold text-dark small text-nowrap">
+                          <span className="fw-semibold text-dark flex-shrink-0">
                             {formatCurrency(lineTotal)}
                           </span>
                         </div>
                       );
-                    })}
-                  </div>
+                    })
+                  )}
                 </div>
 
-                {/* Bill Breakdown */}
-                <div className="bg-white p-3 rounded-3 border">
-                  <h6 className="fw-bold text-dark small mb-2.5 text-uppercase text-muted" style={{ letterSpacing: '0.5px', fontSize: '11px' }}>
-                    Bill Breakdown
-                  </h6>
-
-                  <div className="d-flex justify-content-between small text-secondary mb-1.5" style={{ fontSize: '12.5px' }}>
+                {/* Price Breakdown */}
+                <div className="p-3 rounded-3 border bg-light-subtle" style={{ fontSize: '12.5px' }}>
+                  <div className="d-flex justify-content-between text-secondary mb-1">
                     <span>Items Subtotal</span>
-                    <span className="text-dark fw-medium">{formatCurrency(subtotal)}</span>
+                    <span className="fw-medium text-dark">{formatCurrency(subtotal)}</span>
                   </div>
 
                   {customizationTotal > 0 && (
-                    <div className="d-flex justify-content-between small text-secondary mb-1.5" style={{ fontSize: '12.5px' }}>
+                    <div className="d-flex justify-content-between text-secondary mb-1">
                       <span>Add-ons / Customizations</span>
-                      <span className="text-dark fw-medium">+{formatCurrency(customizationTotal)}</span>
+                      <span className="fw-medium text-dark">+{formatCurrency(customizationTotal)}</span>
                     </div>
                   )}
 
                   {dishDiscount > 0 && (
-                    <div className="d-flex justify-content-between small text-success mb-1.5" style={{ fontSize: '12.5px' }}>
-                      <span>Item Discount</span>
+                    <div className="d-flex justify-content-between text-success mb-1">
+                      <span>Dish Discounts</span>
                       <span className="fw-medium">-{formatCurrency(dishDiscount)}</span>
                     </div>
                   )}
 
                   {effectiveCouponDiscount > 0 && (
-                    <div className="d-flex justify-content-between small text-success mb-1.5" style={{ fontSize: '12.5px' }}>
+                    <div className="d-flex justify-content-between text-success mb-1">
                       <span className="d-flex align-items-center gap-1">
-                        <FiTag size={12} /> Coupon ({couponCode || 'APPLIED'})
+                        <FiTag size={12} /> Coupon {couponCode && <code className="text-success fw-bold bg-success-subtle px-1 rounded">{couponCode}</code>}
                       </span>
                       <span className="fw-medium">-{formatCurrency(effectiveCouponDiscount)}</span>
                     </div>
                   )}
 
                   {isTakeaway && takeawayCharge > 0 && (
-                    <div className="d-flex justify-content-between small text-secondary mb-1.5" style={{ fontSize: '12.5px' }}>
+                    <div className="d-flex justify-content-between text-secondary mb-1">
                       <span>Takeaway Packaging</span>
-                      <span className="text-dark fw-medium">+{formatCurrency(takeawayCharge)}</span>
+                      <span className="fw-medium text-dark">+{formatCurrency(takeawayCharge)}</span>
                     </div>
                   )}
 
-                  <div className="d-flex justify-content-between small text-secondary mb-1.5" style={{ fontSize: '12.5px' }}>
+                  <div className="d-flex justify-content-between text-secondary mb-1 pt-1 border-top">
+                    <span>Taxable Amount</span>
+                    <span className="fw-medium text-dark">{formatCurrency(taxableAmount)}</span>
+                  </div>
+
+                  <div className="d-flex justify-content-between text-secondary mb-1">
                     <span>GST ({gstRate}%)</span>
-                    <span className="text-dark fw-medium">+{formatCurrency(gstAmount)}</span>
+                    <span className="fw-medium text-dark">+{formatCurrency(gstAmount)}</span>
                   </div>
 
                   {serviceChargeAmount > 0 && (
-                    <div className="d-flex justify-content-between small text-secondary mb-1.5" style={{ fontSize: '12.5px' }}>
+                    <div className="d-flex justify-content-between text-secondary mb-1">
                       <span>Service Charge</span>
-                      <span className="text-dark fw-medium">+{formatCurrency(serviceChargeAmount)}</span>
+                      <span className="fw-medium text-dark">+{formatCurrency(serviceChargeAmount)}</span>
                     </div>
                   )}
 
-                  <div className="d-flex justify-content-between align-items-center pt-2.5 mt-2 border-top">
-                    <div>
-                      <span className="fw-bold text-dark fs-6 d-block">Grand Total</span>
-                      <span className="text-muted small" style={{ fontSize: '11px' }}>Inclusive of all taxes</span>
-                    </div>
-                    <span className="fw-bold fs-5 text-danger">
-                      {formatCurrency(grandTotal)}
-                    </span>
+                  <div className="d-flex justify-content-between align-items-center pt-2 mt-1 border-top fw-bold text-dark fs-6">
+                    <span>Total Amount Payable</span>
+                    <span className="text-danger fs-5">{formatCurrency(grandTotal)}</span>
                   </div>
                 </div>
               </div>
 
-              {/* RIGHT SECTION: Payment Methods & Action */}
-              <div 
-                className="col-12 col-md-6 p-4 d-flex flex-column justify-content-between" 
-                style={{ backgroundColor: '#FFFFFF', minHeight: '520px' }}
-              >
+              {/* RIGHT COLUMN: Modern Razorpay Payment Selection */}
+              <div className="col-12 col-lg-5 p-4 d-flex flex-column justify-content-between" style={{ backgroundColor: '#FAFAFA' }}>
                 <div>
                   <h6 className="fw-bold text-dark small mb-3 text-uppercase text-muted" style={{ letterSpacing: '0.5px', fontSize: '11px' }}>
                     Select Payment Method
@@ -295,7 +452,11 @@ export const PaymentModal = ({
                   <div className="d-flex gap-2 mb-4">
                     <button
                       type="button"
-                      onClick={() => setSelectedMethod('UPI')}
+                      onClick={() => {
+                        setSelectedMethod('UPI');
+                        setLocalError('');
+                        handleLaunchRazorpayUpi();
+                      }}
                       className={`btn flex-fill py-2.5 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all ${
                         selectedMethod === 'UPI' 
                           ? 'btn-danger text-white shadow-xs' 
@@ -303,12 +464,12 @@ export const PaymentModal = ({
                       }`}
                       style={{ fontSize: '13px' }}
                     >
-                      <FiSmartphone size={16} /> UPI QR
+                      <FiSmartphone size={16} /> Razorpay UPI
                     </button>
 
                     <button
                       type="button"
-                      onClick={() => setSelectedMethod('COUNTER')}
+                      onClick={() => { setSelectedMethod('COUNTER'); setLocalError(''); }}
                       className={`btn flex-fill py-2.5 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all ${
                         selectedMethod === 'COUNTER' 
                           ? 'btn-danger text-white shadow-xs' 
@@ -316,13 +477,17 @@ export const PaymentModal = ({
                       }`}
                       style={{ fontSize: '13px' }}
                     >
-                      <FiDollarSign size={16} /> {isStaff ? 'Cash' : 'Pay on Counter'}
+                      <FiDollarSign size={16} /> Cash
                     </button>
 
                     {cardEnabled && (
                       <button
                         type="button"
-                        onClick={() => setSelectedMethod('CARD')}
+                        onClick={() => {
+                          setSelectedMethod('CARD');
+                          setLocalError('');
+                          handleLaunchRazorpayCard();
+                        }}
                         className={`btn flex-fill py-2.5 px-3 rounded-3 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all ${
                           selectedMethod === 'CARD' 
                             ? 'btn-danger text-white shadow-xs' 
@@ -335,145 +500,147 @@ export const PaymentModal = ({
                     )}
                   </div>
 
-                  {/* Fixed-height Container for Method Details to prevent modal jumping/resizing */}
-                  <div style={{ minHeight: '345px', height: '345px' }} className="d-flex flex-column justify-content-center">
-                    {/* Method View: UPI QR */}
+                  {/* Method View Container */}
+                  <div style={{ minHeight: '320px' }} className="d-flex flex-column justify-content-center">
+                    
+                    {/* Method View: Modern Razorpay UPI Flow */}
                     {selectedMethod === 'UPI' && (
-                      <div className="text-center p-3 rounded-3 border bg-light-subtle h-100 d-flex flex-column justify-content-center">
-                        <div className="mb-1.5">
-                          <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '10.5px' }}>
-                            ⚡ Instant UPI Scan & Pay
+                      <div className="text-center p-4 rounded-3 border bg-white h-100 d-flex flex-column justify-content-center align-items-center shadow-xs">
+                        <div className="mb-2">
+                          <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 fw-bold" style={{ fontSize: '11px' }}>
+                            ⚡ Razorpay Dynamic UPI QR
                           </span>
                         </div>
 
-                        <div 
-                          className="mx-auto rounded-3 p-1.5 bg-white border shadow-sm mb-2 d-flex align-items-center justify-content-center"
-                          style={{ width: '190px', height: '190px' }}
-                        >
-                          <img 
-                            src="/assets/upi_qr.jpg" 
-                            alt="OmniCard UPI QR" 
-                            className="w-100 h-100 rounded-2"
-                            style={{ objectFit: 'contain' }}
-                            onError={(e) => {
-                              e.currentTarget.style.display = 'none';
-                            }}
-                          />
+                        <div className="my-2">
+                          <span className="text-secondary small d-block mb-1">Payable Total</span>
+                          <span className="fw-bold fs-3 text-danger">{formatCurrency(grandTotal)}</span>
                         </div>
 
-                        <div className="small text-secondary mb-1" style={{ fontSize: '11.5px' }}>
-                          Scan with Google Pay, PhonePe, Paytm or BHIM
-                        </div>
+                        {paymentState === 'PAID' ? (
+                          <div className="p-3 bg-success-subtle border border-success-subtle text-success rounded-3 w-100 my-2">
+                            <FiCheckCircle size={32} className="mb-2 d-block mx-auto" />
+                            <div className="fw-bold fs-6">Payment Verified Successfully!</div>
+                            <small className="text-secondary">Order is marked as Paid.</small>
+                          </div>
+                        ) : paymentState === 'PROCESSING' ? (
+                          <div className="p-3 bg-light rounded-3 border w-100 my-2 text-center">
+                            <span className="spinner-border spinner-border-sm text-danger mb-2" role="status" />
+                            <div className="fw-bold text-dark small">{paymentMessage || 'Waiting for customer payment...'}</div>
+                            <small className="text-secondary d-block mt-1">Listening for instant confirmation...</small>
+                          </div>
+                        ) : (
+                          <div className="my-2 w-100">
+                            <p className="text-secondary small mb-3" style={{ fontSize: '12px' }}>
+                              Supports <strong>Google Pay, PhonePe, Paytm, BHIM & Dynamic UPI QR</strong>. Automatically generates an order session and auto-verifies upon payment.
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleLaunchRazorpayUpi}
+                              disabled={loading || grandTotal <= 0}
+                              className="btn btn-danger w-100 py-2.5 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2"
+                              style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D', height: '46px' }}
+                            >
+                              <FiSmartphone size={17} />
+                              <span>Show Razorpay UPI QR / Pay</span>
+                            </button>
+                          </div>
+                        )}
 
-                        <div className="d-flex align-items-center justify-content-center gap-2">
-                          <code className="text-dark fw-bold bg-white px-2 py-0.5 border rounded small">
-                            7981354982@omni
-                          </code>
-                          <button
-                            type="button"
-                            onClick={handleCopyUpi}
-                            className="btn btn-sm btn-link p-0 text-decoration-none fw-semibold"
-                            style={{ fontSize: '12px' }}
-                          >
-                            {copiedUpi ? '✓ Copied' : 'Copy UPI ID'}
-                          </button>
-                        </div>
-
-                        <div className="mt-1 text-muted" style={{ fontSize: '11px' }}>
-                          Account Name: <strong className="text-dark">YAMIN PRASANNA REDDY BALIJEPALLI</strong>
+                        <div className="mt-2 text-muted small" style={{ fontSize: '11px' }}>
+                          Secured by Razorpay · Signature Verified
                         </div>
                       </div>
                     )}
 
-                    {/* Method View: Counter / Cash */}
+                    {/* Method View: Cash Flow */}
                     {selectedMethod === 'COUNTER' && (
-                      <div className="p-4 rounded-3 border bg-light-subtle text-center h-100 d-flex flex-column justify-content-center align-items-center">
+                      <div className="p-4 rounded-3 border bg-white text-center h-100 d-flex flex-column justify-content-center align-items-center shadow-xs">
                         <div className="rounded-circle bg-warning-subtle text-warning-emphasis d-inline-flex p-3 mb-2">
                           <FiDollarSign size={32} />
                         </div>
-                        <h6 className="fw-bold text-dark mb-1">
-                          {isStaff ? 'Cash Payment at Counter' : 'Pay Cash at Restaurant Counter'}
-                        </h6>
-                        <p className="text-secondary small mb-0" style={{ fontSize: '12.5px', maxWidth: '300px' }}>
-                          {isStaff 
-                            ? 'Collect the physical cash amount from customer at billing counter before confirming.' 
-                            : 'Your order will be sent to the kitchen. Please proceed to the billing counter to pay.'}
+                        <h6 className="fw-bold text-dark mb-1">Cash Payment at Counter</h6>
+                        <p className="text-secondary small mb-3" style={{ fontSize: '12.5px', maxWidth: '320px' }}>
+                          Collect the physical cash amount from customer at billing counter before confirming.
                         </p>
-                        <div className="mt-3 p-2.5 bg-white rounded-3 border text-dark fw-bold w-100" style={{ maxWidth: '280px' }}>
-                          Payable Amount: <span className="text-danger">{formatCurrency(grandTotal)}</span>
+                        <div className="p-2.5 bg-light rounded-3 border text-dark fw-bold w-100 mb-3" style={{ maxWidth: '280px' }}>
+                          Collect Amount: <span className="text-danger fs-5">{formatCurrency(grandTotal)}</span>
                         </div>
+                        <button
+                          type="button"
+                          onClick={handleConfirmCash}
+                          disabled={loading || grandTotal <= 0}
+                          className="btn btn-danger w-100 py-2.5 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2"
+                          style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D', height: '46px', maxWidth: '280px' }}
+                        >
+                          <FiCheckCircle size={17} />
+                          <span>Confirm Cash Payment</span>
+                        </button>
                       </div>
                     )}
 
-                    {/* Method View: Card */}
+                    {/* Method View: Card Flow */}
                     {selectedMethod === 'CARD' && cardEnabled && (
-                      <div className="p-4 rounded-3 border bg-light-subtle text-center h-100 d-flex flex-column justify-content-center align-items-center">
+                      <div className="p-4 rounded-3 border bg-white text-center h-100 d-flex flex-column justify-content-center align-items-center shadow-xs">
                         <div className="rounded-circle bg-primary-subtle text-primary d-inline-flex p-3 mb-2">
                           <FiCreditCard size={32} />
                         </div>
-                        <h6 className="fw-bold text-dark mb-1">Credit / Debit Card Payment</h6>
-                        <p className="text-secondary small mb-0" style={{ fontSize: '12.5px', maxWidth: '300px' }}>
-                          {isStaff 
-                            ? 'Swipe or tap customer card on the POS machine, verify successful receipt, then confirm.' 
-                            : 'Use your credit/debit card on the secure payment gateway to complete payment.'}
+                        <h6 className="fw-bold text-dark mb-1">Razorpay Card Checkout</h6>
+                        <p className="text-secondary small mb-2" style={{ fontSize: '12px', maxWidth: '320px' }}>
+                          Accepts <strong>Visa, Mastercard, RuPay & Amex</strong>. 
                         </p>
-                        <div className="mt-3 p-2.5 bg-white rounded-3 border text-dark fw-bold w-100" style={{ maxWidth: '280px' }}>
-                          Payable Amount: <span className="text-danger">{formatCurrency(grandTotal)}</span>
+                        <div className="badge bg-secondary-subtle text-dark border px-2.5 py-1 mb-3 rounded-pill" style={{ fontSize: '10.5px' }}>
+                          POS Terminal: Web Card Integration Active
                         </div>
+
+                        {paymentState === 'PAID' ? (
+                          <div className="p-3 bg-success-subtle border border-success-subtle text-success rounded-3 w-100 my-2">
+                            <FiCheckCircle size={32} className="mb-2 d-block mx-auto" />
+                            <div className="fw-bold fs-6">Card Payment Verified!</div>
+                          </div>
+                        ) : paymentState === 'PROCESSING' ? (
+                          <div className="p-3 bg-light rounded-3 border w-100 my-2 text-center">
+                            <span className="spinner-border spinner-border-sm text-danger mb-2" role="status" />
+                            <div className="fw-bold text-dark small">{paymentMessage || 'Processing card checkout...'}</div>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleLaunchRazorpayCard}
+                            disabled={loading || grandTotal <= 0}
+                            className="btn btn-danger w-100 py-2.5 rounded-pill fw-bold shadow-sm d-flex align-items-center justify-content-center gap-2"
+                            style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D', height: '46px', maxWidth: '280px' }}
+                          >
+                            <FiCreditCard size={17} />
+                            <span>Open Card Checkout ({formatCurrency(grandTotal)})</span>
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
 
-                  {error && (
-                    <div className="alert alert-danger py-2 small mb-3 d-flex align-items-center gap-2">
+                  {(localError || error) && (
+                    <div className="alert alert-danger py-2 small my-3 d-flex align-items-center gap-2">
                       <FiAlertCircle className="flex-shrink-0" />
-                      <span>{error}</span>
+                      <span>{localError || error}</span>
                     </div>
                   )}
                 </div>
 
                 {/* Footer Actions */}
-                <div className="d-flex align-items-center gap-3 pt-3 border-top mt-3">
+                <div className="d-flex align-items-center justify-content-between pt-3 border-top mt-3">
                   <button
                     type="button"
                     onClick={onClose}
-                    disabled={loading}
+                    disabled={loading || paymentState === 'PROCESSING'}
                     className="btn btn-outline-secondary rounded-pill px-4 fw-semibold"
                     style={{ height: '44px', fontSize: '13.5px' }}
                   >
-                    Cancel
+                    Close
                   </button>
-
-                  <button
-                    type="button"
-                    onClick={handleConfirm}
-                    disabled={loading || grandTotal <= 0}
-                    className="btn btn-danger rounded-pill flex-grow-1 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm"
-                    style={{
-                      height: '44px',
-                      backgroundColor: 'var(--primary-color, #F20D2D)',
-                      borderColor: 'var(--primary-color, #F20D2D)',
-                      fontSize: '14px'
-                    }}
-                  >
-                    {loading ? (
-                      <>
-                        <span className="spinner-border spinner-border-sm" role="status" aria-hidden="true" />
-                        <span>Processing...</span>
-                      </>
-                    ) : (
-                      <>
-                        <FiCheckCircle size={16} />
-                        <span>
-                          {selectedMethod === 'UPI' 
-                            ? `Paid ${formatCurrency(grandTotal)}` 
-                            : selectedMethod === 'COUNTER' 
-                              ? `Confirm Cash Order (${formatCurrency(grandTotal)})` 
-                              : `Pay with Card (${formatCurrency(grandTotal)})`}
-                        </span>
-                      </>
-                    )}
-                  </button>
+                  <span className="text-muted small" style={{ fontSize: '11px' }}>
+                    Payment Mode: <strong>{selectedMethod === 'UPI' ? 'RAZORPAY_UPI' : selectedMethod === 'CARD' ? 'RAZORPAY_CARD' : 'CASH'}</strong>
+                  </span>
                 </div>
               </div>
 
@@ -486,4 +653,3 @@ export const PaymentModal = ({
 };
 
 export default PaymentModal;
-

@@ -131,9 +131,9 @@ export const Cart = () => {
     setPromoCode(code);
   };
 
-  const handleRemovePromo = () => {
-    removeCoupon();
-    setPromoMessage('Coupon removed');
+  const handleRemovePromo = (code = null) => {
+    removeCoupon(code);
+    setPromoMessage(code ? `Coupon ${code} removed` : 'Coupon removed');
     setPromoSuccess(true);
     setPromoCode('');
   };
@@ -399,63 +399,82 @@ export const Cart = () => {
 
             {/* Promo Code Card */}
             <div className="card rounded-3 border-0 shadow-sm p-3 bg-white mb-4">
-              <span className="small fw-semibold text-secondary mb-2 d-block">Have a Promo Coupon?</span>
-              
-              {coupon ? (
-                <>
-                  <div className="card rounded-3 bg-success-subtle border border-success-subtle p-3 mb-2 text-start">
-                    <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                      <div>
-                        <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
-                          <span className="small text-success fw-bold">Applied Coupon:</span>
-                          <span className="badge bg-success text-white font-monospace px-2.5 py-1 rounded" style={{ fontSize: '12px' }}>
-                            {coupon.code}
+              <span className="small fw-semibold text-secondary mb-2 d-block">
+                {isFirstTime ? '🎁 First-Time Customer Offer (Apply Up To 2 Coupons)' : 'Have a Promo Coupon?'}
+              </span>
+
+              {(() => {
+                const appliedList = serverCart?.pricing?.coupons?.length > 0
+                  ? serverCart.pricing.coupons
+                  : (coupon?.appliedList?.length > 0 ? coupon.appliedList : (coupon ? [coupon] : []));
+                const totalDiscountVal = Number(serverCart?.pricing?.coupon_discount_total || getDiscount() || 0);
+                const maxCoupons = isFirstTime ? 2 : 1;
+                const canApplyMore = appliedList.length < maxCoupons;
+
+                return (
+                  <>
+                    {appliedList.length > 0 && (
+                      <div className="card rounded-3 bg-success-subtle border border-success-subtle p-3 mb-3 text-start">
+                        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                          <span className="small text-success fw-bold">
+                            Applied Coupons ({appliedList.length}/{maxCoupons}):
                           </span>
-                          <span className="badge rounded-pill fw-bold bg-success-subtle text-success border border-success-subtle px-2.5 py-0.5" style={{ fontSize: '11px' }}>
-                            🎉 You save {formatCurrency(getDiscount())}!
+                          <span className="badge rounded-pill fw-bold bg-success text-white px-2.5 py-1" style={{ fontSize: '11px' }}>
+                            🎉 Total Savings: {formatCurrency(totalDiscountVal)}
                           </span>
                         </div>
+                        <div className="d-flex flex-column gap-2">
+                          {appliedList.map((ac) => (
+                            <div key={ac.code} className="d-flex align-items-center justify-content-between bg-white rounded-pill px-3 py-1.5 border border-success shadow-xs">
+                              <div className="d-flex align-items-center gap-2">
+                                <span className="badge bg-success text-white font-monospace" style={{ fontSize: '11px' }}>
+                                  {ac.code}
+                                </span>
+                                <span className="small fw-semibold text-success">
+                                  Save {formatCurrency(Number(ac.discount || 0))}
+                                </span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePromo(ac.code)}
+                                className="btn btn-sm btn-link text-danger fw-bold text-decoration-none py-0 px-2"
+                                style={{ fontSize: '11px' }}
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <button 
-                        onClick={handleRemovePromo} 
-                        className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold"
-                        style={{ fontSize: '11px' }}
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                  {promoMessage && (
-                    <div className={`small mb-2 fw-semibold text-start ${promoSuccess ? 'text-success' : 'text-danger'}`} style={{ fontSize: '11px' }}>
-                      {promoMessage}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  <form onSubmit={handleApplyPromo} className="d-flex gap-2">
-                    <input 
-                      type="text" 
-                      className="form-control rounded-pill text-uppercase py-1.5 ps-3"
-                      placeholder="e.g. FOODIE50"
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
-                    />
-                    <button 
-                      type="submit" 
-                      className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm flex-shrink-0"
-                      style={{ height: '40px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)' }}
-                    >
-                      Apply
-                    </button>
-                  </form>
-                  {promoMessage && (
-                    <div className={`small mt-2 fw-semibold text-start ${promoSuccess ? 'text-success' : 'text-danger'}`} style={{ fontSize: '11px' }}>
-                      {promoMessage}
-                    </div>
-                  )}
-                </>
-              )}
+                    )}
+
+                    {canApplyMore && (
+                      <form onSubmit={handleApplyPromo} className="d-flex gap-2">
+                        <input
+                          type="text"
+                          className="form-control rounded-pill text-uppercase py-1.5 ps-3"
+                          placeholder={appliedList.length === 1 && isFirstTime ? "Enter second coupon (e.g. SAVE10)" : "e.g. FOODIE50"}
+                          value={promoCode}
+                          onChange={(e) => setPromoCode(e.target.value)}
+                        />
+                        <button
+                          type="submit"
+                          className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm flex-shrink-0"
+                          style={{ height: '40px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)' }}
+                        >
+                          Apply
+                        </button>
+                      </form>
+                    )}
+
+                    {promoMessage && (
+                      <div className={`small mt-2 fw-semibold text-start ${promoSuccess ? 'text-success' : 'text-danger'}`} style={{ fontSize: '11px' }}>
+                        {promoMessage}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
 
               {/* Available Coupons Section */}
               <div className="mt-3 pt-3 border-top text-start">
@@ -534,6 +553,11 @@ export const Cart = () => {
                           }`} style={{ fontSize: '10px' }}>
                             {c.code}
                           </span>
+                          {Boolean(c.isFirstTimeOffer || c.is_first_time_offer) && (
+                            <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill" style={{ fontSize: '9px' }}>
+                              🎁 New User Offer
+                            </span>
+                          )}
                           <div>
                             <div className="small fw-semibold text-dark" style={{ fontSize: '11px' }}>
                               {info.valueLabel} · Min {formatCurrency(minReq)}
@@ -553,7 +577,7 @@ export const Cart = () => {
                               </span>
                               <button
                                 type="button"
-                                onClick={handleRemovePromo}
+                                onClick={() => handleRemovePromo(c.code)}
                                 className="btn btn-sm btn-link text-danger fw-bold text-decoration-none py-0 px-1"
                                 style={{ fontSize: '11px' }}
                               >

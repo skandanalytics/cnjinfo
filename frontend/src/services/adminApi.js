@@ -22,6 +22,7 @@ const STATUS_LABEL = {
 
 const STATUS_API = {
   pending: 'PENDING',
+  placed: 'PLACED',
   preparing: 'PREPARING',
   ready: 'READY',
   serving: 'SERVED',
@@ -284,6 +285,8 @@ function mapTable(t) {
     qr_url: t.qr_url,
     qr_is_active: t.qr_is_active !== false,
     is_active: t.is_active,
+    has_active_order: Boolean(t.has_active_order),
+    is_occupied: status === 'OCCUPIED',
     active_order_id: t.active_order_id || null,
     active_order: t.active_order || null,
   };
@@ -996,6 +999,45 @@ export function mapOrder(o) {
 
   const displayNo = o.display_order_number || o.display_number || (o.parent_order_id && Number(o.continuation_index) > 0 ? `${o.parent_order_id}.${o.continuation_index}` : String(o.id));
 
+  const normalizeOrderItem = (item) => {
+    if (!item) return item;
+    const customs = Array.isArray(item.customizations)
+      ? item.customizations
+      : (Array.isArray(item.extraIngredients)
+        ? item.extraIngredients
+        : (Array.isArray(item.toppings)
+          ? item.toppings
+          : (Array.isArray(item.options) ? item.options : [])));
+    const instructions = item.special_instructions || item.instructions || item.specialInstructions || '';
+    const unitPrice = Number(item.unit_price != null ? item.unit_price : (item.price != null ? item.price : (item.sellingPrice != null ? item.sellingPrice : 0)));
+    const qty = parseInt(item.quantity || item.qty || 1, 10) || 1;
+    const lineTotal = Number(item.line_total != null ? item.line_total : (item.lineTotal != null ? item.lineTotal : (unitPrice * qty)));
+    return {
+      id: item.id,
+      food_id: item.food_id,
+      name: item.name || item.food_name || item.dish_name || 'Dish Item',
+      quantity: qty,
+      price: unitPrice,
+      unit_price: unitPrice,
+      lineTotal: lineTotal,
+      line_total: lineTotal,
+      customizations: customs,
+      extraIngredients: customs,
+      toppings: customs,
+      instructions: instructions,
+      special_instructions: instructions,
+      specialInstructions: instructions,
+      order_display_number: item.order_display_number || null,
+    };
+  };
+
+  const rawMethod = o.payment_method || o.paymentMethod || o.paymentMethodName || '';
+  const cleanMethod = (!['PAID', 'UNPAID', 'PENDING', 'FAILED', 'SUCCESS'].includes(String(rawMethod).toUpperCase()))
+    ? rawMethod
+    : '';
+  const isPaidStatus = String(o.payment_status || '').toUpperCase() === 'PAID';
+  const resolvedPaymentMethod = cleanMethod || (isPaidStatus ? 'Cash' : '');
+
   return {
     id: o.id,
     orderNumber: displayNo,
@@ -1006,6 +1048,20 @@ export function mapOrder(o) {
     parent_order_id: o.parent_order_id || (typeof o.parent_order === 'object' ? o.parent_order?.id : o.parent_order) || null,
     continuation_index: Number(o.continuation_index || 0),
     has_continuations: Boolean(o.has_continuations),
+    continuations: Array.isArray(o.continuations) ? o.continuations : [],
+    combined_items: (o.combined_items || []).map(normalizeOrderItem),
+    combined_total: o.combined_total !== undefined ? Number(o.combined_total) : finalTotal,
+    combined_items_subtotal: o.combined_items_subtotal !== undefined ? Number(o.combined_items_subtotal) : Number(o.items_subtotal || 0),
+    combined_dish_discount_total: o.combined_dish_discount_total !== undefined ? Number(o.combined_dish_discount_total) : Number(o.dish_discount_total || 0),
+    combined_taxable_amount: o.combined_taxable_amount !== undefined ? Number(o.combined_taxable_amount) : Number(o.taxable_amount || 0),
+    combined_gst_amount: o.combined_gst_amount !== undefined ? Number(o.combined_gst_amount) : Number(o.gst_amount || 0),
+    combined_service_charge_amount: o.combined_service_charge_amount !== undefined ? Number(o.combined_service_charge_amount) : Number(o.service_charge_amount || 0),
+    coupon_code: o.coupon_code || o.coupon || o.voucher || o.voucherCode || '',
+    coupon_codes: Array.isArray(o.coupon_codes) ? o.coupon_codes : (o.coupon_code ? String(o.coupon_code).split(',').map(s => s.trim()).filter(Boolean) : []),
+    applied_coupons: Array.isArray(o.applied_coupons) ? o.applied_coupons : [],
+    voucher: o.voucher || o.coupon_code || '',
+    voucherCode: o.voucherCode || o.coupon_code || '',
+    coupon: o.coupon || o.coupon_code || '',
     status: STATUS_LABEL[o.status] || o.status,
     backendStatus: o.status,
     date: created.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }),
@@ -1019,8 +1075,8 @@ export function mapOrder(o) {
     table_capacity: o.table?.capacity || null,
     source: o.order_type === 'TAKEAWAY' ? 'Takeaway' : 'Dine-In',
     orderType: o.order_type === 'TAKEAWAY' ? 'Takeaway' : 'Dine-In',
-    paymentMethod: o.payment_status,
-    paymentMethodName: o.payment_method || '',
+    paymentMethod: resolvedPaymentMethod,
+    paymentMethodName: resolvedPaymentMethod,
     paymentStatus: o.payment_status,
     payment_status: o.payment_status,
     total: finalTotal,
@@ -1058,24 +1114,11 @@ export function mapOrder(o) {
     placedByName: o.placed_by_name || '',
     user: o.customer_phone || '',
     customerPhone: o.customer_phone || '',
-    items: (o.items || []).map((item) => {
-      const customs = Array.isArray(item.customizations) ? item.customizations : (Array.isArray(item.extraIngredients) ? item.extraIngredients : (Array.isArray(item.toppings) ? item.toppings : (Array.isArray(item.options) ? item.options : [])));
-      const instructions = item.special_instructions || item.instructions || item.specialInstructions || '';
-      return {
-        id: item.id,
-        food_id: item.food_id,
-        name: item.name || item.food_name || item.dish_name || 'Dish Item',
-        quantity: item.quantity,
-        price: Number(item.unit_price),
-        lineTotal: Number(item.line_total),
-        customizations: customs,
-        extraIngredients: customs,
-        toppings: customs,
-        instructions: instructions,
-        special_instructions: instructions,
-        specialInstructions: instructions,
-      };
-    }),
+    refund_status: o.refund_status || 'NOT_APPLICABLE',
+    refunded_amount: Number(o.refunded_amount || 0),
+    cancel_reason: o.cancel_reason || '',
+    parent_order_display_number: o.parent_order_display_number || null,
+    items: (o.items || []).map(normalizeOrderItem),
   };
 }
 
@@ -1100,6 +1143,8 @@ export async function listOrdersForUi(options = {}) {
   const params = [];
   if (isMine) params.push('mine=1');
   if (targetBranch && targetBranch !== 'ALL') params.push(`branch=${encodeURIComponent(targetBranch)}`);
+  if (options?.fromDate) params.push(`from_date=${encodeURIComponent(options.fromDate)}`);
+  if (options?.toDate) params.push(`to_date=${encodeURIComponent(options.toDate)}`);
   const query = params.length > 0 ? `?${params.join('&')}` : '';
   const rows = listOf(await staffJson(`/orders/${query}`));
   let mapped = rows.map(mapOrder);
@@ -1148,10 +1193,10 @@ export async function proceedToBill(orderId) {
   return data;
 }
 
-export async function recordCounterPayment(orderId) {
+export async function recordCounterPayment(orderId, method = 'CASH') {
   const data = await staffJson(`/orders/${orderId}/counter-payment/`, {
     method: 'POST',
-    body: JSON.stringify({}),
+    body: JSON.stringify({ method }),
   });
   return data;
 }
@@ -1215,6 +1260,62 @@ export async function updateOrderServiceCharge(orderId, enabled) {
     throw err;
   }
 }
+
+export async function getStaffOrder(id) {
+  const data = await staffJson(`/orders/${id}/`);
+  return mapOrder(data);
+}
+
+export async function applyOrderCoupon(orderId, couponCode) {
+  const data = await staffJson(`/orders/${orderId}/`, {
+    method: 'PATCH',
+    body: JSON.stringify({ coupon_code: couponCode }),
+  });
+  window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId } }));
+  return mapOrder(data);
+}
+
+export async function removeOrderCoupon(orderId, couponCode = null) {
+  const payload = { remove_coupon: true };
+  if (couponCode) {
+    payload.remove_code = couponCode;
+  }
+  const data = await staffJson(`/orders/${orderId}/`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+  window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId } }));
+  return mapOrder(data);
+}
+
+export async function getOrderEligibleCoupons(orderId) {
+  const data = await staffJson(`/orders/${orderId}/eligible-coupons/`);
+  return data;
+}
+
+export async function rejectOrder(orderId, { scope = 'INDIVIDUAL', reason = '' } = {}) {
+  const data = await staffJson(`/orders/${orderId}/reject/`, {
+    method: 'POST',
+    body: JSON.stringify({ scope, reason }),
+  });
+  window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId } }));
+  return mapOrder(data);
+}
+
+export async function getOrderRefunds(orderId) {
+  const data = await staffJson(`/orders/${orderId}/refunds/`);
+  return data;
+}
+
+export async function recordOrderRefund(orderId, payload) {
+  const data = await staffJson(`/orders/${orderId}/refund/`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+  window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId } }));
+  return data;
+}
+
 
 export async function downloadInvoice(order) {
   const status = String(order?.status || '').toLowerCase();

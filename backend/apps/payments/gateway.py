@@ -8,12 +8,18 @@ use RAZORPAY_WEBHOOK_SECRET when it is set, otherwise the same key secret.
 import hashlib
 import hmac
 import json
+import time
 from base64 import b64encode
 from decimal import Decimal, ROUND_HALF_UP
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from django.conf import settings
+
+try:
+    import razorpay
+except ImportError:
+    razorpay = None
 
 _gateway = None
 
@@ -25,20 +31,44 @@ class GatewayError(Exception):
 
 
 class RazorpayClient:
-    """Thin HTTP wrapper. Not used in tests."""
+    """Wrapper around official Razorpay Python SDK with HTTP fallback."""
 
     def __init__(self, key_id, key_secret):
         self.key_id = key_id
         self.key_secret = key_secret
+        if razorpay is not None:
+            try:
+                self.sdk = razorpay.Client(auth=(key_id, key_secret))
+            except Exception:
+                self.sdk = None
+        else:
+            self.sdk = None
 
-    def create_order(self, amount, receipt, notes=None):
-        paise = int((Decimal(amount) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
-        body = json.dumps({
+    def create_order(self, amount, receipt=None, notes=None, currency="INR"):
+        if isinstance(amount, (Decimal, float)) or (isinstance(amount, str) and "." in amount):
+            paise = int((Decimal(str(amount)) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+        else:
+            paise = int(amount)
+        if paise < 100:
+            raise GatewayError("amount must be >= 100 paise", "invalid_amount")
+
+        order_data = {
             "amount": paise,
-            "currency": "INR",
-            "receipt": str(receipt)[:40],
+            "currency": (currency or "INR").upper(),
+            "receipt": str(receipt)[:40] if receipt else f"rcpt_{int(paise)}",
             "notes": {str(k): str(v) for k, v in (notes or {}).items()},
-        }).encode()
+        }
+
+        if self.sdk is not None:
+            try:
+                data = self.sdk.order.create(data=order_data)
+                order_id = data.get("id")
+                if order_id:
+                    return order_id
+            except Exception as exc:
+                raise GatewayError("The payment provider could not start this payment.", "gateway_error") from exc
+
+        body = json.dumps(order_data).encode()
         token = b64encode(f"{self.key_id}:{self.key_secret}".encode()).decode()
         request = Request(
             "https://api.razorpay.com/v1/orders",
@@ -64,10 +94,10 @@ class FakeRazorpay:
         self.created = []
         self._n = 0
 
-    def create_order(self, amount, receipt, notes=None):
+    def create_order(self, amount, receipt=None, notes=None, currency="INR"):
         self._n += 1
-        order_id = f"order_test_{self._n}"
-        self.created.append({"id": order_id, "amount": str(amount), "receipt": receipt, "notes": notes or {}})
+        order_id = f"order_test_{int(time.time() * 1000)}_{self._n}"
+        self.created.append({"id": order_id, "amount": str(amount), "receipt": receipt, "notes": notes or {}, "currency": currency})
         return order_id
 
 
@@ -124,8 +154,19 @@ def _matches(expected, given):
 
 
 def verify_checkout_signature(order_id, payment_id, signature, secret):
-    if not secret:
+    if not secret or not order_id or not payment_id or not signature:
         return False
+    if razorpay is not None:
+        try:
+            client = razorpay.Client(auth=("dummy", secret))
+            client.utility.verify_payment_signature({
+                "razorpay_order_id": str(order_id),
+                "razorpay_payment_id": str(payment_id),
+                "razorpay_signature": str(signature)
+            })
+            return True
+        except Exception:
+            return False
     return _matches(sign_checkout(order_id, payment_id, secret), signature)
 
 

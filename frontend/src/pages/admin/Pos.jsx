@@ -1081,8 +1081,9 @@ export const Pos = () => {
     cartItems.forEach(item => {
       const qty = item.quantity || 1;
       totalQuantity += qty;
-      const basePrice = Number(item.dish.price || item.dish.sellingPrice || 0);
-      itemsSubtotal += basePrice * qty;
+      const originalPrice = Number(item.dish.price || item.dish.originalPrice || item.dish.sellingPrice || 0);
+      const sellingPrice = Number(item.dish.sellingPrice || item.dish.discountPrice || originalPrice);
+      itemsSubtotal += originalPrice * qty;
 
       // Add-ons extra
       const optionsExtra = (item.options || []).reduce((acc, opt) => {
@@ -1090,17 +1091,17 @@ export const Pos = () => {
       }, 0);
       addOnsTotal += optionsExtra * qty;
 
-      // Menu dish discount
-      if (item.dish.hasDiscount && item.dish.discountPrice && item.dish.price > item.dish.discountPrice) {
-        dishDiscountsTotal += (item.dish.price - item.dish.discountPrice) * qty;
+      // Menu dish discount: exact difference between original price and selling price
+      if (item.dish.hasDiscount && originalPrice > sellingPrice) {
+        dishDiscountsTotal += (originalPrice - sellingPrice) * qty;
       }
     });
 
     const merchandise = itemsSubtotal + addOnsTotal - dishDiscountsTotal;
 
-    // Coupon discount calculation
+    // Coupon discount calculation (Active only for Takeaway in POS; Dine-in coupons applied at Complete Session)
     let couponDiscount = 0;
-    if (appliedCoupon && merchandise >= (appliedCoupon.minOrderValue || appliedCoupon.minimum_order_amount || 0)) {
+    if (orderType === 'TAKEAWAY' && appliedCoupon && merchandise >= (appliedCoupon.minOrderValue || appliedCoupon.minimum_order_amount || 0)) {
       if (appliedCoupon.type === 'percentage' || appliedCoupon.discount_type === 'PERCENTAGE') {
         const pct = appliedCoupon.discount || appliedCoupon.discount_value || 0;
         let disc = (merchandise * pct) / 100;
@@ -1142,8 +1143,13 @@ export const Pos = () => {
     };
   }, [cartItems, orderType, appliedCoupon]);
 
-  // Auto-apply eligible coupon when cart changes
+  // Auto-apply eligible coupon when cart changes (Takeaway only; Dine-in coupons applied at Complete Session)
   useEffect(() => {
+    if (orderType === 'DINE_IN') {
+      if (appliedCoupon) setAppliedCoupon(null);
+      return;
+    }
+
     if (cartItems.length === 0) {
       userDismissedCouponRef.current = false;
       if (appliedCoupon?.isAutomatic) {
@@ -1292,10 +1298,12 @@ export const Pos = () => {
     const resolvedName = customerName.trim() || parentOrder?.customer_name || selectedTable?.active_order?.customer_name || '';
 
     const methodMap = {
-      'UPI': 'UPI',
+      'UPI': 'RAZORPAY_UPI',
+      'RAZORPAY_UPI': 'RAZORPAY_UPI',
       'COUNTER': 'CASH',
       'CASH': 'CASH',
-      'CARD': 'CARD',
+      'CARD': 'RAZORPAY_CARD',
+      'RAZORPAY_CARD': 'RAZORPAY_CARD',
     };
     const apiPaymentMethod = methodMap[selectedMethod] || 'CASH';
 
@@ -1305,7 +1313,7 @@ export const Pos = () => {
       branch: Number(selectedBranchId),
       items: itemsPayload,
       idempotency_key: idempotencyKey,
-      coupon_code: appliedCoupon ? appliedCoupon.code : (userDismissedCouponRef.current ? 'NONE' : ''),
+      coupon_code: orderType === 'TAKEAWAY' ? (appliedCoupon ? appliedCoupon.code : (userDismissedCouponRef.current ? 'NONE' : '')) : '',
       customer_phone: resolvedPhone,
       customer_name: resolvedName,
       payment_method: apiPaymentMethod,
@@ -1663,10 +1671,38 @@ export const Pos = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* View Mode Toggle: Grid Icon (Card View) vs Table/List Icon (Table View) */}
+                <div className="btn-group p-1 bg-white rounded-pill border border-light-subtle shadow-xs" role="group" aria-label="POS view mode">
+                  <button
+                    type="button"
+                    onClick={() => setPosViewMode('grid')}
+                    className={`btn btn-sm rounded-pill p-0 fw-bold transition-all border-0 d-inline-flex align-items-center justify-content-center ${
+                      posViewMode === 'grid' ? 'btn-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+                    }`}
+                    style={{ width: '32px', height: '30px' }}
+                    title="Card View"
+                    aria-label="Card View"
+                  >
+                    <FiGrid size={15} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPosViewMode('table')}
+                    className={`btn btn-sm rounded-pill p-0 fw-bold transition-all border-0 d-inline-flex align-items-center justify-content-center ${
+                      posViewMode === 'table' ? 'btn-danger text-white shadow-xs' : 'text-secondary bg-transparent'
+                    }`}
+                    style={{ width: '32px', height: '30px' }}
+                    title="Table View"
+                    aria-label="Table View"
+                  >
+                    <FiList size={15} />
+                  </button>
+                </div>
               </div>
             )}
 
-            {/* 4. Food Cards Responsive 4-Column Grid */}
+            {/* 4. Food Cards Responsive 4-Column Grid / Table View */}
             <div className="flex-grow-1 min-h-0">
               {loading ? (
                 <div className="min-vh-50 d-flex align-items-center justify-content-center py-5">
@@ -1683,6 +1719,174 @@ export const Pos = () => {
                       ? 'No dishes are configured for the selected branch.' 
                       : 'Try adjusting your category, food type, or search term.'}
                   </p>
+                </div>
+              ) : posViewMode === 'table' ? (
+                <div className="card rounded-4 border shadow-sm overflow-hidden mb-4 bg-white" style={{ borderColor: '#E2E8F0' }}>
+                  <div className="table-responsive">
+                    <table className="table align-middle mb-0">
+                      <thead>
+                        <tr className="small fw-semibold text-secondary" style={{ fontSize: '12px', backgroundColor: '#F8FAFC', borderBottom: '1px solid #E2E8F0' }}>
+                          <th className="ps-3 py-3" style={{ width: '32%', minWidth: '160px' }}>Dish Name</th>
+                          <th className="py-3" style={{ width: '13%' }}>Original Price</th>
+                          <th className="py-3" style={{ width: '13%' }}>Discount</th>
+                          <th className="py-3" style={{ width: '14%' }}>Final Price</th>
+                          <th className="py-3" style={{ width: '14%' }}>Availability</th>
+                          <th className="text-end pe-3 py-3" style={{ width: '14%' }}>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredDishes.map((dish) => {
+                          const isOutOfStock = 
+                            dish.status === 'Out of Stock' || 
+                            dish.status === 'OUT_OF_STOCK' || 
+                            Number(dish.stock) <= 0 || 
+                            dish.is_orderable === false || 
+                            dish.isOrderable === false;
+                          const isLowStock = !isOutOfStock && Number(dish.stock) > 0 && Number(dish.stock) <= 5;
+                          const ft = normalizeFoodType(dish.foodType || dish.type);
+                          const isVeg = ft === 'veg' || ft === 'vegan';
+                          const originalPrice = Number(dish.price || dish.originalPrice || dish.sellingPrice || 0);
+                          const finalPrice = Number(dish.sellingPrice || dish.discountPrice || originalPrice);
+                          const hasDiscount = Boolean(dish.hasDiscount && originalPrice > finalPrice);
+                          const discountAmount = hasDiscount ? (originalPrice - finalPrice) : 0;
+                          const discountPercent = dish.discountPercent || (hasDiscount && originalPrice > 0 ? Math.round((discountAmount / originalPrice) * 100) : 0);
+                          const cartItem = cartItems.find(i => String(i.dish.id) === String(dish.id));
+                          const cartQty = cartItem?.quantity || 0;
+
+                          return (
+                            <tr key={dish.id} style={{ borderBottom: '1px solid #F1F5F9' }}>
+                              <td className="ps-3 py-2.5">
+                                <div className="d-flex align-items-center gap-2">
+                                  <span 
+                                    className={`flex-shrink-0 ${isVeg ? 'veg-badge' : 'non-veg-badge'}`} 
+                                    style={{ width: '15px', height: '15px' }} 
+                                    title={isVeg ? 'Vegetarian' : 'Non-Vegetarian'}
+                                  />
+                                  <div className="min-w-0">
+                                    <div className="fw-bold text-dark text-truncate" style={{ fontSize: '13px', maxWidth: '260px' }}>
+                                      {dish.name}
+                                    </div>
+                                    <div className="text-secondary small text-truncate" style={{ fontSize: '11px', color: '#64748B' }}>
+                                      {dish.category || 'General'}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Original Price */}
+                              <td className="py-2.5" style={{ fontSize: '13px' }}>
+                                {hasDiscount ? (
+                                  <span className="text-muted text-decoration-line-through">
+                                    {formatCurrency(originalPrice)}
+                                  </span>
+                                ) : (
+                                  <span className="text-secondary">
+                                    {formatCurrency(originalPrice)}
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Discount */}
+                              <td className="py-2.5">
+                                {hasDiscount ? (
+                                  <span className="badge bg-success-subtle text-success rounded-pill px-2 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>
+                                    {discountPercent > 0 ? `${discountPercent}% OFF` : `-${formatCurrency(discountAmount)}`}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted small">—</span>
+                                )}
+                              </td>
+
+                              {/* Final Price */}
+                              <td className="py-2.5 fw-bold" style={{ fontSize: '13.5px', color: '#F20D2D' }}>
+                                {formatCurrency(finalPrice)}
+                              </td>
+
+                              {/* Availability */}
+                              <td className="py-2.5">
+                                <span 
+                                  className={`badge rounded-pill fw-semibold px-2 py-0.5 ${
+                                    isOutOfStock 
+                                      ? 'bg-danger-subtle text-danger border border-danger-subtle' 
+                                      : isLowStock 
+                                        ? 'bg-warning-subtle text-warning-emphasis border border-warning-subtle' 
+                                        : 'bg-success-subtle text-success border border-success-subtle'
+                                  }`}
+                                  style={{ fontSize: '11px' }}
+                                >
+                                  ● {isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
+                                </span>
+                              </td>
+
+                              {/* Actions: Customize & Add / Stepper */}
+                              <td className="text-end pe-3 py-2.5">
+                                <div className="d-flex align-items-center justify-content-end gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenCustomize(dish)}
+                                    className="btn btn-sm p-0 rounded-circle bg-white d-inline-flex align-items-center justify-content-center shadow-xs"
+                                    style={{ width: '30px', height: '30px', border: '1.5px solid #F20D2D', color: '#F20D2D' }}
+                                    title="Customize & Add Special Instructions"
+                                    disabled={isOutOfStock}
+                                  >
+                                    <FiEdit2 size={13} />
+                                  </button>
+
+                                  {cartQty > 0 ? (
+                                    <div 
+                                      className="d-flex align-items-center justify-content-between bg-white border px-1.5 shadow-xs"
+                                      style={{ height: '30px', borderRadius: '15px', borderColor: '#CBD5E1', minWidth: '78px' }}
+                                    >
+                                      <button
+                                        type="button"
+                                        className="btn btn-link p-0 text-danger border-0 fw-bold d-flex align-items-center justify-content-center"
+                                        style={{ width: '22px', height: '22px', textDecoration: 'none', fontSize: '15px', lineHeight: 1 }}
+                                        onClick={() => handleDecrementDish(dish)}
+                                        title="Decrease quantity"
+                                      >
+                                        −
+                                      </button>
+                                      <span className="fw-bold small px-1 text-center" style={{ fontSize: '12px', minWidth: '16px' }}>
+                                        {cartQty}
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
+                                        style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '15px', lineHeight: 1 }}
+                                        onClick={() => handleIncrementDish(dish)}
+                                        title="Increase quantity"
+                                      >
+                                        +
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleAddDish(dish)}
+                                      className="btn btn-sm px-2.5 py-1 d-inline-flex align-items-center justify-content-center gap-1 rounded-pill shadow-xs fw-semibold"
+                                      style={{
+                                        height: '30px',
+                                        backgroundColor: '#F20D2D',
+                                        borderColor: '#F20D2D',
+                                        color: '#FFFFFF',
+                                        cursor: isOutOfStock ? 'not-allowed' : 'pointer',
+                                        opacity: isOutOfStock ? 0.4 : 1,
+                                        fontSize: '12px'
+                                      }}
+                                      disabled={isOutOfStock}
+                                      title={isOutOfStock ? "Out of Stock" : `Add ${dish.name} to order`}
+                                    >
+                                      <FiPlus size={13} /> Add
+                                    </button>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               ) : (
                 <div className="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-xl-4 g-3 pb-4">
@@ -1713,10 +1917,11 @@ export const Pos = () => {
                             backgroundColor: '#FFFFFF',
                             border: '1px solid #E2E8F0',
                             transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                            minHeight: '210px'
                           }}
                         >
 {/* Header row with Veg/Non-Veg icon & optional Bestseller/Popular pill (Dish images hidden in POS) */}
-                          <div className="card-body p-3 d-flex flex-column justify-content-between h-100">
+                          <div className="card-body p-3 d-flex flex-column h-100">
                             <div>
                               <div className="d-flex align-items-center justify-content-between mb-2">
                                 <div 
@@ -1762,46 +1967,59 @@ export const Pos = () => {
                                   </span>
                                 ) : null}
                               </div>
-                              <h6 className="fw-bold text-dark mb-0 text-truncate" title={dish.name} style={{ fontSize: '15px' }}>
-                                {dish.name}
-                              </h6>
-                              <div className="text-secondary small mt-0.5 text-truncate" style={{ fontSize: '12px', color: '#64748B' }}>
+                              <div style={{ minHeight: '42px', maxHeight: '42px', overflow: 'hidden' }}>
+                                <h6
+                                  className="fw-bold text-dark mb-0"
+                                  title={dish.name}
+                                  style={{
+                                    fontSize: '14.5px',
+                                    lineHeight: '1.3',
+                                    display: '-webkit-box',
+                                    WebkitLineClamp: 2,
+                                    WebkitBoxOrient: 'vertical',
+                                    overflow: 'hidden',
+                                  }}
+                                >
+                                  {dish.name}
+                                </h6>
+                              </div>
+                              <div className="text-secondary small mt-0.5 text-truncate" style={{ fontSize: '12px', color: '#64748B', minHeight: '18px' }}>
                                 {dish.category || 'General'}
                               </div>
+                            </div>
 
-                              {/* Price Row with Availability Status Dot */}
-                              <div className="d-flex align-items-center justify-content-between mt-2 pt-1 flex-wrap gap-2">
-                                <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
-                                  <span className="fw-bold" style={{ color: '#F20D2D', fontSize: '16px' }}>
-                                    {formatCurrency(dish.sellingPrice || dish.price)}
+                            {/* Price Row with Availability Status Dot (Anchored at fixed position) */}
+                            <div className="d-flex align-items-center justify-content-between mt-auto pt-2 flex-wrap gap-2" style={{ minHeight: '28px' }}>
+                              <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
+                                <span className="fw-bold" style={{ color: '#F20D2D', fontSize: '16px' }}>
+                                  {formatCurrency(dish.sellingPrice || dish.price)}
+                                </span>
+                                {dish.hasDiscount && dish.price > (dish.sellingPrice || dish.price) && (
+                                  <span className="text-muted text-decoration-line-through small" style={{ fontSize: '12px', color: '#94A3B8' }}>
+                                    {formatCurrency(dish.price)}
                                   </span>
-                                  {dish.hasDiscount && dish.price > (dish.sellingPrice || dish.price) && (
-                                    <span className="text-muted text-decoration-line-through small" style={{ fontSize: '12px', color: '#94A3B8' }}>
-                                      {formatCurrency(dish.price)}
-                                    </span>
-                                  )}
-                                </div>
+                                )}
+                              </div>
 
-                                {/* Stock status pill/dot in price row where it never collides with buttons */}
-                                <div className="d-inline-flex align-items-center" style={{ gap: '8px' }} title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}>
-                                  <span
-                                    className="rounded-circle flex-shrink-0"
-                                    style={{
-                                      width: '8px',
-                                      height: '8px',
-                                      backgroundColor: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A',
-                                      boxShadow: isOutOfStock ? '0 0 0 2px rgba(220, 38, 38, 0.2)' : isLowStock ? '0 0 0 2px rgba(217, 119, 6, 0.2)' : '0 0 0 2px rgba(22, 163, 74, 0.2)'
-                                    }}
-                                  />
-                                  <span style={{ fontSize: '11px', color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A', fontWeight: 500 }}>
-                                    {isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
-                                  </span>
-                                </div>
+                              {/* Stock status pill/dot in price row where it never collides with buttons */}
+                              <div className="d-inline-flex align-items-center" style={{ gap: '8px' }} title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}>
+                                <span
+                                  className="rounded-circle flex-shrink-0"
+                                  style={{
+                                    width: '8px',
+                                    height: '8px',
+                                    backgroundColor: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A',
+                                    boxShadow: isOutOfStock ? '0 0 0 2px rgba(220, 38, 38, 0.2)' : isLowStock ? '0 0 0 2px rgba(217, 119, 6, 0.2)' : '0 0 0 2px rgba(22, 163, 74, 0.2)'
+                                  }}
+                                />
+                                <span style={{ fontSize: '11px', color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A', fontWeight: 500 }}>
+                                  {isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}
+                                </span>
                               </div>
                             </div>
 
                             {/* Action Row: Customize Button & Add/Stepper Button with full responsive wrapping */}
-                            <div className="d-flex align-items-center justify-content-between mt-3 pt-2 border-top border-light-subtle flex-wrap gap-2">
+                            <div className="d-flex align-items-center justify-content-between mt-2 pt-2 border-top border-light-subtle flex-wrap gap-2" style={{ minHeight: '38px' }}>
                               {/* Left: Customize button (visible for all dishes to add instructions/customizations) */}
                               <div>
                                 <button
@@ -2049,88 +2267,92 @@ export const Pos = () => {
                 </div>
               </div>
 
-              {/* 3. Apply Coupon Bar */}
-              <div 
-                className="d-flex flex-column gap-2 p-2.5 shadow-xs"
-                style={{
-                  backgroundColor: '#FFF5F5',
-                  border: '1px dashed #FECDD3',
-                  borderRadius: '12px'
-                }}
-              >
-                <div className="d-flex align-items-center justify-content-between">
-                  <div className="d-flex align-items-center gap-2 ps-1">
-                    <FiTag style={{ color: '#F20D2D', fontSize: '16px' }} />
-                    <span className="fw-semibold text-dark" style={{ fontSize: '13px' }}>
-                      Apply Coupon
-                    </span>
-                  </div>
-
-                  {/* View Coupons Button */}
-                  <button
-                    type="button"
-                    onClick={() => setShowCouponModal(true)}
-                    className="btn btn-sm p-0 text-danger fw-bold text-decoration-none d-inline-flex align-items-center gap-1"
-                    style={{ fontSize: '12px' }}
+              {/* 3. Apply Coupon Bar (Takeaway only; Dine-in coupons applied at Complete Session) */}
+              {orderType === 'TAKEAWAY' && (
+                <>
+                  <div 
+                    className="d-flex flex-column gap-2 p-2.5 shadow-xs"
+                    style={{
+                      backgroundColor: '#FFF5F5',
+                      border: '1px dashed #FECDD3',
+                      borderRadius: '12px'
+                    }}
                   >
-                    <span>View Coupons ({coupons.length})</span>
-                    <span style={{ fontSize: '10px' }}>›</span>
-                  </button>
-                </div>
+                    <div className="d-flex align-items-center justify-content-between">
+                      <div className="d-flex align-items-center gap-2 ps-1">
+                        <FiTag style={{ color: '#F20D2D', fontSize: '16px' }} />
+                        <span className="fw-semibold text-dark" style={{ fontSize: '13px' }}>
+                          Apply Coupon
+                        </span>
+                      </div>
 
-                {appliedCoupon ? (
-                  <div className="d-flex align-items-center justify-content-between bg-white px-2.5 py-1.5 rounded-3 border border-danger-subtle">
-                    <div className="d-flex align-items-center gap-2">
-                      <span className="badge bg-danger text-white rounded-pill px-2.5 py-1" style={{ fontSize: '11px' }}>
-                        {appliedCoupon.code}
-                      </span>
-                      <span className="small fw-bold text-success" style={{ fontSize: '12px' }}>
-                        -{formatCurrency(billSummary.couponDiscount)} OFF
-                      </span>
+                      {/* View Coupons Button */}
+                      <button
+                        type="button"
+                        onClick={() => setShowCouponModal(true)}
+                        className="btn btn-sm p-0 text-danger fw-bold text-decoration-none d-inline-flex align-items-center gap-1"
+                        style={{ fontSize: '12px' }}
+                      >
+                        <span>View Coupons ({coupons.length})</span>
+                        <span style={{ fontSize: '10px' }}>›</span>
+                      </button>
                     </div>
-                    <button 
-                      type="button" 
-                      onClick={handleRemoveCoupon} 
-                      className="btn btn-sm btn-link p-0 text-danger border-0"
-                      title="Remove coupon"
-                    >
-                      <FiX size={16} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="d-flex align-items-center gap-1.5 w-100">
-                    <input
-                      type="text"
-                      className="form-control form-control-sm border-light-subtle shadow-xs"
-                      style={{ height: '34px', borderRadius: '8px', fontSize: '12px', paddingLeft: '10px' }}
-                      placeholder="Enter promo coupon code"
-                      value={couponCodeInput}
-                      onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleApplyCoupon(couponCodeInput)}
-                      className="btn btn-sm fw-semibold shadow-xs text-nowrap"
-                      style={{
-                        height: '34px',
-                        border: '1.5px solid #F20D2D',
-                        color: '#F20D2D',
-                        backgroundColor: '#FFFFFF',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        padding: '0 14px'
-                      }}
-                    >
-                      Apply
-                    </button>
-                  </div>
-                )}
-              </div>
 
-              {couponError && (
-                <div className="text-danger small mt-n2" style={{ fontSize: '11px' }}>
-                  {couponError}
-                </div>
+                    {appliedCoupon ? (
+                      <div className="d-flex align-items-center justify-content-between bg-white px-2.5 py-1.5 rounded-3 border border-danger-subtle">
+                        <div className="d-flex align-items-center gap-2">
+                          <span className="badge bg-danger text-white rounded-pill px-2.5 py-1" style={{ fontSize: '11px' }}>
+                            {appliedCoupon.code}
+                          </span>
+                          <span className="small fw-bold text-success" style={{ fontSize: '12px' }}>
+                            -{formatCurrency(billSummary.couponDiscount)} OFF
+                          </span>
+                        </div>
+                        <button 
+                          type="button" 
+                          onClick={handleRemoveCoupon} 
+                          className="btn btn-sm btn-link p-0 text-danger border-0"
+                          title="Remove coupon"
+                        >
+                          <FiX size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="d-flex align-items-center gap-1.5 w-100">
+                        <input
+                          type="text"
+                          className="form-control form-control-sm border-light-subtle shadow-xs"
+                          style={{ height: '34px', borderRadius: '8px', fontSize: '12px', paddingLeft: '10px' }}
+                          placeholder="Enter promo coupon code"
+                          value={couponCodeInput}
+                          onChange={(e) => setCouponCodeInput(e.target.value.toUpperCase())}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleApplyCoupon(couponCodeInput)}
+                          className="btn btn-sm fw-semibold shadow-xs text-nowrap"
+                          style={{
+                            height: '34px',
+                            border: '1.5px solid #F20D2D',
+                            color: '#F20D2D',
+                            backgroundColor: '#FFFFFF',
+                            borderRadius: '8px',
+                            fontSize: '12px',
+                            padding: '0 14px'
+                          }}
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {couponError && (
+                    <div className="text-danger small mt-n2" style={{ fontSize: '11px' }}>
+                      {couponError}
+                    </div>
+                  )}
+                </>
               )}
 
               {/* 4. Order Items Section (Independently scrollable) */}
@@ -2175,9 +2397,10 @@ export const Pos = () => {
                     </div>
                   ) : (
                     cartItems.map((item, idx) => {
-                      const basePrice = Number(item.dish.price || item.dish.sellingPrice || 0);
+                      const originalPrice = Number(item.dish.price || item.dish.originalPrice || item.dish.sellingPrice || 0);
+                      const sellingPrice = Number(item.dish.sellingPrice || item.dish.discountPrice || originalPrice);
                       const optionsTotal = (item.options || []).reduce((acc, opt) => acc + Number(opt.extra_price ?? opt.price ?? 0), 0);
-                      const itemUnitPrice = basePrice + optionsTotal;
+                      const itemUnitPrice = sellingPrice + optionsTotal;
                       const lineTotal = itemUnitPrice * item.quantity;
 
                       return (
@@ -2202,12 +2425,19 @@ export const Pos = () => {
                             <div className="fw-bold text-dark text-truncate" style={{ fontSize: '12.5px' }}>
                               {item.dish.name}
                             </div>
-                            <div className="text-secondary small" style={{ fontSize: '11px', color: '#64748B' }}>
-                              {formatCurrency(itemUnitPrice)}
+                            <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
+                              <span className="fw-bold text-danger" style={{ fontSize: '12px' }}>
+                                {formatCurrency(itemUnitPrice)}
+                              </span>
+                              {item.dish.hasDiscount && originalPrice > sellingPrice && (
+                                <span className="text-muted text-decoration-line-through small" style={{ fontSize: '11px', color: '#94A3B8' }}>
+                                  {formatCurrency(originalPrice + optionsTotal)}
+                                </span>
+                              )}
                             </div>
-                            {item.dish.hasDiscount && item.dish.price > item.dish.sellingPrice && (
+                            {item.dish.hasDiscount && originalPrice > sellingPrice && (
                               <div className="text-success fw-semibold" style={{ fontSize: '10.5px' }}>
-                                -{formatCurrency((item.dish.price - item.dish.sellingPrice) * item.quantity)} off
+                                -{formatCurrency((originalPrice - sellingPrice) * item.quantity)} off
                               </div>
                             )}
                             {item.specialInstructions && (
@@ -2342,22 +2572,25 @@ export const Pos = () => {
                   </div>
                 )}
 
-                {/* 6. Action Buttons Row: Save Order & Proceed to Payment */}
+                {/* 6. Action Buttons Row: Confirm Order (Dine-In) or Save Order & Proceed to Payment (Takeaway) */}
                 <div className="d-flex align-items-center gap-2 pt-1">
                   <button
                     type="button"
                     disabled={!canSubmitOrder || submittingOrder}
                     onClick={() => handleSubmitOrder(false)}
-                    className="btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 shadow-xs transition-all"
+                    className={`btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 transition-all ${
+                      orderType === 'DINE_IN' ? 'text-white shadow-sm' : 'shadow-xs'
+                    }`}
                     style={{
                       height: '44px',
                       borderRadius: '12px',
                       fontSize: '13px',
-                      backgroundColor: '#FFFFFF',
+                      backgroundColor: orderType === 'DINE_IN' ? '#F20D2D' : '#FFFFFF',
                       borderColor: '#F20D2D',
                       borderWidth: '1.5px',
                       borderStyle: 'solid',
-                      color: '#F20D2D',
+                      color: orderType === 'DINE_IN' ? '#FFFFFF' : '#F20D2D',
+                      boxShadow: orderType === 'DINE_IN' ? '0 4px 12px rgba(242, 13, 45, 0.25)' : 'none',
                       opacity: !canSubmitOrder ? 0.5 : 1
                     }}
                     title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
@@ -2372,31 +2605,32 @@ export const Pos = () => {
                     )}
                   </button>
 
-                  <button
-                    type="button"
-                    disabled={!canSubmitOrder || submittingOrder}
-                    onClick={() => {
-                      if (!canSubmitOrder) return;
-                      setOrderError('');
-                      setShowPaymentModal(true);
-                    }}
-                    className="btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
-                    style={{
-                      height: '44px',
-                      borderRadius: '12px',
-                      fontSize: '13px',
-                      backgroundColor: '#F20D2D',
-                      borderColor: '#F20D2D',
-                      borderWidth: '1.5px',
-                      borderStyle: 'solid',
-                      boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)',
-                      opacity: !canSubmitOrder ? 0.5 : 1
-                    }}
-                    title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
-                  >
-                    <FiCreditCard size={17} />
-                    <span>Proceed to Payment</span>
-                  </button>
+                  {orderType === 'TAKEAWAY' && (
+                    <button
+                      type="button"
+                      disabled={!canSubmitOrder || submittingOrder}
+                      onClick={() => {
+                        if (!canSubmitOrder) return;
+                        setOrderError('');
+                        setShowPaymentModal(true);
+                      }}
+                      className="btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
+                      style={{
+                        height: '44px',
+                        borderRadius: '12px',
+                        fontSize: '13px',
+                        backgroundColor: '#F20D2D',
+                        borderColor: '#F20D2D',
+                        borderWidth: '1.5px',
+                        borderStyle: 'solid',
+                        boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)',
+                        opacity: !canSubmitOrder ? 0.5 : 1
+                      }}
+                    >
+                      <FiCreditCard size={17} />
+                      <span>Proceed to Payment</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2890,9 +3124,8 @@ export const Pos = () => {
               couponCode: appliedCoupon?.code || '',
               couponDiscount: billSummary.couponDiscount || 0,
             }}
-            onConfirmPayment={(method) => {
-              const isPaid = method !== 'COUNTER';
-              handleSubmitOrder(isPaid, method);
+            onConfirmPayment={(method, paymentResult) => {
+              handleSubmitOrder(true, method, paymentResult);
             }}
             loading={submittingOrder}
             error={orderError}

@@ -81,7 +81,7 @@ const getOrderDate = (o) => {
 };
 
 export const analyticsService = {
-  getDashboardBundle: async () => {
+  getDashboardBundle: async (options = {}) => {
     const { isStaffScreen } = await import('./adminApi');
     const staff = isStaffScreen();
     let staffFoods = [];
@@ -92,7 +92,7 @@ export const analyticsService = {
       } catch (e) {}
     }
     const [allOrdersRaw, allTablesRaw, foodRes, usersRes] = await Promise.all([
-      orderService.getAllOrders(true).catch(() => []),
+      orderService.getAllOrders(true, options).catch(() => []),
       tableService.getTables().catch(() => []),
       staff ? Promise.resolve({ data: staffFoods }) : api.get('/foods/').catch(() => ({ data: [] })),
       staff ? Promise.resolve({ data: [] }) : api.get('/users/users/').catch(() => ({ data: [] }))
@@ -107,6 +107,12 @@ export const analyticsService = {
     const curMonth = now.getMonth();
     const curYear = now.getFullYear();
 
+    const getOrderNetRevenue = (o) => {
+      const gross = getOrderAmount(o);
+      const refunded = parseSafeAmount(o.refunded_amount || o.refundedAmount || 0);
+      return Math.max(0, gross - refunded);
+    };
+
     // Helper: Valid, non-failed, non-cancelled orders
     const validOrders = allOrders.filter(o => {
       const payStatus = (o.payment_status || o.paymentStatus || '').toUpperCase();
@@ -116,23 +122,23 @@ export const analyticsService = {
 
     // Summary calculations
     const todayOrders = validOrders.filter(o => getOrderDate(o).toDateString() === todayStr);
-    const todayRevenue = todayOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
+    const todayRevenue = todayOrders.reduce((sum, o) => sum + getOrderNetRevenue(o), 0);
 
     const monthlyOrders = validOrders.filter(o => {
       const d = getOrderDate(o);
       return d.getMonth() === curMonth && d.getFullYear() === curYear;
     });
-    const monthlyRevenue = monthlyOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
+    const monthlyRevenue = monthlyOrders.reduce((sum, o) => sum + getOrderNetRevenue(o), 0);
 
     const curQuarter = Math.floor(now.getMonth() / 3);
     const quarterlyOrders = validOrders.filter(o => {
       const d = getOrderDate(o);
       return Math.floor(d.getMonth() / 3) === curQuarter && d.getFullYear() === curYear;
     });
-    const quarterlyRevenue = quarterlyOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
+    const quarterlyRevenue = quarterlyOrders.reduce((sum, o) => sum + getOrderNetRevenue(o), 0);
 
     const yearlyOrders = validOrders.filter(o => getOrderDate(o).getFullYear() === curYear);
-    const yearlyRevenue = yearlyOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
+    const yearlyRevenue = yearlyOrders.reduce((sum, o) => sum + getOrderNetRevenue(o), 0);
 
     // Pending orders: exactly matching Pending tab in /admin/orders and New Tickets in Kitchen
     const isPendingStatus = (st) => {
@@ -154,7 +160,7 @@ export const analyticsService = {
       return s === 'available' || t.isAvailable === true || t.is_available === true;
     }).length;
 
-    const totalRevenue = validOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
+    const totalRevenue = validOrders.reduce((sum, o) => sum + getOrderNetRevenue(o), 0);
 
     const summary = {
       totalRevenue: Math.round(totalRevenue),
@@ -331,12 +337,12 @@ export const analyticsService = {
       };
     });
 
-    // Business Performance metrics synchronized with live orders today
-    const customersCount = todayOrders.length > 0
-      ? new Set(todayOrders.map(o => o.user).filter(Boolean)).size || todayOrders.length
+    // Business Performance metrics synchronized with the qualifying orders in range
+    const customersCount = validOrders.length > 0
+      ? new Set(validOrders.map(o => o.user || o.customerPhone || o.customer_phone || o.phone || o.placedById || o.id).filter(Boolean)).size || validOrders.length
       : 0;
-    const ordersCount = todayOrders.length;
-    const avgOrderValue = ordersCount > 0 ? Math.round(todayRevenue / ordersCount) : 0;
+    const ordersCount = validOrders.length;
+    const avgOrderValue = ordersCount > 0 ? Math.round(totalRevenue / ordersCount) : 0;
 
     const businessStats = {
       customersCount,

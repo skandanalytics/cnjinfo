@@ -158,7 +158,7 @@ def process_webhook(raw_body, signature, event_id_header=""):
     return {"ignored": True}
 
 
-def _apply_capture(payment, razorpay_payment_id, signature, event_id, event_type, payload, provider_amount=None):
+def _apply_capture(payment, razorpay_payment_id, signature, event_id, event_type, payload, provider_amount=None, method=None):
     payment = Payment.objects.select_for_update().get(pk=payment.pk)
     order = _lock_order(payment.order_id)
     if PaymentEvent.objects.filter(event_id=event_id).exists():
@@ -180,6 +180,10 @@ def _apply_capture(payment, razorpay_payment_id, signature, event_id, event_type
     payment.razorpay_payment_id = razorpay_payment_id or payment.razorpay_payment_id
     payment.razorpay_signature = signature or ""
     payment.status = Payment.Status.SUCCESS
+    if method:
+        payment.method = method
+    elif payment.method not in (Payment.Method.RAZORPAY_UPI, Payment.Method.RAZORPAY_CARD):
+        payment.method = Payment.Method.RAZORPAY
     payment.paid_at = payment.paid_at or timezone.now()
     payment.failure_reason = ""
     try:
@@ -189,6 +193,27 @@ def _apply_capture(payment, razorpay_payment_id, signature, event_id, event_type
         raise PaymentError("This order is already paid.", "already_paid", 409)
     order.payment_status = Order.PaymentStatus.PAID
     order.save(update_fields=["payment_status", "updated_at"])
+
+    # If this order has continuations or is part of a continuation group, mark related orders as PAID as well
+    root = order.parent_order if order.parent_order_id else order
+    related_orders = [root] + list(root.continuations.exclude(pk=order.pk))
+    for rel in related_orders:
+        if rel.pk != order.pk and rel.payment_status != Order.PaymentStatus.PAID:
+            rel.payment_status = Order.PaymentStatus.PAID
+            rel.save(update_fields=["payment_status", "updated_at"])
+            Payment.objects.get_or_create(
+                order=rel,
+                defaults={
+                    "method": payment.method,
+                    "amount": rel.total_amount,
+                    "status": Payment.Status.SUCCESS,
+                    "recorded_by": payment.recorded_by,
+                    "paid_at": timezone.now(),
+                    "razorpay_order_id": payment.razorpay_order_id,
+                    "razorpay_payment_id": payment.razorpay_payment_id,
+                }
+            )
+
     _remember(event_id, event_type, payload, payment)
     return payment
 
@@ -230,12 +255,14 @@ def _remember(event_id, event_type, payload, payment):
 
 
 @transaction.atomic
-def record_counter(staff_user, order_id, amount=None):
+def record_counter(staff_user, order_id, amount=None, method=None):
     from apps.accounts.scoping import can_access_branch
     from apps.accounts.permissions import sees_every_order
     order = Order.objects.select_for_update().filter(pk=order_id).first()
     if order is None or not can_access_branch(staff_user, order.branch_id):
         raise PaymentError("Not found.", "not_found", 404)
+    if amount is not None and Decimal(amount) != order.total_amount:
+        raise PaymentError("The amount must equal the order total.", "amount_mismatch")
     from apps.accounts.models import Employee
     from apps.accounts.staff_catalog import parse_bill_access
     cashier = Employee.objects.filter(user=staff_user, role=Employee.Role.CASHIER).first()
@@ -250,12 +277,11 @@ def record_counter(staff_user, order_id, amount=None):
         raise PaymentError("This order is cancelled.", "order_cancelled", 409)
     if _already_paid(order):
         raise PaymentError("This order is already paid.", "already_paid", 409)
-    if amount is not None and Decimal(amount) != order.total_amount:
-        raise PaymentError("The amount must equal the order total.", "amount_mismatch")
     try:
+        cash_method = Payment.Method.CASH if str(method or "").upper() == "CASH" else Payment.Method.COUNTER
         with transaction.atomic():
             payment = Payment.objects.create(
-                order=order, method=Payment.Method.COUNTER, amount=order.total_amount,
+                order=order, method=cash_method, amount=order.total_amount,
                 status=Payment.Status.SUCCESS, recorded_by=staff_user, paid_at=timezone.now(),
             )
     except IntegrityError:
@@ -273,7 +299,7 @@ def record_counter(staff_user, order_id, amount=None):
             Payment.objects.get_or_create(
                 order=rel,
                 defaults={
-                    "method": Payment.Method.COUNTER,
+                    "method": cash_method,
                     "amount": rel.total_amount,
                     "status": Payment.Status.SUCCESS,
                     "recorded_by": staff_user,

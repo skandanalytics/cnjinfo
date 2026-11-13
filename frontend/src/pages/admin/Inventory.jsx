@@ -49,6 +49,9 @@ export const Inventory = () => {
   const [validationError, setValidationError] = useState('');
   const [saveLoading, setSaveLoading] = useState(false);
 
+  const isFetchingRef = React.useRef(false);
+  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_selected_branch') || '') : '');
+
   useEffect(() => {
     const s = getInitialStatus();
     setStockStatusFilter(s);
@@ -66,6 +69,8 @@ export const Inventory = () => {
   };
 
   const fetchInventory = async (showLoading = true) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     if (showLoading) setLoading(true);
     try {
       const [menuData, stockData] = await Promise.all([
@@ -76,8 +81,10 @@ export const Inventory = () => {
       setStockItems(stockData || []);
     } catch (e) {
       console.error("Error loading inventory:", e);
+    } finally {
+      if (showLoading) setLoading(false);
+      isFetchingRef.current = false;
     }
-    if (showLoading) setLoading(false);
   };
 
   const fetchInventorySilently = async () => {
@@ -110,7 +117,10 @@ export const Inventory = () => {
       }
     };
 
-    const handleBranchSync = () => {
+    const handleBranchSync = (e) => {
+      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_selected_branch') ?? '');
+      if (lastBranchRef.current === nextBranch) return;
+      lastBranchRef.current = nextBranch;
       fetchInventory(true);
     };
     window.addEventListener('foodie_branch_selected', handleBranchSync);
@@ -252,7 +262,6 @@ export const Inventory = () => {
       {loading || branchesLoading ? (
         <div className="py-5 text-center">
           <Loader />
-          <p className="text-muted small mt-2">Loading inventory data...</p>
         </div>
       ) : !hasBranches ? (
         <>

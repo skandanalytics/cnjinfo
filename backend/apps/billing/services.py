@@ -30,21 +30,56 @@ def breakdown(order):
     placed = local_created.strftime("%d %b %Y, %I:%M %p") if local_created else ""
     contact = _invoice_contact(root)
 
-    items = []
+    items_raw = []
     for ord_obj in all_orders:
-        ord_display = ord_obj.display_number
         for item in ord_obj.items.all():
-            items.append({
+            items_raw.append({
                 "id": item.id,
                 "order_id": ord_obj.id,
-                "order_display_number": ord_display,
                 "name": item.food_name,
                 "quantity": item.quantity,
-                "unit_price": str(item.unit_price),
-                "line_total": str(item.line_total),
+                "unit_price": item.unit_price,
+                "line_total": item.line_total,
                 "customizations": item.customizations or [],
                 "special_instructions": item.special_instructions or "",
             })
+
+    # Combine identical items across parent & suborders:
+    # Combine only when dish name, customizations, and unit_price are identical.
+    # Keep differing customizations/variants as separate line items.
+    combined_items_map = {}
+    for it in items_raw:
+        opts = []
+        for o in (it.get("customizations") or []):
+            if isinstance(o, dict):
+                opts.append(f"{str(o.get('name', '')).strip().lower()}:{str(o.get('extra_price', 0))}")
+            elif isinstance(o, str):
+                opts.append(o.strip().lower())
+        opts.sort()
+        opts_key = "|".join(opts)
+        inst_key = str(it.get("special_instructions") or "").strip().lower()
+        key = (it["name"].strip().lower(), str(it["unit_price"]), opts_key, inst_key)
+
+        if key in combined_items_map:
+            existing = combined_items_map[key]
+            existing["quantity"] += it["quantity"]
+            existing["line_total"] = Decimal(str(existing["line_total"])) + Decimal(str(it["line_total"]))
+        else:
+            combined_items_map[key] = {
+                "id": it["id"],
+                "order_id": root.id,
+                "name": it["name"],
+                "quantity": it["quantity"],
+                "unit_price": str(it["unit_price"]),
+                "line_total": it["line_total"],
+                "customizations": it["customizations"],
+                "special_instructions": it["special_instructions"],
+            }
+
+    items = []
+    for it in combined_items_map.values():
+        it["line_total"] = str(it["line_total"])
+        items.append(it)
 
     total_subtotal = sum((o.items_subtotal for o in all_orders), Decimal("0.00"))
     total_customization = sum((o.customization_total for o in all_orders), Decimal("0.00"))

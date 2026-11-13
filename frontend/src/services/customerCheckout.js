@@ -7,10 +7,20 @@ import {
 
 const CHECKOUT_KEY = 'foodie_checkout_key';
 
-const PAYMENT_METHODS = { COD: 'COUNTER', COUNTER: 'COUNTER', CARD: 'CARD', UPI: 'UPI' };
+const PAYMENT_METHODS = { 
+  COD: 'CASH', 
+  COUNTER: 'CASH', 
+  CASH: 'CASH',
+  CARD: 'RAZORPAY_CARD', 
+  RAZORPAY_CARD: 'RAZORPAY_CARD',
+  UPI: 'RAZORPAY_UPI', 
+  RAZORPAY_UPI: 'RAZORPAY_UPI',
+  RAZORPAY: 'RAZORPAY' 
+};
 
 export function toApiPaymentMethod(method) {
-  return PAYMENT_METHODS[String(method || '').toUpperCase()] || 'COUNTER';
+  const norm = String(method || '').toUpperCase();
+  return PAYMENT_METHODS[norm] || 'RAZORPAY_UPI';
 }
 
 export function checkoutErrorMessage(err, fallback = 'Could not place the order.') {
@@ -222,12 +232,13 @@ export async function fetchCustomerOrder(orderId) {
 
 let razorpayScript = null;
 
-function loadRazorpay() {
+export function loadRazorpay() {
   if (window.Razorpay) return Promise.resolve();
   if (!razorpayScript) {
     razorpayScript = new Promise((resolve, reject) => {
       const script = document.createElement('script');
       script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.async = true;
       script.onload = () => resolve();
       script.onerror = () => {
         razorpayScript = null;
@@ -239,10 +250,196 @@ function loadRazorpay() {
   return razorpayScript;
 }
 
+/**
+ * Creates a Razorpay order via POST /api/create-order
+ * @param {Object} options
+ * @param {number|string} options.amount Amount (in paise or rupees with decimal)
+ * @param {string} [options.currency='INR'] 3-letter currency code
+ * @param {number|string} [options.orderId] Associated Foodie Order ID
+ * @param {string} [options.receipt] Optional receipt reference
+ * @param {Object} [options.notes] Optional metadata notes
+ * @returns {Promise<{ order_id: string, amount: number, currency: string, key_id: string }>}
+ */
+export async function createRazorpayOrder({ amount, currency = 'INR', orderId = null, receipt = null, notes = {}, paymentMethod = 'RAZORPAY' }) {
+  const payload = {
+    amount,
+    currency,
+    ...(orderId ? { order_id: orderId } : {}),
+    ...(receipt ? { receipt } : {}),
+    payment_method: paymentMethod,
+    notes,
+  };
+  const res = await api.post('/create-order/', payload);
+  return res.data;
+}
+
+/**
+ * Verifies Razorpay payment signature via POST /api/verify-payment
+ * @param {Object} data
+ * @param {string} data.razorpay_order_id
+ * @param {string} data.razorpay_payment_id
+ * @param {string} data.razorpay_signature
+ * @param {string} [data.payment_method]
+ * @returns {Promise<{ status: string, success: boolean, message: string }>}
+ */
+export async function verifyRazorpayPayment({ razorpay_order_id, razorpay_payment_id, razorpay_signature, payment_method = '' }) {
+  const payload = {
+    razorpay_order_id,
+    razorpay_payment_id,
+    razorpay_signature,
+    ...(payment_method ? { payment_method } : {}),
+  };
+  try {
+    const res = await api.post('/verify-payment/', payload);
+    return res.data;
+  } catch (err) {
+    // Fallback to legacy endpoint if available
+    const res = await api.post('/payments/verify/', payload);
+    return res.data;
+  }
+}
+
+/**
+ * Polls order payment status from real-time endpoint
+ */
+export async function checkOrderPaymentStatus(orderId) {
+  try {
+    const res = await api.get(`/orders/${orderId}/payment-status/`);
+    return res.data;
+  } catch (e) {
+    const res = await api.get(`/orders/${orderId}/`);
+    const ord = res.data;
+    const isPaid = (ord.payment_status === 'PAID' || ord.paymentStatus === 'PAID');
+    return {
+      order_id: ord.id,
+      is_paid: isPaid,
+      payment_status: ord.payment_status || ord.paymentStatus,
+      payment_method: ord.payment_method,
+    };
+  }
+}
+
+/**
+ * Universal Razorpay Standard Web Checkout launcher
+ * Handles script injection, order creation, modal invocation, dismissal, failure, and signature verification.
+ */
+export async function startRazorpayStandardCheckout({
+  amount,
+  currency = 'INR',
+  orderId = null,
+  orderNumber = null,
+  receipt = null,
+  notes = {},
+  paymentMethod = 'RAZORPAY',
+  customer = null,
+  onSuccess,
+  onFailure,
+  onDismiss,
+}) {
+  try {
+    await loadRazorpay();
+  } catch (err) {
+    const failRes = { status: 'FAILED', message: err.message };
+    if (onFailure) onFailure(failRes);
+    return failRes;
+  }
+
+  let orderData;
+  try {
+    orderData = await createRazorpayOrder({ amount, currency, orderId, receipt, notes, paymentMethod });
+  } catch (err) {
+    const failRes = { status: 'FAILED', message: checkoutErrorMessage(err, 'Could not initiate online payment.') };
+    if (onFailure) onFailure(failRes);
+    return failRes;
+  }
+
+  return new Promise((resolve) => {
+    let lastFailure = null;
+    let settled = false;
+
+    const finish = (result) => {
+      if (!settled) {
+        settled = true;
+        if (result.status === 'PAID' && onSuccess) onSuccess(result);
+        else if (result.status === 'CANCELLED' && onDismiss) onDismiss(result);
+        else if (result.status === 'FAILED' && onFailure) onFailure(result);
+        resolve(result);
+      }
+    };
+
+    const prefillData = {
+      name: customer?.name || '',
+      contact: customer?.phone || customer?.mobile || '',
+      email: customer?.email || '',
+    };
+
+    // Set method prefill based on selected option
+    const normMethod = String(paymentMethod || '').toUpperCase();
+    if (normMethod.includes('UPI')) {
+      prefillData.method = 'upi';
+    } else if (normMethod.includes('CARD')) {
+      prefillData.method = 'card';
+    }
+
+    const options = {
+      key: orderData.key_id,
+      order_id: orderData.order_id,
+      amount: orderData.amount,
+      currency: orderData.currency || 'INR',
+      name: 'Foodie',
+      description: orderNumber ? `Order #${orderNumber}` : (orderId ? `Order #${orderId}` : 'Foodie Order'),
+      prefill: prefillData,
+      theme: {
+        color: '#F20D2D',
+      },
+      handler: async (resp) => {
+        try {
+          const verifyResult = await verifyRazorpayPayment({
+            razorpay_order_id: resp.razorpay_order_id,
+            razorpay_payment_id: resp.razorpay_payment_id,
+            razorpay_signature: resp.razorpay_signature,
+            payment_method: normMethod || 'RAZORPAY',
+          });
+          finish({ status: 'PAID', verification: verifyResult, paymentId: resp.razorpay_payment_id });
+        } catch (err) {
+          finish({ status: 'FAILED', message: checkoutErrorMessage(err, 'The payment could not be verified.') });
+        }
+      },
+      modal: {
+        ondismiss: () => finish(lastFailure
+          ? { status: 'FAILED', message: lastFailure }
+          : { status: 'CANCELLED', message: 'Payment was cancelled. Your order is saved; you can pay again.' }),
+      },
+    };
+
+    const checkout = new window.Razorpay(options);
+    checkout.on('payment.failed', (resp) => {
+      lastFailure = resp?.error?.description || 'The payment failed.';
+    });
+    checkout.open();
+  });
+}
+
 // Starts a Razorpay payment for an existing order. The order is only marked paid by the server after it
 // verifies the signature; the result here just tells the UI what happened.
 // Resolves to { status: 'PAID' | 'FAILED' | 'CANCELLED', message? }.
 export async function payOrderOnline(order, method, customer) {
+  const orderAmountPaise = Math.round(Number(order.total_amount || order.total || 0) * 100);
+
+  // Attempt using standard checkout flow if order total is available
+  if (orderAmountPaise >= 100) {
+    return startRazorpayStandardCheckout({
+      amount: orderAmountPaise,
+      currency: 'INR',
+      orderId: order.id,
+      orderNumber: order.order_number || order.orderNumber || order.id,
+      notes: { order_id: String(order.id) },
+      paymentMethod: method,
+      customer,
+    });
+  }
+
+  // Fallback to legacy start endpoint if amount could not be computed
   let start;
   try {
     start = (await api.post(`/orders/${order.id}/pay/`, { method: toApiPaymentMethod(method) })).data;
@@ -265,15 +462,22 @@ export async function payOrderOnline(order, method, customer) {
     };
     const checkout = new window.Razorpay({
       key: start.key_id,
-      order_id: start.razorpay_order_id,
+      order_id: start.order_id || start.razorpay_order_id,
       amount: Math.round(Number(start.amount) * 100),
       currency: start.currency || 'INR',
       name: 'Foodie',
       description: `Order ${order.order_number || order.id}`,
-      prefill: { name: customer?.name || '', contact: customer?.phone || '' },
+      prefill: {
+        name: customer?.name || '',
+        contact: customer?.phone || customer?.mobile || '',
+        email: customer?.email || '',
+      },
+      theme: {
+        color: '#F20D2D',
+      },
       handler: async (resp) => {
         try {
-          await api.post('/payments/verify/', {
+          await verifyRazorpayPayment({
             razorpay_order_id: resp.razorpay_order_id,
             razorpay_payment_id: resp.razorpay_payment_id,
             razorpay_signature: resp.razorpay_signature,

@@ -338,25 +338,6 @@ export const EmployeeDashboard = () => {
                           Payment: <strong className="text-dark">{ord.payment_status || 'UNPAID'}</strong>
                         </span>
                         <div className="d-flex align-items-center gap-2 ms-auto">
-                          {(!ord.status || String(ord.status).toLowerCase() === 'pending' || String(ord.status).toLowerCase() === 'placed' || String(ord.status).toLowerCase() === 'new') && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isRejecting(ord.id)}
-                              loading={isRejecting(ord.id)}
-                              onClick={() => {
-                                const reason = window.prompt('Enter a reason for cancelling this order.');
-                                if (!reason || !reason.trim()) return;
-                                if (window.confirm("Are you sure you want to reject this order?")) {
-                                  handleOrderAction(ord.id, 'Cancelled', reason.trim());
-                                }
-                              }}
-                              className="py-1 px-2.5 fw-bold rounded-pill"
-                              style={{ fontSize: '11.5px' }}
-                            >
-                              Reject
-                            </Button>
-                          )}
                           {action && (
                             <Button
                               size="sm"

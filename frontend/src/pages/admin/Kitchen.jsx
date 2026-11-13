@@ -9,6 +9,7 @@ import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
 import { FiUser, FiShoppingBag, FiClock, FiFileText, FiCheck, FiRefreshCw, FiChevronLeft } from 'react-icons/fi';
 import EBillModal from '../../components/orders/EBillModal';
+import OrderRejectionModal from '../../components/orders/OrderRejectionModal';
 import Toast from '../../components/common/Toast';
 import { tableService } from '../../services/tableService';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
@@ -63,16 +64,26 @@ export const Kitchen = () => {
     setClearingTableId(ord.id);
     try {
       await tableService.cleanTable(targetId);
-      setClearedOrderIds(prev => new Set(prev).add(ord.id));
+      const rootId = ord.parent_order_id || ord.parent_order || ord.id;
+      setClearedOrderIds(prev => {
+        const next = new Set(prev);
+        next.add(ord.id);
+        if (rootId) next.add(rootId);
+        return next;
+      });
       const updatedTables = await tableService.getTables().catch(() => []);
       setTables(Array.isArray(updatedTables) ? updatedTables : []);
       const label = foundTable?.table_number || foundTable?.number || canonNum || 'assigned';
       setToast({ show: true, message: `Table ${label} cleared and marked Available!`, type: 'add' });
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: ord.id } }));
+      localStorage.setItem('foodie_orders_sync_trigger', Date.now().toString());
     } catch (err) {
       console.error('Failed to clean table:', err);
       await tableService.updateTableStatus(targetId, 'Available').catch(() => {});
       setClearedOrderIds(prev => new Set(prev).add(ord.id));
       setToast({ show: true, message: `Table marked Available.`, type: 'add' });
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: ord.id } }));
+      localStorage.setItem('foodie_orders_sync_trigger', Date.now().toString());
     } finally {
       setClearingTableId(null);
     }
@@ -80,7 +91,58 @@ export const Kitchen = () => {
 
   const isTableCleared = (ord) => {
     if (!ord) return false;
-    return clearedOrderIds.has(ord.id) || Boolean(ord.table_cleared) || Boolean(ord.is_table_cleared);
+    const rawVal = ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? (ord.table?.number || ord.table?.table_number || ord.table?.id) : ord.table);
+    const canonNum = tableService.getCanonicalTableNumber(rawVal || '');
+    const ordTableId = ord.table_id || ord.tableId || (typeof ord.table === 'object' ? ord.table?.id : null);
+
+    const foundTable = tables.find(t => {
+      if (ordTableId && String(t.id) === String(ordTableId)) return true;
+      const tNum = tableService.getCanonicalTableNumber(t.table_number || t.number || t.id || '');
+      return canonNum && tNum && canonNum === tNum;
+    });
+
+    if (!foundTable) {
+      return clearedOrderIds.has(ord.id) || Boolean(ord.table_cleared) || Boolean(ord.is_table_cleared);
+    }
+
+    const isAvailableInDb = foundTable.status === 'AVAILABLE' || foundTable.status === 'Available';
+    if (isAvailableInDb) {
+      return true;
+    }
+
+    // If table is OCCUPIED, check if this order belongs to the CURRENT occupying session
+    const activeSessionRootId = foundTable.active_order_id;
+    const ordRootId = ord.parent_order_id || ord.parent_order || ord.id;
+    if (activeSessionRootId && ordRootId && String(activeSessionRootId) !== String(ordRootId)) {
+      // Order belongs to a past completed session that was already cleared and replaced by a new session
+      return true;
+    }
+
+    return clearedOrderIds.has(ord.id) || (ordRootId && clearedOrderIds.has(ordRootId)) || Boolean(ord.table_cleared) || Boolean(ord.is_table_cleared);
+  };
+
+  const isTableReadyForCleaning = (ord) => {
+    if (!ord) return false;
+    const rawVal = ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? (ord.table?.number || ord.table?.table_number || ord.table?.id) : ord.table);
+    const canonNum = tableService.getCanonicalTableNumber(rawVal || '');
+    const ordTableId = ord.table_id || ord.tableId || (typeof ord.table === 'object' ? ord.table?.id : null);
+
+    // If any active order for the same table in the entire queue is still PENDING, PREPARING, or READY:
+    const hasIncompleteOrder = activeBranchFilteredOrders.some(o => {
+      if (!o || o.id === ord.id) return false;
+      const oRawVal = o.tableNumber || o.table_label || (typeof o.table === 'object' ? (o.table?.number || o.table?.table_number || o.table?.id) : o.table);
+      const oCanonNum = tableService.getCanonicalTableNumber(oRawVal || '');
+      const oTableId = o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : null);
+
+      const isSameTable = (ordTableId && oTableId && String(ordTableId) === String(oTableId)) ||
+                          (canonNum && oCanonNum && canonNum === oCanonNum);
+      if (!isSameTable) return false;
+
+      const st = String(o.status || '').toUpperCase();
+      return st === 'PENDING' || st === 'PREPARING' || st === 'READY' || st === 'NEW';
+    });
+
+    return !hasIncompleteOrder;
   };
   const headerRef = useRef(null);
   const [gridHeight, setGridHeight] = useState(null);
@@ -120,6 +182,7 @@ export const Kitchen = () => {
   // Determine initial branch from user's assigned branch or fallback to main branch
   const userAssignedBranch = user?.branchId || user?.restaurant || user?.restaurant_id || null;
   const isBranchRestricted = Boolean(user?.role === 'employee' && userAssignedBranch);
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin' || user?.role === 'owner';
   const [selectedBranch, setSelectedBranch] = useState(() => {
     if (userAssignedBranch) return String(userAssignedBranch);
     try {
@@ -219,22 +282,29 @@ export const Kitchen = () => {
     }
   };
 
-  const handleReject = async (id) => {
-    if (updatingId != null && String(updatingId) === String(id)) return;
-    const reason = window.prompt('Enter a reason for cancelling this order.');
-    if (!reason || !reason.trim()) return;
-    if (window.confirm("Are you sure you want to reject this order?")) {
-      setUpdatingId(id);
-      setUpdatingAction('reject');
-      setActionError('');
-      try {
-        await updateStatus(id, 'Cancelled', reason.trim());
-      } catch (e) {
-        setActionError(e.message || 'The order could not be cancelled.');
-      } finally {
-        setUpdatingId(null);
-        setUpdatingAction(null);
-      }
+  const [rejectionTargetOrder, setRejectionTargetOrder] = useState(null);
+  const [rejectionLoading, setRejectionLoading] = useState(false);
+  const [rejectionError, setRejectionError] = useState('');
+
+  const handleOpenRejectModal = (ord) => {
+    setRejectionError('');
+    setRejectionTargetOrder(ord);
+  };
+
+  const handleConfirmKitchenRejection = async ({ scope, reason }) => {
+    if (!rejectionTargetOrder) return;
+    setRejectionLoading(true);
+    setRejectionError('');
+    try {
+      const { rejectOrder } = await import('../../services/adminApi');
+      await rejectOrder(rejectionTargetOrder.id, { scope, reason });
+      setRejectionTargetOrder(null);
+      if (fetchOrders) await fetchOrders();
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
+    } catch (e) {
+      setRejectionError(e?.response?.data?.detail || e?.message || 'The order could not be cancelled.');
+    } finally {
+      setRejectionLoading(false);
     }
   };
 
@@ -315,11 +385,8 @@ export const Kitchen = () => {
 
   const isPending = (st) => {
     const s = String(st || '').toLowerCase().trim();
-    if (!s) return true;
-    if (s === 'cancelled' || s === 'canceled' || s === 'preparing' || s === 'cooking' || s === 'accepted' || s === 'in_kitchen' || s === 'ready' || s === 'out_for_delivery' || s === 'prepared' || s === 'ready_for_pickup' || s === 'completed' || s === 'serving' || s === 'served' || s === 'delivered' || s === 'done' || s === 'settled') {
-      return false;
-    }
-    return true;
+    if (!s) return false;
+    return s === 'pending' || s === 'placed' || s === 'new' || s === 'created' || s === 'confirmed';
   };
 
   const isPreparing = (st) => {
@@ -405,7 +472,13 @@ export const Kitchen = () => {
     return (totalMatches && itemsMatch);
   };
 
-  const allKitchenOrders = (orders || []).filter((ord) => ord && (ord.id || ord.order_id));
+  const allKitchenOrders = (orders || []).filter((ord) => {
+    if (!ord || (!ord.id && !ord.order_id)) return false;
+    const st = String(ord.status || '').toLowerCase().trim();
+    if (st === 'cancelled' || st === 'canceled' || st === 'rejected') return false;
+    if (getTicketItems(ord).length === 0) return false;
+    return true;
+  });
   // Branch and backend-driven filtering (NEVER filter by customer user_id)
   const activeBranchFilteredOrders = allKitchenOrders.filter((ord) => {
     if (!ord || (!ord.id && !ord.order_id)) return false;
@@ -556,16 +629,40 @@ export const Kitchen = () => {
 
                           {/* Items List */}
                           <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
-                            {itemsList.map((i, idx) => (
-                              <div key={idx} className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
-                                <span className="text-dark fw-medium">
-                                  {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
-                                </span>
-                                <span className="fw-bold text-dark">
-                                  ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
-                                </span>
-                              </div>
-                            ))}
+                            {itemsList.map((i, idx) => {
+                              const extras = getCustomizationsList(i);
+                              const instructions = getInstructions(i);
+                              return (
+                                <div key={idx} className="py-1 border-bottom" style={{ borderColor: '#F8FAFC' }}>
+                                  <div className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
+                                    <span className="text-dark fw-medium">
+                                      {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
+                                    </span>
+                                    <span className="fw-bold text-dark">
+                                      ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
+                                    </span>
+                                  </div>
+                                  {extras.length > 0 && (
+                                    <div className="d-flex flex-wrap gap-1 mt-1">
+                                      {extras.map((extra, eIdx) => (
+                                        <span
+                                          key={eIdx}
+                                          className="badge bg-light text-secondary border fw-normal text-wrap text-start"
+                                          style={{ fontSize: '10.5px', maxWidth: '100%', wordBreak: 'break-word', borderColor: '#E2E8F0', padding: '2px 6px' }}
+                                        >
+                                          + {extra}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {instructions && (
+                                    <div className="text-muted fst-italic mt-0.5" style={{ fontSize: '10.5px' }}>
+                                      Note: {instructions}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {/* Special Instructions Note Box */}
@@ -578,15 +675,17 @@ export const Kitchen = () => {
 
                           {/* Action Buttons */}
                           <div className="d-flex align-items-center justify-content-between gap-2 pt-3 mt-1">
-                            <button
-                              type="button"
-                              onClick={() => handleReject(ord.id)}
-                              disabled={isRejecting(ord.id)}
-                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs"
-                              style={{ borderColor: '#F20D2D', color: '#F20D2D', border: '1px solid #F20D2D', fontSize: '12px' }}
-                            >
-                              Reject
-                            </button>
+                            {isAdmin && (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRejectModal(ord)}
+                                disabled={rejectionLoading}
+                                className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs"
+                                style={{ borderColor: '#F20D2D', color: '#F20D2D', border: '1px solid #F20D2D', fontSize: '12px' }}
+                              >
+                                Reject
+                              </button>
+                            )}
 
                             <button
                               type="button"
@@ -658,16 +757,40 @@ export const Kitchen = () => {
                           </div>
 
                           <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
-                            {itemsList.map((i, idx) => (
-                              <div key={idx} className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
-                                <span className="text-dark fw-medium">
-                                  {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
-                                </span>
-                                <span className="fw-bold text-dark">
-                                  ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
-                                </span>
-                              </div>
-                            ))}
+                            {itemsList.map((i, idx) => {
+                              const extras = getCustomizationsList(i);
+                              const instructions = getInstructions(i);
+                              return (
+                                <div key={idx} className="py-1 border-bottom" style={{ borderColor: '#F8FAFC' }}>
+                                  <div className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
+                                    <span className="text-dark fw-medium">
+                                      {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
+                                    </span>
+                                    <span className="fw-bold text-dark">
+                                      ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
+                                    </span>
+                                  </div>
+                                  {extras.length > 0 && (
+                                    <div className="d-flex flex-wrap gap-1 mt-1">
+                                      {extras.map((extra, eIdx) => (
+                                        <span
+                                          key={eIdx}
+                                          className="badge bg-light text-secondary border fw-normal text-wrap text-start"
+                                          style={{ fontSize: '10.5px', maxWidth: '100%', wordBreak: 'break-word', borderColor: '#E2E8F0', padding: '2px 6px' }}
+                                        >
+                                          + {extra}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {instructions && (
+                                    <div className="text-muted fst-italic mt-0.5" style={{ fontSize: '10.5px' }}>
+                                      Note: {instructions}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {Boolean(ord.special_instructions || ord.notes) && (
@@ -757,16 +880,40 @@ export const Kitchen = () => {
                           </div>
 
                           <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
-                            {itemsList.map((i, idx) => (
-                              <div key={idx} className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
-                                <span className="text-dark fw-medium">
-                                  {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
-                                </span>
-                                <span className="fw-bold text-dark">
-                                  ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
-                                </span>
-                              </div>
-                            ))}
+                            {itemsList.map((i, idx) => {
+                              const extras = getCustomizationsList(i);
+                              const instructions = getInstructions(i);
+                              return (
+                                <div key={idx} className="py-1 border-bottom" style={{ borderColor: '#F8FAFC' }}>
+                                  <div className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
+                                    <span className="text-dark fw-medium">
+                                      {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
+                                    </span>
+                                    <span className="fw-bold text-dark">
+                                      ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
+                                    </span>
+                                  </div>
+                                  {extras.length > 0 && (
+                                    <div className="d-flex flex-wrap gap-1 mt-1">
+                                      {extras.map((extra, eIdx) => (
+                                        <span
+                                          key={eIdx}
+                                          className="badge bg-light text-secondary border fw-normal text-wrap text-start"
+                                          style={{ fontSize: '10.5px', maxWidth: '100%', wordBreak: 'break-word', borderColor: '#E2E8F0', padding: '2px 6px' }}
+                                        >
+                                          + {extra}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {instructions && (
+                                    <div className="text-muted fst-italic mt-0.5" style={{ fontSize: '10.5px' }}>
+                                      Note: {instructions}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
 
                           {Boolean(ord.special_instructions || ord.notes) && (
@@ -858,16 +1005,40 @@ export const Kitchen = () => {
                           </div>
 
                           <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
-                            {itemsList.map((i, idx) => (
-                              <div key={idx} className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
-                                <span className="text-dark fw-medium">
-                                  {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
-                                </span>
-                                <span className="fw-bold text-dark">
-                                  ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
-                                </span>
-                              </div>
-                            ))}
+                            {itemsList.map((i, idx) => {
+                              const extras = getCustomizationsList(i);
+                              const instructions = getInstructions(i);
+                              return (
+                                <div key={idx} className="py-1 border-bottom" style={{ borderColor: '#F8FAFC' }}>
+                                  <div className="d-flex align-items-center justify-content-between small" style={{ fontSize: '12.5px' }}>
+                                    <span className="text-dark fw-medium">
+                                      {i.name || i.title || 'Dish'} <strong className="text-secondary ms-1">× {i.quantity || 1}</strong>
+                                    </span>
+                                    <span className="fw-bold text-dark">
+                                      ₹{(Number(i.line_total || i.price || 0)).toFixed(2)}
+                                    </span>
+                                  </div>
+                                  {extras.length > 0 && (
+                                    <div className="d-flex flex-wrap gap-1 mt-1">
+                                      {extras.map((extra, eIdx) => (
+                                        <span
+                                          key={eIdx}
+                                          className="badge bg-light text-secondary border fw-normal text-wrap text-start"
+                                          style={{ fontSize: '10.5px', maxWidth: '100%', wordBreak: 'break-word', borderColor: '#E2E8F0', padding: '2px 6px' }}
+                                        >
+                                          + {extra}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {instructions && (
+                                    <div className="text-muted fst-italic mt-0.5" style={{ fontSize: '10.5px' }}>
+                                      Note: {instructions}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
                           </div>
 
                           <div className="d-flex align-items-center justify-content-between pt-2 text-secondary small" style={{ fontSize: '12px' }}>
@@ -888,35 +1059,48 @@ export const Kitchen = () => {
                               View Bill
                             </button>
 
-                            {!isTakeaway && (
-                              <button
-                                type="button"
-                                onClick={() => handleCleanTable(ord)}
-                                disabled={clearingTableId === ord.id || isTableCleared(ord)}
-                                className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs transition-all ${
-                                  isTableCleared(ord)
-                                    ? 'bg-light border text-muted opacity-75'
-                                    : 'btn-success text-white'
-                                }`}
-                                style={{
-                                  backgroundColor: isTableCleared(ord) ? '#F1F5F9' : '#16A34A',
-                                  borderColor: isTableCleared(ord) ? '#CBD5E1' : '#16A34A',
-                                  color: isTableCleared(ord) ? '#64748B' : '#FFFFFF',
-                                  fontSize: '12px',
-                                  cursor: isTableCleared(ord) ? 'default' : 'pointer'
-                                }}
-                                title={isTableCleared(ord) ? "Table is already cleaned and available" : "Clear & mark table available"}
-                              >
-                                <FiCheck size={13} />
-                                <span>
-                                  {clearingTableId === ord.id
-                                    ? 'Clearing...'
-                                    : isTableCleared(ord)
-                                    ? 'Table Cleared'
-                                    : 'Table Cleaned'}
-                                </span>
-                              </button>
-                            )}
+                            {!isTakeaway && (() => {
+                              const isCleared = isTableCleared(ord);
+                              const isReadyForClean = isTableReadyForCleaning(ord);
+                              const isDisabled = clearingTableId === ord.id || isCleared || !isReadyForClean;
+                              const buttonTitle = isCleared
+                                ? "Table is already cleaned and available"
+                                : (!isReadyForClean
+                                  ? "Table cannot be cleaned until all orders for this table are Served"
+                                  : "Clear & mark table available");
+
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => handleCleanTable(ord)}
+                                  disabled={isDisabled}
+                                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs transition-all ${
+                                    isCleared
+                                      ? 'bg-light border text-muted opacity-75'
+                                      : (!isReadyForClean
+                                        ? 'btn-secondary text-white opacity-60'
+                                        : 'btn-success text-white')
+                                  }`}
+                                  style={{
+                                    backgroundColor: isCleared ? '#F1F5F9' : (!isReadyForClean ? '#94A3B8' : '#16A34A'),
+                                    borderColor: isCleared ? '#CBD5E1' : (!isReadyForClean ? '#94A3B8' : '#16A34A'),
+                                    color: isCleared ? '#64748B' : '#FFFFFF',
+                                    fontSize: '12px',
+                                    cursor: isDisabled ? 'not-allowed' : 'pointer'
+                                  }}
+                                  title={buttonTitle}
+                                >
+                                  <FiCheck size={13} />
+                                  <span>
+                                    {clearingTableId === ord.id
+                                      ? 'Clearing...'
+                                      : isCleared
+                                      ? 'Table Cleared'
+                                      : 'Table Cleaned'}
+                                  </span>
+                                </button>
+                              );
+                            })()}
                           </div>
                         </div>
                       );
@@ -934,6 +1118,20 @@ export const Kitchen = () => {
         order={eBillOrder}
         onClose={() => setEBillOrder(null)}
       />
+
+      {rejectionTargetOrder && (
+        <OrderRejectionModal
+          isOpen={Boolean(rejectionTargetOrder)}
+          onClose={() => {
+            setRejectionTargetOrder(null);
+            setRejectionError('');
+          }}
+          order={rejectionTargetOrder}
+          onConfirmReject={handleConfirmKitchenRejection}
+          loading={rejectionLoading}
+          error={rejectionError}
+        />
+      )}
 
       <Toast
         isOpen={toast.show}

@@ -164,37 +164,45 @@ class TableSerializer(BranchBoundSerializerMixin, serializers.ModelSerializer):
     def get_qr_url(self, obj):
         return qr_url(obj)
 
-    def get_has_active_order(self, obj):
+    def _find_active_or_session_order(self, obj):
         from apps.orders.models import Order
-        return Order.objects.filter(table=obj, status__in=Order.ACTIVE_STATUSES).exists()
-
-    def get_active_order_id(self, obj):
-        from apps.orders.models import Order
-        active = Order.objects.filter(
+        # 1. Any root order currently in ACTIVE_STATUSES (PENDING, PREPARING, READY, SERVED)
+        active_root = Order.objects.filter(
             table=obj,
             status__in=Order.ACTIVE_STATUSES,
             parent_order__isnull=True
         ).order_by("-id").first()
-        if active:
-            return active.id
-        any_active = Order.objects.filter(table=obj, status__in=Order.ACTIVE_STATUSES).order_by("-id").first()
+        if active_root:
+            return active_root
+
+        # 2. Any continuation order currently in ACTIVE_STATUSES -> return its root
+        any_active = Order.objects.filter(
+            table=obj,
+            status__in=Order.ACTIVE_STATUSES
+        ).order_by("-id").first()
         if any_active:
-            return any_active.parent_order_id or any_active.id
+            return any_active.parent_order or any_active
+
+        # 3. If table is OCCUPIED, find the latest session root that is not CANCELLED
+        if obj.status == DiningTable.Status.OCCUPIED:
+            latest = Order.objects.filter(
+                table=obj
+            ).exclude(status=Order.Status.CANCELLED).order_by("-id").first()
+            if latest:
+                return latest.parent_order or latest
+
         return None
+
+    def get_has_active_order(self, obj):
+        return bool(self._find_active_or_session_order(obj))
+
+    def get_active_order_id(self, obj):
+        ord_obj = self._find_active_or_session_order(obj)
+        return ord_obj.id if ord_obj else None
 
     def get_active_order(self, obj):
         from apps.orders.models import Order
-        active = Order.objects.filter(
-            table=obj,
-            status__in=Order.ACTIVE_STATUSES,
-            parent_order__isnull=True
-        ).order_by("-id").first()
-        if not active:
-            any_active = Order.objects.filter(table=obj, status__in=Order.ACTIVE_STATUSES).order_by("-id").first()
-            if any_active and any_active.parent_order_id:
-                active = any_active.parent_order
-            elif any_active:
-                active = any_active
+        active = self._find_active_or_session_order(obj)
         if not active:
             return None
         c_name = active.customer.name if active.customer and getattr(active.customer, "name", None) else ""

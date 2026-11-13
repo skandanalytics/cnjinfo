@@ -35,6 +35,24 @@ def sees_every_order(user):
     return emp is not None and emp.role in ADMIN_ROLES
 
 
+def can_confirm_refund(user):
+    """Admin and Super Admin, or Manager with explicit refund confirmation authorization."""
+    if not user or not user.is_authenticated or not user.is_active:
+        return False
+    if getattr(user, "is_superuser", False):
+        return True
+    emp = get_active_employee(user)
+    if emp is None:
+        return False
+    if emp.role in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
+        return True
+    from .staff_catalog import parse_bill_access
+    duties = parse_bill_access(emp.bill_access)
+    if emp.role == Employee.Role.MANAGER:
+        return "confirm_refund" in duties or "refund_confirmation" in duties
+    return "confirm_refund" in duties or "refund_confirmation" in duties
+
+
 class IsCustomer(BasePermission):
     def has_permission(self, request, view):
         u = request.user

@@ -10,8 +10,13 @@ export const restaurantService = {
   getRestaurants: async () => {
     const { isStaffScreen, listBranches } = await import('./adminApi');
     if (isStaffScreen()) return listBranches();
-    const res = await api.get('/branches/');
-    return res.data;
+    try {
+      const res = await api.get('/public/branches/');
+      return res.data;
+    } catch {
+      const res = await api.get('/branches/');
+      return res.data;
+    }
   },
 
   getRestaurantById: async (id) => {

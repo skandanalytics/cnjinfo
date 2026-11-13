@@ -1,5 +1,6 @@
 import { orderService } from '../services/orderService';
 import api from '../services/api';
+import { combineBillItems } from './orderNumber';
 
 /**
  * Dynamically load jsPDF so that Vite / builds do not crash if jspdf is not yet installed on other machines
@@ -27,7 +28,7 @@ const getJsPDF = async () => {
 const printHtmlInvoice = (order, backendId, payment, customer) => {
   try {
     const displayOrderNum = String(order?.display_order_number || order?.display_number || backendId || order?.id || order?.backendNumericId || 'N/A');
-    const items = Array.isArray(order.items) ? order.items : [];
+    const items = combineBillItems(Array.isArray(order.items) ? order.items : []);
     const subtotal = parseFloat(order.subtotal || 0) || items.reduce((s, i) => s + (parseFloat(i.price || 0) * (parseInt(i.quantity) || 1)), 0);
     const isTakeaway = order.orderType === 'Takeaway' || order.table === 'Takeaway' || order.packingCharge > 0 || order.packing_charge > 0;
     const totalQty = items.reduce((s, i) => s + (parseInt(i.quantity) || 1), 0) || 1;
@@ -549,7 +550,7 @@ export const generateEBillPDF = async (orderOrId) => {
     y += 8;
 
     // Items Loop
-    const items = Array.isArray(order.items) && order.items.length > 0 ? order.items : [];
+    const items = combineBillItems(Array.isArray(order.items) && order.items.length > 0 ? order.items : []);
 
     items.forEach((item, idx) => {
       const isEven = idx % 2 === 0;

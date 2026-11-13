@@ -283,7 +283,8 @@ class CartCouponView(CartBase):
         cart = services.get_cart(ident, branch)
         if cart is None:
             return Response(services.empty_cart_view(branch))
-        services.remove_coupon(cart)
+        code_param = request.query_params.get("code")
+        services.remove_coupon(cart, code=code_param)
         return self.render(request, cart)
 
 

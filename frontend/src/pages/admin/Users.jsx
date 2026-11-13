@@ -77,7 +77,6 @@ export const Users = () => {
   };
 
   const handleOpenAddModal = () => {
-    if (!hasBranches) return;
     setEditingUser(null);
     resetForm();
     setIsAddModalOpen(true);
@@ -131,10 +130,10 @@ export const Users = () => {
     };
   }, []);
 
-  // Branch-scoped employee list
+  // Branch-scoped employee list (Super Admin owner is always visible)
   const branchEmployees = useMemo(() => {
     if (!selectedBranch || selectedBranch === 'ALL') return employees;
-    return employees.filter(u => String(u.branch) === String(selectedBranch));
+    return employees.filter(u => String(u.branch) === String(selectedBranch) || u.role === 'super_admin' || u.backendRole === 'SUPER_ADMIN');
   }, [employees, selectedBranch]);
 
   // Stats calculation reflecting selected branch
@@ -328,7 +327,7 @@ export const Users = () => {
         showBackButton
         backUrl="/admin/dashboard"
         actions={
-          employees.length > 0 && hasBranches ? (
+          employees.length > 0 ? (
             <div className="d-flex align-items-center gap-3 flex-wrap">
               <SearchBar
                 placeholder="Search staff, ID, role..."
@@ -381,8 +380,6 @@ export const Users = () => {
 
       {loading ? (
         <Loader />
-      ) : !hasBranches ? (
-        <BranchRequiredState />
       ) : employees.length === 0 ? (
         /* Empty State when there are NO employees at all: Only shows the Add New Employee button */
         <div className="card border-0 shadow-sm rounded-4 p-5 bg-white text-center d-flex flex-column align-items-center justify-content-center my-4" style={{ minHeight: '420px' }}>
@@ -545,7 +542,7 @@ export const Users = () => {
                                 <FiEdit2 size={14} />
                               </button>
 
-                              {(u.role !== 'admin' || String(u.employeeId) !== String(currentUser?.employeeCode)) && (
+                              {u.role !== 'super_admin' && u.backendRole !== 'SUPER_ADMIN' && u.employeeId !== 'SKAND' && (u.role !== 'admin' || String(u.employeeId) !== String(currentUser?.employeeCode)) && (
                                 <button
                                   onClick={() => { setDeleteError(''); setPendingDelete(u); }}
                                   className="btn btn-sm btn-light rounded-circle text-danger p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
@@ -673,6 +670,7 @@ export const Users = () => {
                       <input
                         type="text"
                         required
+                        maxLength={formData.role === 'SUPER_ADMIN' ? 30 : 20}
                         className="form-control rounded-3"
                         placeholder="e.g. Rahul Sharma"
                         value={formData.name}

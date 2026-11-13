@@ -13,7 +13,7 @@
 from dataclasses import dataclass, field
 from decimal import Decimal
 
-from django.db import transaction
+from django.db import models, transaction
 from django.utils import timezone
 
 from apps.menu.pricing_helpers import money
@@ -51,14 +51,34 @@ def is_first_time(customer):
         return False  # anonymous buyers are never first-time
     if isinstance(customer, NewCustomer):
         return True
-    # A customer is first-time only if they have NO non-cancelled and non-failed orders,
-    # and NO active redemptions for a first-time coupon.
-    has_orders = Order.objects.filter(customer=customer).exclude(
-        status=Order.Status.CANCELLED
-    ).exclude(
+
+    customer_id = getattr(customer, "id", None) or getattr(customer, "pk", None)
+    if not customer_id:
+        return True
+
+    from apps.orders.models import Order
+    # Authoritative backend check:
+    # A customer qualifies as a first-time customer if they have never completed a successful paid order.
+    # An unpaid or rejected order does not count as a successful completed purchase.
+    # A fully refunded and cancelled order does not count as a retained completed purchase (restores eligibility).
+    # A partially refunded completed order still counts as a previous purchase.
+    # A completed purchase with a retained payment qualifies as a previous successful purchase.
+    orders = Order.objects.filter(customer_id=customer_id).exclude(
         payment_status=Order.PaymentStatus.FAILED
-    ).exists()
-    return not has_orders
+    ).filter(
+        models.Q(payment_status=Order.PaymentStatus.PAID) |
+        models.Q(payments__status="SUCCESS") |
+        models.Q(status=Order.Status.COMPLETED)
+    ).distinct()
+
+    for ord_obj in orders:
+        # If cancelled and fully refunded -> does not disqualify (restores eligibility)
+        if ord_obj.status == Order.Status.CANCELLED and ord_obj.refund_status == Order.RefundStatus.FULLY_REFUNDED:
+            continue
+        # Any other paid or completed order disqualifies first-time status
+        return False
+
+    return True
 
 
 def usage_count(coupon, exclude_order=None):
@@ -95,14 +115,17 @@ def ineligible_reason(coupon, branch, qualifying_amount, customer, first_time, n
         if not first_time:
             return "This coupon is only for first-time customers."
         if getattr(customer, "pk", None) is not None:
-            used = CouponRedemption.objects.filter(coupon=coupon, customer=customer).exclude(
-                order__status=Order.Status.CANCELLED
+            used = CouponRedemption.objects.filter(coupon=coupon, customer=customer)
+            if exclude_order is not None:
+                used = used.exclude(order=exclude_order)
+            # Fully refunded cancelled orders do not count as retained usage
+            retained_used = used.exclude(
+                order__status=Order.Status.CANCELLED,
+                order__refund_status=Order.RefundStatus.FULLY_REFUNDED
             ).exclude(
                 order__payment_status=Order.PaymentStatus.FAILED
             )
-            if exclude_order is not None:
-                used = used.exclude(order=exclude_order)
-            if used.exists():
+            if retained_used.exists():
                 return "You have already used this coupon."
     return None
 
@@ -117,12 +140,12 @@ def normalise_codes(codes):
     return out
 
 
-def _best_auto(coupons, branch, qualifying_amount, customer, first, now, remaining, already):
+def _best_auto(coupons, branch, qualifying_amount, customer, first, now, remaining, already, exclude_order=None):
     best = None
     for c in coupons:
         if c.pk in already:
             continue
-        if ineligible_reason(c, branch, qualifying_amount, customer, first, now) is not None:
+        if ineligible_reason(c, branch, qualifying_amount, customer, first, now, exclude_order=exclude_order) is not None:
             continue
         amount = discount_for(c, remaining)
         if amount <= 0:
@@ -132,60 +155,99 @@ def _best_auto(coupons, branch, qualifying_amount, customer, first, now, remaini
     return best
 
 
-def apply_coupons(branch, qualifying_amount, customer, codes=None, now=None, allow_auto=True):
-    """Decide which coupons apply to an order whose amount (after dish discounts) is `qualifying_amount`."""
+def apply_coupons(branch, qualifying_amount, customer, codes=None, now=None, allow_auto=True, exclude_order=None):
+    """Decide which coupons apply to an order whose amount (after dish discounts) is `qualifying_amount`.
+    Option B: Apply New User Coupon first, then calculate the second coupon on the remaining eligible subtotal.
+    """
     now = now or timezone.now()
     first = is_first_time(customer)
     out = CouponOutcome(first_time=first)
     remaining = qualifying_amount
 
-    if first:  # automatic first-time coupon: the eligible one that saves the most
-        best = _best_auto(
-            Coupon.objects.filter(branch=branch, is_first_time_auto=True, is_active=True),
-            branch, qualifying_amount, customer, first, now, qualifying_amount, set())
-        if best:
-            out.applied.append(best)
-            remaining -= best.amount
+    clean_codes = normalise_codes(codes)
+    if not clean_codes:
+        if allow_auto:
+            if first:
+                best_first = _best_auto(
+                    Coupon.objects.filter(branch=branch, is_first_time_auto=True, is_active=True),
+                    branch, qualifying_amount, customer, first, now, remaining, set(),
+                    exclude_order=exclude_order
+                )
+                if best_first:
+                    out.applied.append(best_first)
+                    remaining -= best_first.amount
 
-    codes = normalise_codes(codes)
-    if allow_auto and not codes:
-        best = _best_auto(
-            Coupon.objects.filter(branch=branch, auto_apply=True, is_active=True),
-            branch, qualifying_amount, customer, first, now, remaining,
-            {a.coupon.pk for a in out.applied})
-        if best:
-            out.applied.append(best)
-            remaining -= best.amount
-    for i, code in enumerate(codes):
-        if i >= 1:
-            out.rejected.append((code, "Only one additional coupon is allowed per order." if first
-                                 else "Only one coupon can be used per order."))
-            continue
+            best_reg = _best_auto(
+                Coupon.objects.filter(branch=branch, auto_apply=True, is_active=True),
+                branch, qualifying_amount, customer, first, now, remaining,
+                {a.coupon.pk for a in out.applied},
+                exclude_order=exclude_order
+            )
+            if best_reg:
+                out.applied.append(best_reg)
+                remaining -= best_reg.amount
+        return out
+
+    # Resolve codes to coupon objects
+    resolved_coupons = []
+    for code in clean_codes:
         coupon = Coupon.objects.filter(branch=branch, code__iexact=code).first()
         if coupon is None:
             out.rejected.append((code, "Invalid coupon code."))
-        elif any(a.coupon.pk == coupon.pk for a in out.applied):
-            out.rejected.append((code, "This coupon is already applied automatically."))
         else:
-            # Check higher-value priority rule: if a higher minimum order coupon is available/entered,
-            # lower-value coupons are disabled.
-            if coupon.min_order_value < Decimal("500") and qualifying_amount >= Decimal("500"):
-                higher_exists = Coupon.objects.filter(
-                    branch=branch, is_active=True, min_order_value__gte=Decimal("500"), min_order_value__lte=qualifying_amount
-                ).exists()
-                if higher_exists:
-                    reason = "A higher-value coupon is eligible for this order."
-                else:
-                    reason = ineligible_reason(coupon, branch, qualifying_amount, customer, first, now)
-            else:
-                reason = ineligible_reason(coupon, branch, qualifying_amount, customer, first, now)
+            resolved_coupons.append(coupon)
 
-            if reason:
-                out.rejected.append((code, reason))
-            else:
-                amount = discount_for(coupon, remaining)
-                out.applied.append(AppliedCoupon(coupon, amount))
-                remaining -= amount
+    # Separate New User coupons and regular coupons
+    new_user_coupons = [c for c in resolved_coupons if c.is_first_time_auto]
+    regular_coupons = [c for c in resolved_coupons if not c.is_first_time_auto]
+
+    if not first:
+        for c in new_user_coupons:
+            out.rejected.append((c.code, "This coupon is only for first-time customers."))
+        if len(regular_coupons) > 1:
+            for c in regular_coupons[1:]:
+                out.rejected.append((c.code, "Only one coupon can be used per order."))
+        eligible_to_apply = regular_coupons[:1]
+    else:
+        if len(new_user_coupons) > 1:
+            for c in new_user_coupons[1:]:
+                out.rejected.append((c.code, "Only one New User coupon can be applied."))
+        if len(regular_coupons) > 1:
+            for c in regular_coupons[1:]:
+                out.rejected.append((c.code, "Only one additional coupon is allowed per order."))
+
+        # If user did not manually enter a New User coupon, auto-apply the best one
+        if not new_user_coupons and allow_auto:
+            best_first = _best_auto(
+                Coupon.objects.filter(branch=branch, is_first_time_auto=True, is_active=True),
+                branch, qualifying_amount, customer, first, now, remaining, set(),
+                exclude_order=exclude_order
+            )
+            if best_first:
+                out.applied.append(best_first)
+                remaining -= best_first.amount
+
+        # Mandatory sequential calculation: New User coupon FIRST (if entered), then regular coupon
+        eligible_to_apply = []
+        if new_user_coupons:
+            eligible_to_apply.append(new_user_coupons[0])
+        if regular_coupons:
+            eligible_to_apply.append(regular_coupons[0])
+
+    for c in eligible_to_apply:
+        reason = ineligible_reason(c, branch, qualifying_amount, customer, first, now, exclude_order=exclude_order)
+        if reason:
+            out.rejected.append((c.code, reason))
+            continue
+
+        amount = discount_for(c, remaining)
+        amount = min(amount, remaining)
+        if amount > Decimal("0.00"):
+            out.applied.append(AppliedCoupon(c, amount))
+            remaining = max(Decimal("0.00"), remaining - amount)
+        else:
+            out.rejected.append((c.code, "Coupon does not provide any discount on this order."))
+
     return out
 
 

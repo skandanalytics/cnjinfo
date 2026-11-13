@@ -748,13 +748,14 @@ export const isOrderOwnedByCustomer = (ord, customerUser) => {
 };
 
 export const orderService = {
-  getAllOrders: async (includeDetails = false) => {
-    return orderService.getOrders('ALL', includeDetails);
+  getAllOrders: async (includeDetails = false, options = {}) => {
+    return orderService.getOrders('ALL', includeDetails, true, options);
   },
 
-  getOrders: async (userId, includeDetails = false, bypassCache = true) => {
+  getOrders: async (userId, includeDetails = false, bypassCache = true, options = {}) => {
     const { isStaffScreen, listOrdersForUi } = await import('./adminApi');
-    if (isStaffScreen()) return listOrdersForUi();
+    const opts = typeof userId === 'object' && userId !== null ? userId : (options || {});
+    if (isStaffScreen()) return listOrdersForUi(opts);
     const hasCustomerToken = typeof window !== 'undefined' && (sessionStorage.getItem('foodie_token_customer') || localStorage.getItem('foodie_token_customer'));
     if (!hasCustomerToken) return [];
     const isExplicitAll = userId === 'ALL' || userId === 'all' || userId === '__ALL__';

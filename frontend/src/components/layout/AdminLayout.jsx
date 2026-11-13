@@ -297,7 +297,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                       </div>
                     </div>
 
-                    <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                    <div className="d-flex flex-column gap-2.5 p-1" style={{ maxHeight: '360px', overflowY: 'auto' }}>
                       {branchFilteredNotifications.length === 0 ? (
                         <div className="text-center py-4 text-secondary small">
                           <FiBell size={28} className="text-muted mb-2 opacity-50 d-block mx-auto" />
@@ -312,25 +312,28 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                               setShowNotifDropdown(false);
                               navigate('/admin/orders');
                             }}
-                            className={`p-2.5 mb-1.5 rounded-3 border transition-all cursor-pointer ${
+                            className={`p-3 rounded-3 border transition-all cursor-pointer shadow-xs ${
                               !n.read ? 'bg-light-subtle border-danger-subtle' : 'border-light-subtle opacity-75'
                             }`}
-                            style={{ cursor: 'pointer', backgroundColor: !n.read ? 'var(--primary-subtle)' : 'transparent' }}
+                            style={{ 
+                              cursor: 'pointer', 
+                              backgroundColor: !n.read ? 'rgba(242, 13, 45, 0.04)' : '#FFFFFF'
+                            }}
                           >
-                            <div className="d-flex align-items-start gap-2">
-                              <div className={`p-1.5 rounded-circle mt-0.5 ${!n.read ? 'bg-danger-subtle text-danger' : 'bg-secondary-subtle text-secondary'}`}>
-                                <FiShoppingBag size={14} />
+                            <div className="d-flex align-items-start gap-2.5">
+                              <div className={`p-2 rounded-circle flex-shrink-0 ${!n.read ? 'bg-danger-subtle text-danger' : 'bg-secondary-subtle text-secondary'}`}>
+                                <FiShoppingBag size={15} />
                               </div>
-                              <div className="flex-grow-1" style={{ fontSize: '12px' }}>
-                                <div className={`fw-semibold ${!n.read ? 'text-dark' : 'text-secondary'}`}>
+                              <div className="flex-grow-1 min-w-0" style={{ fontSize: '12px' }}>
+                                <div className={`fw-semibold ${!n.read ? 'text-dark' : 'text-secondary'}`} style={{ lineHeight: '1.4' }}>
                                   {n.text}
                                 </div>
-                                <div className="text-muted mt-1" style={{ fontSize: '10px' }}>
+                                <div className="text-muted mt-1.5" style={{ fontSize: '10.5px' }}>
                                   {n.date ? new Date(n.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now'}
                                 </div>
                               </div>
                               {!n.read && (
-                                <span className="bg-danger rounded-circle d-inline-block mt-1" style={{ width: '6px', height: '6px' }}></span>
+                                <span className="bg-danger rounded-circle d-inline-block mt-1 flex-shrink-0" style={{ width: '7px', height: '7px' }}></span>
                               )}
                             </div>
                           </div>
@@ -365,7 +368,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                     {user?.name || (user?.role === 'admin' ? 'foodieadmin' : 'Staff')}
                   </div>
                   <div className="text-secondary" style={{ fontSize: '10px', lineHeight: '1' }}>
-                    {user?.backendRole === 'MANAGER' ? 'Manager' : (user?.role === 'admin' ? 'Admin' : 'Staff')}
+                    {user?.backendRole === 'SUPER_ADMIN' ? 'Super Admin' : (user?.backendRole === 'MANAGER' ? 'Manager' : (user?.role === 'admin' ? 'Admin' : 'Staff'))}
                   </div>
                 </div>
                 <FiChevronDown size={14} className="text-muted ms-1" />
@@ -381,15 +384,26 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                   />
                   <div 
                     className="dropdown-menu show position-absolute end-0 mt-2 shadow border-0 p-3 rounded-3" 
-                    style={{ minWidth: '230px', zIndex: 1000, top: '100%', backgroundColor: 'var(--surface-color)' }}
+                    style={{ minWidth: '240px', zIndex: 1000, top: '100%', backgroundColor: 'var(--surface-color)' }}
                   >
-                    {/* User details header */}
+                    {/* User details header: Full Name (formatted cleanly), Username/Phone, Role */}
                     <div className="border-bottom pb-2 mb-2">
-                      <div className="fw-bold text-dark small">{user?.name || (user?.role === 'admin' ? 'foodieadmin' : 'Staff Member')}</div>
-                      <div className="text-muted" style={{ fontSize: '11px' }}>{user?.email || (user?.role === 'admin' ? 'admin@foodie.com' : 'staff@foodie.com')}</div>
-                      <span className="badge bg-danger-subtle text-danger fw-semibold mt-1.5 text-uppercase" style={{ fontSize: '9.5px' }}>
-                        {user?.role || 'Admin'} Account
-                      </span>
+                      <div className="fw-bold text-dark" style={{ fontSize: '13px' }}>
+                        {(user?.name || '').trim().replace(/\s+/g, ' ') || (user?.role === 'admin' ? 'Foodie Admin' : 'Staff Member')}
+                      </div>
+                      <div className="text-muted mt-0.5" style={{ fontSize: '11px' }}>
+                        {user?.employeeCode ? `Code: ${user.employeeCode}` : (user?.phone || user?.email || '')}
+                      </div>
+                      <div className="d-flex align-items-center gap-1.5 mt-2">
+                        <span className="badge bg-danger-subtle text-danger fw-semibold text-uppercase" style={{ fontSize: '10px' }}>
+                          {user?.backendRole === 'SUPER_ADMIN' ? 'Super Admin' : (user?.backendRole === 'MANAGER' ? 'Manager' : (user?.role === 'admin' ? 'Admin' : 'Staff'))}
+                        </span>
+                        {user?.branchName && (
+                          <span className="badge bg-secondary-subtle text-secondary" style={{ fontSize: '10px' }}>
+                            {user.branchName}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Logout Option */}

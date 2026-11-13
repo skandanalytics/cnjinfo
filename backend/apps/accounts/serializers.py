@@ -45,9 +45,12 @@ def user_payload(user):
     emp = get_active_employee(user)
     if emp:
         dept = "Management" if emp.role in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN) else emp.department
+        from .permissions import can_confirm_refund
         data["employee"] = {
             "employee_code": emp.employee_code, "role": emp.role, "department": dept,
             "job_title": emp.job_title, "is_admin_level": emp.role in ADMIN_ROLES,
+            "can_confirm_refund": can_confirm_refund(user),
+            "bill_access": emp.bill_access,
             "branch": {"id": emp.branch_id, "name": emp.branch.name} if emp.branch_id else None,
         }
     return data
@@ -94,10 +97,14 @@ class EmployeeSerializer(serializers.ModelSerializer):
             attrs["branch"] = branch
 
         # Privilege escalation: you can only grant roles below your own (SUPER_ADMIN may grant any).
-        if actor.role != Employee.Role.SUPER_ADMIN and ROLE_RANK[role] >= ROLE_RANK[actor.role]:
-            raise serializers.ValidationError({"role": "You cannot assign a role equal to or above your own."})
-        if inst and actor.role != Employee.Role.SUPER_ADMIN and ROLE_RANK[inst.role] >= ROLE_RANK[actor.role]:
-            raise serializers.ValidationError("You cannot modify an employee with an equal or higher role.")
+        is_super = getattr(request_user, "is_superuser", False) or (actor and actor.role == Employee.Role.SUPER_ADMIN)
+        if not is_super:
+            if not actor:
+                raise serializers.ValidationError("Only staff administrators can manage employees.")
+            if ROLE_RANK[role] >= ROLE_RANK[actor.role]:
+                raise serializers.ValidationError({"role": "You cannot assign a role equal to or above your own."})
+            if inst and ROLE_RANK[inst.role] >= ROLE_RANK[actor.role]:
+                raise serializers.ValidationError("You cannot modify an employee with an equal or higher role.")
 
         # Branch rules: only owner-level roles may be branchless; branch-limited admins stay in their branch.
         if branch is None and role not in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
@@ -129,6 +136,9 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if name:
             if any(ch.isdigit() for ch in name):
                 raise serializers.ValidationError({"name": "Employee name cannot contain numbers."})
+            max_len = 30 if role == Employee.Role.SUPER_ADMIN else 20
+            if len(name.strip()) > max_len:
+                raise serializers.ValidationError({"name": f"Name cannot exceed {max_len} characters."})
 
         phone = user_data.get("phone")
         if phone:

@@ -66,12 +66,17 @@ export const TableCard = ({
   return (
     <div 
       className={`card shadow-xs transition-all position-relative overflow-hidden ${isInactive ? 'opacity-75' : ''}`}
+      onClick={(e) => {
+        if (!isInactive && onSelect) {
+          onSelect(table);
+        }
+      }}
       style={{
         borderRadius: '0px',
         backgroundColor: isOccupied ? '#FEF2F2' : '#F0FDF4',
         border: isOccupied ? '1.5px solid #FECACA' : '1.5px solid #BBF7D0',
         padding: '14px 16px',
-        cursor: 'default'
+        cursor: isInactive ? 'not-allowed' : 'pointer'
       }}
     >
       {/* Top Status Pill (Right Aligned, with optional Admin Delete) */}

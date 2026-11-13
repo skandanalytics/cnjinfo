@@ -9,6 +9,11 @@ class Payment(models.Model):
     """One row per payment attempt. At most one attempt per order may be SUCCESS (see success_slot)."""
 
     class Method(models.TextChoices):
+        RAZORPAY_UPI = "RAZORPAY_UPI", "Razorpay UPI"
+        RAZORPAY_CARD = "RAZORPAY_CARD", "Razorpay Card"
+        CASH = "CASH", "Cash"
+        # Backward compatibility choices for historical records
+        RAZORPAY = "RAZORPAY", "Razorpay"
         UPI = "UPI", "UPI"
         CARD = "CARD", "Card"
         NETBANKING = "NETBANKING", "Netbanking"
@@ -24,7 +29,7 @@ class Payment(models.Model):
         REFUNDED = "REFUNDED", "Refunded"
 
     order = models.ForeignKey("orders.Order", on_delete=models.PROTECT, related_name="payments")
-    method = models.CharField(max_length=10, choices=Method.choices)
+    method = models.CharField(max_length=20, choices=Method.choices)
     amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0"))])
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.CREATED)
     razorpay_order_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
@@ -61,3 +66,33 @@ class PaymentEvent(models.Model):
 
     class Meta:
         db_table = "payment_events"
+
+
+class Refund(models.Model):
+    """Manual or recorded refund entry associated with an order and its payment."""
+
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SUCCESS = "SUCCESS", "Refunded"
+        FAILED = "FAILED", "Refund Failed"
+
+    order = models.ForeignKey("orders.Order", on_delete=models.PROTECT, related_name="refunds")
+    payment = models.ForeignKey(Payment, on_delete=models.SET_NULL, null=True, blank=True, related_name="refunds")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    method = models.CharField(max_length=20, choices=Payment.Method.choices)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SUCCESS)
+    reason = models.CharField(max_length=255, blank=True)
+    notes = models.TextField(blank=True)
+    reference = models.CharField(max_length=100, blank=True)
+    confirmed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "refunds"
+        ordering = ["-id"]

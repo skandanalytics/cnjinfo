@@ -12,7 +12,7 @@ import { restaurantService } from '../../services/restaurantService';
 import { useAuth } from '../../hooks/useAuth';
 import EBillModal from '../../components/orders/EBillModal';
 import Toast from '../../components/common/Toast';
-import { FiEye, FiFileText, FiGrid, FiList } from 'react-icons/fi';
+import { FiEye, FiFileText, FiGrid, FiList, FiChevronDown, FiChevronRight, FiClock } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
@@ -45,6 +45,21 @@ export const Orders = () => {
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
   const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState(null);
+  const [expandedParents, setExpandedParents] = useState(() => new Set());
+
+  const toggleExpand = (parentId) => {
+    if (!parentId) return;
+    setExpandedParents((prev) => {
+      const next = new Set(prev);
+      const key = String(parentId);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
 
   const [serviceTaxEnabled, setServiceTaxEnabled] = useState(() => {
     try {
@@ -114,6 +129,41 @@ export const Orders = () => {
     setActiveTab(tabFromUrl);
   }, [searchParams]);
 
+  // Handle opening order details when navigated with ?orderId= or ?order= (REQ-6)
+  useEffect(() => {
+    const targetOrderId = searchParams.get('orderId') || searchParams.get('order');
+    if (!targetOrderId) return;
+    if (orders && orders.length > 0) {
+      const found = orders.find(o =>
+        String(o.id) === String(targetOrderId) ||
+        String(o.order_number) === String(targetOrderId) ||
+        String(o.display_order_number) === String(targetOrderId)
+      );
+      if (found) {
+        setSelectedOrder(found);
+        if (found.parent_order_id) {
+          setExpandedParents(prev => new Set(prev).add(String(found.parent_order_id)));
+        } else {
+          setExpandedParents(prev => new Set(prev).add(String(found.id)));
+        }
+        return;
+      }
+    }
+    // Direct fetch fallback if order not yet loaded in context
+    import('../../services/adminApi').then(({ getStaffOrder }) => {
+      getStaffOrder(targetOrderId).then(ord => {
+        if (ord) {
+          setSelectedOrder(ord);
+          if (ord.parent_order_id) {
+            setExpandedParents(prev => new Set(prev).add(String(ord.parent_order_id)));
+          } else {
+            setExpandedParents(prev => new Set(prev).add(String(ord.id)));
+          }
+        }
+      }).catch(() => {});
+    });
+  }, [searchParams, orders]);
+
   const tabs = ['All', 'Pending', 'Preparing', 'Ready', 'Serving', 'Completed', 'Cancelled'];
 
   const handleTabClick = (tab) => {
@@ -127,7 +177,120 @@ export const Orders = () => {
     }
   };
 
-  const filteredOrders = (orders || []).filter((o) => {
+  // Detect if an order is a suborder (continuation of a parent order)
+  const isSuborder = (order) => {
+    if (!order) return false;
+    if (order.parent_order_id || (typeof order.parent_order === 'object' && order.parent_order?.id) || order.parent_order || order.parentOrderId) {
+      return true;
+    }
+    if (order.continuation_index && Number(order.continuation_index) > 0) {
+      return true;
+    }
+    const disp = String(order.display_order_number || order.orderNumber || order.display_number || '');
+    if (disp.includes('.') && /^\d+\.\d+/.test(disp)) {
+      return true;
+    }
+    return false;
+  };
+
+  const getParentKey = (order) => {
+    if (!order) return null;
+    const pId = order.parent_order_id || (typeof order.parent_order === 'object' ? order.parent_order?.id : order.parent_order) || order.parentOrderId;
+    if (pId) return String(pId);
+    const disp = String(order.display_order_number || order.orderNumber || order.display_number || '');
+    if (disp.includes('.')) {
+      const rootPart = disp.split('.')[0].replace(/^#/, '').trim();
+      if (rootPart) return rootPart;
+    }
+    return null;
+  };
+
+  // Group suborders by parent order ID / key
+  const subordersMap = React.useMemo(() => {
+    const map = new Map();
+
+    // 1. Group any standalone suborders from orders list
+    (orders || []).forEach((o) => {
+      if (isSuborder(o)) {
+        const pKey = getParentKey(o);
+        if (pKey) {
+          if (!map.has(pKey)) map.set(pKey, []);
+          const list = map.get(pKey);
+          if (!list.some((existing) => String(existing.id) === String(o.id))) {
+            list.push(o);
+          }
+        }
+      }
+    });
+
+    // 2. Merge any continuations attached to parent orders
+    (orders || []).forEach((p) => {
+      if (!isSuborder(p) && Array.isArray(p.continuations) && p.continuations.length > 0) {
+        const pKey = String(p.id);
+        if (!map.has(pKey)) map.set(pKey, []);
+        const list = map.get(pKey);
+        p.continuations.forEach((c) => {
+          const exists = list.some((existing) => String(existing.id) === String(c.id));
+          if (!exists) {
+            const fullMatch = (orders || []).find((ord) => String(ord.id) === String(c.id));
+            list.push(
+              fullMatch || {
+                ...c,
+                parent_order_id: p.id,
+                table: p.table,
+                orderType: p.orderType,
+                customerName: p.customerName || p.customer_name,
+                customerPhone: p.customerPhone || p.customer_phone,
+                total: Number(c.total_amount || 0),
+                total_amount: c.total_amount,
+                status: c.status,
+                paymentStatus: c.payment_status || 'UNPAID',
+                time: c.created_at
+                  ? new Date(c.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true })
+                  : p.time,
+                date: c.created_at
+                  ? new Date(c.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+                  : p.date,
+              }
+            );
+          }
+        });
+      }
+    });
+
+    // 3. Sort suborders by continuation index or id
+    map.forEach((list) => {
+      list.sort((a, b) => {
+        const idxA = Number(a.continuation_index || 0);
+        const idxB = Number(b.continuation_index || 0);
+        if (idxA !== idxB) return idxA - idxB;
+        return Number(a.id || 0) - Number(b.id || 0);
+      });
+    });
+
+    return map;
+  }, [orders]);
+
+  // Canonical Serial Numbering Map for Parent Orders:
+  // Maintains consistent, authoritative numbering matching backend database records across all screens
+  const parentSerialMap = React.useMemo(() => {
+    const map = new Map();
+
+    (orders || []).forEach((parent) => {
+      if (!isSuborder(parent)) {
+        const canonicalDisplay = formatOrderDisplayNumber(parent, parent.id);
+        map.set(String(parent.id), String(canonicalDisplay));
+        if (parent.orderNumber) {
+          map.set(String(parent.orderNumber), String(canonicalDisplay));
+        }
+      }
+    });
+
+    return map;
+  }, [orders]);
+
+  // Criteria matcher for an individual order or suborder
+  const matchesOrderCriteria = (o, searchStr, tab, payFilter, tFilter, bFilter, empFilter) => {
     if (!o || (!o.id && !o.order_id)) return false;
 
     let currentUser = user;
@@ -137,41 +300,44 @@ export const Orders = () => {
         if (stored) currentUser = JSON.parse(stored);
       } catch {}
     }
-    const isEmployee = currentUser?.role === 'employee' || ['STAFF', 'CHEF', 'CASHIER'].includes(currentUser?.backendRole || currentUser?.role);
+    const isEmployee =
+      currentUser?.role === 'employee' ||
+      ['STAFF', 'CHEF', 'CASHIER'].includes(currentUser?.backendRole || currentUser?.role);
     if (isEmployee && currentUser?.id) {
       const placedId = String(o.placedById || o.placed_by_id || o.employeeId || '');
-      if (placedId !== String(currentUser.id)) {
+      if (placedId && placedId !== String(currentUser.id)) {
         return false;
       }
     }
 
     // Branch filter
-    if (branchFilter !== 'ALL' && String(o.branchId || o.branch_id || '') !== String(branchFilter)) {
+    if (bFilter !== 'ALL' && String(o.branchId || o.branch_id || '') !== String(bFilter)) {
       return false;
     }
 
-    if (employeeFilter !== 'ALL') {
-      const selected = employees.find((emp) => String(emp.id) === String(employeeFilter));
-      const wantedUser = selected?.userId != null ? String(selected.userId) : String(employeeFilter);
+    // Employee filter
+    if (empFilter !== 'ALL') {
+      const selected = employees.find((emp) => String(emp.id) === String(empFilter));
+      const wantedUser = selected?.userId != null ? String(selected.userId) : String(empFilter);
       if (String(o.placedById || '') !== wantedUser) return false;
     }
 
-    const rawSearch = search.trim().toLowerCase();
-    let matchesSearch = true;
-    if (rawSearch) {
+    // Search filter
+    if (searchStr && searchStr.trim()) {
+      const rawSearch = searchStr.trim().toLowerCase();
+      const cleanSearch = rawSearch.replace(/^#/, '');
       const orderIdStr = String(o.id || o.orderNumber || '').toLowerCase();
       const orderTableStr = String(o.table || '').toLowerCase();
 
       const cleanOrderTableDigits = orderTableStr.replace(/^(table\s*|t-?)/i, '').replace(/^0+/, '') || orderTableStr;
-      const cleanSearchDigits = rawSearch.replace(/^(table\s*|t-?)/i, '').replace(/^0+/, '') || rawSearch;
-      const isSimpleNumber = /^\d{1,2}$/.test(rawSearch);
+      const cleanSearchDigits = cleanSearch.replace(/^(table\s*|t-?)/i, '').replace(/^0+/, '') || cleanSearch;
 
       // Table matching
       const directTableMatch =
-        orderTableStr === rawSearch ||
-        orderTableStr.includes(rawSearch) ||
-        `table ${orderTableStr}`.includes(rawSearch) ||
-        `table ${cleanOrderTableDigits}`.includes(rawSearch);
+        orderTableStr === cleanSearch ||
+        orderTableStr.includes(cleanSearch) ||
+        `table ${orderTableStr}`.includes(cleanSearch) ||
+        `table ${cleanOrderTableDigits}`.includes(cleanSearch);
 
       const numericTableMatch = Boolean(
         cleanSearchDigits &&
@@ -181,19 +347,18 @@ export const Orders = () => {
 
       const tableMatch = directTableMatch || numericTableMatch;
 
-      // Order ID matching (matches canonical ID, orderNumber, or display number like 30.1)
-      const displayNo = String(formatOrderDisplayNumber(o, o.id) || '').toLowerCase();
+      // Order ID / Display number / Serial number matching
+      const parentSerial = parentSerialMap ? parentSerialMap.get(String(o.id)) : null;
+      const displayNo = String(parentSerial || formatOrderDisplayNumber(o, o.id) || '').toLowerCase();
       const parentIdStr = String(o.parent_order_id || o.parent_order || o.parentOrderId || '').toLowerCase();
-      const hasContinuationMatch = (o.continuations || []).some(c => {
-        const cDisp = String(formatOrderDisplayNumber(c, c.id) || '').toLowerCase();
-        return cDisp.includes(rawSearch) || String(c.id).includes(rawSearch);
-      });
-      const subOrderMatch =
-        displayNo.startsWith(rawSearch + '.') ||
-        displayNo.includes(rawSearch) ||
-        parentIdStr === rawSearch ||
-        parentIdStr === cleanSearchDigits ||
-        hasContinuationMatch;
+
+      const idMatch =
+        orderIdStr === cleanSearch ||
+        orderIdStr.includes(cleanSearch) ||
+        displayNo === cleanSearch ||
+        displayNo.includes(cleanSearch) ||
+        (parentSerial && (parentSerial === cleanSearch || `#${parentSerial}` === cleanSearch)) ||
+        parentIdStr === cleanSearch;
 
       const customerMatch =
         (o.customerName && o.customerName.toLowerCase().includes(rawSearch)) ||
@@ -201,52 +366,138 @@ export const Orders = () => {
         (o.customerPhone && o.customerPhone.includes(rawSearch)) ||
         (o.customer_phone && o.customer_phone.includes(rawSearch));
 
-      const idMatch = isSimpleNumber
-        ? (orderIdStr === rawSearch || orderIdStr === `#${rawSearch}` || orderIdStr.startsWith(rawSearch) || displayNo === rawSearch || subOrderMatch)
-        : (orderIdStr.includes(rawSearch) || `#${orderIdStr}`.includes(rawSearch) || displayNo.includes(rawSearch) || `#${displayNo}`.includes(rawSearch) || subOrderMatch);
-
-      matchesSearch = tableMatch || idMatch || customerMatch;
+      if (!tableMatch && !idMatch && !customerMatch) {
+        return false;
+      }
     }
 
-    let matchesTab = activeTab === 'All';
-    if (activeTab !== 'All') {
-      const statusLower = String(o.status || '').toLowerCase().trim();
-      const tabLower = activeTab.toLowerCase().trim();
+    // Tab status filter
+    if (tab !== 'All') {
+      const statusLower = String(o.status || o.backendStatus || '').toLowerCase().trim();
+      const tabLower = tab.toLowerCase().trim();
+      let matchesTab = false;
       if (tabLower === 'pending') {
-        matchesTab = statusLower === 'pending' || statusLower === 'confirmed' || statusLower === 'placed' || statusLower === 'new' || !statusLower;
+        matchesTab =
+          statusLower === 'pending' ||
+          statusLower === 'confirmed' ||
+          statusLower === 'placed' ||
+          statusLower === 'new' ||
+          !statusLower;
       } else if (tabLower === 'preparing') {
-        matchesTab = statusLower === 'preparing' || statusLower === 'cooking' || statusLower === 'accepted' || statusLower === 'in_kitchen';
+        matchesTab =
+          statusLower === 'preparing' ||
+          statusLower === 'cooking' ||
+          statusLower === 'accepted' ||
+          statusLower === 'in_kitchen';
       } else if (tabLower === 'ready') {
         matchesTab = statusLower === 'ready' || statusLower === 'prepared' || statusLower === 'out_for_delivery';
       } else if (tabLower === 'serving') {
         matchesTab = statusLower === 'serving' || statusLower === 'served';
       } else if (tabLower === 'completed') {
-        matchesTab = statusLower === 'completed' || statusLower === 'delivered' || statusLower === 'done' || statusLower === 'settled';
+        matchesTab =
+          statusLower === 'completed' ||
+          statusLower === 'delivered' ||
+          statusLower === 'done' ||
+          statusLower === 'settled';
       } else if (tabLower === 'cancelled') {
         matchesTab = statusLower === 'cancelled' || statusLower === 'rejected';
       } else {
         matchesTab = statusLower === tabLower;
       }
+      if (!matchesTab) return false;
     }
 
-    const pay = String(o.paymentStatus || o.payment_status || '').toUpperCase();
-    let matchesPayment = true;
-    if (paymentFilter === 'PAID') {
-      matchesPayment = pay === 'PAID';
-    } else if (paymentFilter === 'UNPAID') {
-      matchesPayment = pay !== 'PAID';
+    // Payment filter
+    if (payFilter !== 'ALL') {
+      const pay = String(o.paymentStatus || o.payment_status || '').toUpperCase();
+      if (payFilter === 'PAID' && pay !== 'PAID') return false;
+      if (payFilter === 'UNPAID' && pay === 'PAID') return false;
     }
 
-    let matchesType = true;
-    if (typeFilter !== 'ALL') {
-      const isTakeaway = String(o.orderType || o.order_type || o.source || '').toUpperCase().includes('TAKEAWAY') || 
+    // Type filter
+    if (tFilter !== 'ALL') {
+      const isTakeaway =
+        String(o.orderType || o.order_type || o.source || '').toUpperCase().includes('TAKEAWAY') ||
         String(o.table || '').toLowerCase() === 'takeaway';
-      if (typeFilter === 'DINE_IN' && isTakeaway) matchesType = false;
-      if (typeFilter === 'TAKEAWAY' && !isTakeaway) matchesType = false;
+      if (tFilter === 'DINE_IN' && isTakeaway) return false;
+      if (tFilter === 'TAKEAWAY' && !isTakeaway) return false;
     }
 
-    return matchesSearch && matchesTab && matchesPayment && matchesType;
-  });
+    return true;
+  };
+
+  // Extract and sort root parent orders strictly by parent serial sequence descending
+  const rootOrders = React.useMemo(() => {
+    const parents = (orders || []).filter((o) => !isSuborder(o));
+    return parents.sort((a, b) => {
+      const serialA = Number(parentSerialMap.get(String(a.id)) || a.id);
+      const serialB = Number(parentSerialMap.get(String(b.id)) || b.id);
+      if (!isNaN(serialA) && !isNaN(serialB) && serialA !== serialB) {
+        return serialB - serialA; // Descending: #114, #113, #112, #111, #110
+      }
+      const timeA = a.rawCreatedAt || (a.created_at ? new Date(a.created_at).getTime() : Number(a.id) || 0);
+      const timeB = b.rawCreatedAt || (b.created_at ? new Date(b.created_at).getTime() : Number(b.id) || 0);
+      return timeB - timeA;
+    });
+  }, [orders, parentSerialMap]);
+
+  // Determine which parent orders match and which suborders trigger auto-expansion
+  const { filteredParentOrders, autoExpandedParentIds } = React.useMemo(() => {
+    const autoExpand = new Set();
+    const filtered = [];
+    const searchTrimmed = search.trim().toLowerCase();
+    const cleanSearchQuery = searchTrimmed.replace(/^#/, '');
+
+    rootOrders.forEach((parent) => {
+      const pKey = String(parent.id);
+      const suborders = subordersMap.get(pKey) || subordersMap.get(String(parent.orderNumber)) || [];
+
+      const parentMatches = matchesOrderCriteria(
+        parent,
+        search,
+        activeTab,
+        paymentFilter,
+        typeFilter,
+        branchFilter,
+        employeeFilter
+      );
+
+      const matchingSuborders = suborders.filter((sub) =>
+        matchesOrderCriteria(sub, search, activeTab, paymentFilter, typeFilter, branchFilter, employeeFilter)
+      );
+
+      // If search query matches a suborder display number or ID, auto-expand parent
+      if (cleanSearchQuery) {
+        const parentSerial = parentSerialMap.get(pKey) || formatOrderDisplayNumber(parent, parent.id);
+        const subMatchesSearch = suborders.some((sub, sIdx) => {
+          const subSerial = `${parentSerial}.${sub.continuation_index || (sIdx + 1)}`;
+          const subDisplay = String(formatOrderDisplayNumber(sub, sub.id) || '').toLowerCase();
+          const cleanSub = subDisplay.replace(/^#/, '');
+          return (
+            subSerial === cleanSearchQuery ||
+            `#${subSerial}` === cleanSearchQuery ||
+            cleanSub === cleanSearchQuery ||
+            cleanSub.includes(cleanSearchQuery) ||
+            String(sub.id) === cleanSearchQuery
+          );
+        });
+        if (subMatchesSearch) {
+          autoExpand.add(pKey);
+        }
+      }
+
+      if (parentMatches || matchingSuborders.length > 0) {
+        filtered.push(parent);
+      }
+    });
+
+    return { filteredParentOrders: filtered, autoExpandedParentIds: autoExpand };
+  }, [rootOrders, subordersMap, parentSerialMap, search, activeTab, paymentFilter, typeFilter, branchFilter, employeeFilter]);
+
+  const isExpanded = (parentId) => {
+    const key = String(parentId);
+    return expandedParents.has(key) || autoExpandedParentIds.has(key);
+  };
 
   const handleContinueOrder = (ord) => {
     setSelectedOrder(null);
@@ -327,16 +578,22 @@ export const Orders = () => {
                 placeholder="Search Order ID or Table..."
                 value={search}
                 onChange={setSearch}
-                records={(orders || []).map((order) => ({
-                  id: order.id,
-                  label: String(order.orderNumber || order.id),
-                  title: `Order ${order.orderNumber || order.id}`,
-                  subtitle: [order.status, order.orderType || (order.table ? `Table ${order.table}` : '')].filter(Boolean).join(' · '),
-                  searchText: [order.id, order.orderNumber, order.table, order.status, order.orderType, order.customerPhone].filter(Boolean).join(' '),
-                }))}
+                records={rootOrders.map((order) => {
+                  const serial = parentSerialMap.get(String(order.id)) || formatOrderDisplayNumber(order, order.id);
+                  return {
+                    id: order.id,
+                    label: String(serial),
+                    title: `Order #${serial}`,
+                    subtitle: [order.status, order.orderType || (order.table ? `Table ${order.table}` : '')].filter(Boolean).join(' · '),
+                    searchText: [order.id, serial, `#${serial}`, order.orderNumber, order.table, order.status, order.orderType, order.customerPhone].filter(Boolean).join(' '),
+                  };
+                })}
                 onSelectSuggestion={(item) => {
                   const found = (orders || []).find((order) => String(order.id) === String(item?.id));
-                  if (found) setSelectedOrder(found);
+                  if (found) {
+                    const serial = parentSerialMap.get(String(found.id)) || formatOrderDisplayNumber(found, found.id);
+                    setSelectedOrder({ ...found, serialNumber: serial, display_order_number: serial });
+                  }
                 }}
               />
             </div>
@@ -429,11 +686,11 @@ export const Orders = () => {
       {/* Order List / Table */}
       {loading ? (
         <Loader />
-      ) : filteredOrders.length === 0 ? (
+      ) : filteredParentOrders.length === 0 ? (
         <EmptyState
-          title={orders.length === 0 ? "No Orders Yet" : "No Orders Found"}
+          title={rootOrders.length === 0 ? "No Orders Yet" : "No Orders Found"}
           description={
-            orders.length === 0
+            rootOrders.length === 0
               ? "There are currently no placed orders."
               : activeTab !== 'All'
                 ? `There are currently no orders with "${activeTab}" status.`
@@ -461,13 +718,18 @@ export const Orders = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredOrders.map((order) => {
+                {filteredParentOrders.map((order) => {
+                  const pKey = String(order.id);
+                  const suborders = subordersMap.get(pKey) || subordersMap.get(String(order.orderNumber)) || [];
+                  const expanded = isExpanded(order.id);
+                  const hasSuborders = suborders.length > 0;
                   const adj = adjustOrderForServiceTax(order);
                   const isTakeaway = String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('TAKEAWAY') || 
                     String(order.table || '').toLowerCase() === 'takeaway';
                   const rawTable = order.table ? String(order.table).replace(/^(table\s*|t-?)/i, '').trim() : '';
                   const displayTable = isTakeaway ? '—' : (rawTable ? `T${rawTable.padStart(2, '0')}` : (order.table || '—'));
-                  const displayNo = formatOrderDisplayNumber(order, order.id);
+                  const parentSerial = parentSerialMap.get(pKey) || formatOrderDisplayNumber(order, order.id);
+                  const displayNo = parentSerial;
                   const isPaid = String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID';
                   const customerDisplay = order.customerName || order.customer_name || (order.customerPhone || order.customer_phone ? order.customerPhone || order.customer_phone : 'Walk-in');
 
@@ -496,69 +758,247 @@ export const Orders = () => {
                   }
 
                   return (
-                    <tr key={order.id} style={{ borderBottom: '1px solid var(--border-subtle)' }}>
-                      <td className="ps-4 py-3 fw-bold font-monospace" style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
-                        #{displayNo}
-                      </td>
-                      <td className="py-3 fw-semibold" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                        {displayTable}
-                      </td>
-                      <td className="py-3" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                        <span className="badge rounded-pill px-2.5 py-1" style={{ backgroundColor: isTakeaway ? 'rgba(37, 99, 235, 0.1)' : 'rgba(242, 13, 45, 0.08)', color: isTakeaway ? '#2563EB' : 'var(--primary-color)' }}>
-                          {isTakeaway ? 'Takeaway' : 'Dine-In'}
-                        </span>
-                      </td>
-                      <td className="py-3 fw-medium text-truncate" style={{ fontSize: '13px', maxWidth: '140px', color: 'var(--text-primary)' }}>
-                        {customerDisplay}
-                      </td>
-                      <td className="py-3 fw-bold" style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>
-                        {formatCurrency(adj.total || adj.total_amount)}
-                      </td>
-                      <td className="py-3">
-                        <span className={`badge rounded-pill fw-semibold px-2.5 py-1 ${stVariant}`} style={{ fontSize: '11px' }}>
-                          ● {stLabel}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        {isPaid ? (
-                          <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A' }}>
-                            ● Paid
+                    <React.Fragment key={order.id}>
+                      {/* Parent Order Row */}
+                      <tr 
+                        style={{ 
+                          borderBottom: hasSuborders && expanded ? 'none' : '1px solid var(--border-subtle)',
+                          cursor: hasSuborders ? 'pointer' : 'default',
+                          backgroundColor: expanded && hasSuborders ? 'rgba(242, 13, 45, 0.02)' : 'transparent',
+                          transition: 'background-color 0.15s ease'
+                        }}
+                        onClick={() => {
+                          if (hasSuborders) toggleExpand(order.id);
+                        }}
+                      >
+                        <td className="ps-4 py-3 fw-bold font-monospace" style={{ fontSize: '13px', color: 'var(--text-primary)' }}>
+                          <div className="d-flex align-items-center gap-1.5 flex-wrap">
+                            {hasSuborders ? (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleExpand(order.id);
+                                }}
+                                className="btn btn-sm p-0 border-0 text-secondary d-inline-flex align-items-center justify-content-center me-1"
+                                style={{ width: '22px', height: '22px' }}
+                                aria-label={expanded ? "Collapse suborders" : "Expand suborders"}
+                                title={expanded ? "Collapse suborders" : "Expand suborders"}
+                              >
+                                {expanded ? (
+                                  <FiChevronDown size={17} className="text-danger fw-bold" />
+                                ) : (
+                                  <FiChevronRight size={17} />
+                                )}
+                              </button>
+                            ) : (
+                              <span style={{ width: '22px', display: 'inline-block' }} />
+                            )}
+                            <span>#{displayNo}</span>
+                            {hasSuborders && (
+                              <span 
+                                className="badge rounded-pill border fw-semibold ms-1"
+                                style={{ 
+                                  fontSize: '10.5px', 
+                                  backgroundColor: expanded ? 'rgba(242, 13, 45, 0.08)' : '#f1f5f9',
+                                  color: expanded ? 'var(--primary-color, #F20D2D)' : '#64748b',
+                                  borderColor: expanded ? 'rgba(242, 13, 45, 0.2)' : '#e2e8f0'
+                                }}
+                              >
+                                {suborders.length} {suborders.length === 1 ? 'suborder' : 'suborders'}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 fw-semibold" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          {displayTable}
+                        </td>
+                        <td className="py-3" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+                          <span className="badge rounded-pill px-2.5 py-1" style={{ backgroundColor: isTakeaway ? 'rgba(37, 99, 235, 0.1)' : 'rgba(242, 13, 45, 0.08)', color: isTakeaway ? '#2563EB' : 'var(--primary-color)' }}>
+                            {isTakeaway ? 'Takeaway' : 'Dine-In'}
                           </span>
-                        ) : (String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PENDING' || String(order.payment_method || '').toUpperCase() === 'UPI') ? (
-                          <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#B45309', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
-                            ● Pending Verification
+                        </td>
+                        <td className="py-3 fw-medium text-truncate" style={{ fontSize: '13px', maxWidth: '140px', color: 'var(--text-primary)' }}>
+                          {customerDisplay}
+                        </td>
+                        <td className="py-3 fw-bold" style={{ fontSize: '13.5px', color: 'var(--text-primary)' }}>
+                          {formatCurrency(adj.total || adj.total_amount)}
+                        </td>
+                        <td className="py-3">
+                          <span className={`badge rounded-pill fw-semibold px-2.5 py-1 ${stVariant}`} style={{ fontSize: '11px' }}>
+                            ● {stLabel}
                           </span>
-                        ) : (
-                          <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
-                            ● Unpaid
-                          </span>
-                        )}
-                      </td>
-                      <td className="text-end pe-4 py-3">
-                        <div className="d-flex align-items-center justify-content-end" style={{ gap: '12px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setSelectedOrder(order)}
-                            className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
-                            style={{ width: '32px', height: '32px' }}
-                            title="View Order Details"
-                            aria-label="View Order Details"
+                        </td>
+                        <td className="py-3">
+                          <div className="d-flex flex-column align-items-start gap-1">
+                            {isPaid ? (
+                              <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A' }}>
+                                ● Paid
+                              </span>
+                            ) : (String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PENDING' || String(order.payment_method || '').toUpperCase() === 'UPI') ? (
+                              <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#B45309', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
+                                ● Pending Verification
+                              </span>
+                            ) : (
+                              <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
+                                ● Unpaid
+                              </span>
+                            )}
+                            {(order.paymentMethodName || order.payment_method) && (
+                              <span className="text-secondary small fw-medium" style={{ fontSize: '10.5px' }}>
+                                {String(order.paymentMethodName || order.payment_method).toUpperCase()}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="text-end pe-4 py-3" onClick={(e) => e.stopPropagation()}>
+                          <div className="d-flex align-items-center justify-content-end" style={{ gap: '12px' }}>
+                            <button
+                              type="button"
+                              onClick={() => setSelectedOrder({ ...order, serialNumber: parentSerial, display_order_number: parentSerial })}
+                              className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
+                              style={{ width: '32px', height: '32px' }}
+                              title="View Order Details"
+                              aria-label="View Order Details"
+                            >
+                              <FiEye size={14} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEBillOrder({ ...adj, serialNumber: parentSerial, display_order_number: parentSerial })}
+                              className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
+                              style={{ width: '32px', height: '32px' }}
+                              title="View E-Bill"
+                              aria-label="View E-Bill"
+                            >
+                              <FiFileText size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* Suborders Expanded Hierarchy Rows */}
+                      {hasSuborders && expanded && suborders.map((sub, sIdx) => {
+                        const isLastSub = sIdx === suborders.length - 1;
+                        const subAdj = adjustOrderForServiceTax(sub);
+                        const subContinuationIndex = sub.continuation_index || (sIdx + 1);
+                        const subDisplayNo = `${parentSerial}.${subContinuationIndex}`;
+                        const subIsPaid = String(sub.paymentStatus || sub.payment_status || '').toUpperCase() === 'PAID';
+                        const subCustomer = sub.customerName || sub.customer_name || customerDisplay;
+                        const subTime = sub.time || (sub.created_at ? new Date(sub.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) : '');
+
+                        // Suborder status styling
+                        const subSt = String(sub.status || sub.backendStatus || '').toLowerCase().trim();
+                        let subStVariant = 'bg-secondary-subtle text-secondary';
+                        let subStLabel = sub.status || 'Pending';
+                        if (['pending', 'placed', 'new'].includes(subSt)) {
+                          subStVariant = 'bg-secondary-subtle text-secondary border';
+                          subStLabel = 'Pending';
+                        } else if (['preparing', 'cooking', 'in_kitchen'].includes(subSt)) {
+                          subStVariant = 'bg-warning-subtle text-warning-emphasis border border-warning-subtle';
+                          subStLabel = 'Preparing';
+                        } else if (['ready', 'prepared'].includes(subSt)) {
+                          subStVariant = 'bg-info-subtle text-info-emphasis border border-info-subtle';
+                          subStLabel = 'Ready';
+                        } else if (['serving', 'served'].includes(subSt)) {
+                          subStVariant = 'bg-primary-light text-danger border border-danger-subtle';
+                          subStLabel = 'Serving';
+                        } else if (['completed', 'delivered', 'done', 'settled'].includes(subSt)) {
+                          subStVariant = 'bg-success-subtle text-success border border-success-subtle';
+                          subStLabel = 'Completed';
+                        } else if (['cancelled', 'canceled', 'rejected'].includes(subSt)) {
+                          subStVariant = 'bg-danger-subtle text-danger border border-danger-subtle';
+                          subStLabel = 'Cancelled';
+                        }
+
+                        return (
+                          <tr 
+                            key={sub.id || `${order.id}-sub-${sIdx}`}
+                            style={{ 
+                              backgroundColor: '#f8fafc',
+                              borderBottom: isLastSub ? '1px solid var(--border-subtle)' : '1px dashed #e2e8f0'
+                            }}
                           >
-                            <FiEye size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEBillOrder(adj)}
-                            className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
-                            style={{ width: '32px', height: '32px' }}
-                            title="View E-Bill"
-                            aria-label="View E-Bill"
-                          >
-                            <FiFileText size={14} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
+                            <td className="ps-4 py-2.5 font-monospace" style={{ fontSize: '12.5px' }}>
+                              <div className="d-flex align-items-center" style={{ paddingLeft: '20px' }}>
+                                <span className="text-secondary fw-bold me-2 font-monospace" style={{ fontSize: '13px', color: '#94a3b8' }}>
+                                  {isLastSub ? '└──' : '├──'}
+                                </span>
+                                <span className="badge bg-secondary-subtle text-dark border me-1.5" style={{ fontSize: '10px' }}>
+                                  Suborder
+                                </span>
+                                <span className="fw-bold text-dark">#{subDisplayNo}</span>
+                              </div>
+                            </td>
+                            <td className="py-2.5 text-muted small" style={{ fontSize: '12px' }}>
+                              {displayTable}
+                            </td>
+                            <td className="py-2.5 text-muted small" style={{ fontSize: '12px' }}>
+                              <span className="text-secondary">Continuation</span>
+                            </td>
+                            <td className="py-2.5 text-muted small text-truncate" style={{ fontSize: '12px', maxWidth: '140px' }}>
+                              {subTime ? `${subTime}` : subCustomer}
+                            </td>
+                            <td className="py-2.5 fw-bold" style={{ fontSize: '12.5px', color: 'var(--text-primary)' }}>
+                              {formatCurrency(subAdj.total || subAdj.total_amount)}
+                            </td>
+                            <td className="py-2.5">
+                              <span className={`badge rounded-pill fw-semibold px-2 py-0.5 ${subStVariant}`} style={{ fontSize: '10.5px' }}>
+                                ● {subStLabel}
+                              </span>
+                            </td>
+                            <td className="py-2.5">
+                              <div className="d-flex flex-column align-items-start gap-0.5">
+                                {subIsPaid ? (
+                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5" style={{ fontSize: '10.5px', backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A' }}>
+                                    ● Paid
+                                  </span>
+                                ) : (
+                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5" style={{ fontSize: '10.5px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
+                                    ● Unpaid
+                                  </span>
+                                )}
+                                {(sub.payment_method || sub.paymentMethodName || order.payment_method) && (
+                                  <span className="text-muted small" style={{ fontSize: '10px' }}>
+                                    {String(sub.payment_method || sub.paymentMethodName || order.payment_method).toUpperCase()}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="text-end pe-4 py-2.5">
+                              <div className="d-flex align-items-center justify-content-end" style={{ gap: '8px' }}>
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedOrder({
+                                    ...sub,
+                                    serialNumber: subDisplayNo,
+                                    display_order_number: subDisplayNo,
+                                    parent_order_id: order.id,
+                                    parent_order_display_number: parentSerial,
+                                  })}
+                                  className="btn btn-sm btn-outline-secondary rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
+                                  style={{ width: '28px', height: '28px' }}
+                                  title="View Suborder Details"
+                                  aria-label="View Suborder Details"
+                                >
+                                  <FiEye size={12} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setEBillOrder({ ...subAdj, serialNumber: subDisplayNo, display_order_number: subDisplayNo })}
+                                  className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
+                                  style={{ width: '28px', height: '28px' }}
+                                  title="View E-Bill"
+                                  aria-label="View E-Bill"
+                                >
+                                  <FiFileText size={12} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
                   );
                 })}
               </tbody>
@@ -567,15 +1007,38 @@ export const Orders = () => {
         </div>
       ) : (
         <div className="row">
-          {filteredOrders.map((order) => (
-            <div key={order.id} className="col-12">
-              <OrderCard
-                order={adjustOrderForServiceTax(order)}
-                onViewDetails={(ord) => setSelectedOrder(ord)}
-                onViewEBill={(ord) => setEBillOrder(ord)}
-              />
-            </div>
-          ))}
+          {filteredParentOrders.map((order) => {
+            const pKey = String(order.id);
+            const parentSerial = parentSerialMap.get(pKey) || formatOrderDisplayNumber(order, order.id);
+            const rawSuborders = subordersMap.get(pKey) || subordersMap.get(String(order.orderNumber)) || [];
+            const suborders = rawSuborders.map((sub, sIdx) => {
+              const subIndex = sub.continuation_index !== undefined && sub.continuation_index !== null ? sub.continuation_index : (sIdx + 1);
+              const subSerial = `${parentSerial}.${subIndex}`;
+              return {
+                ...sub,
+                serialNumber: subSerial,
+                display_order_number: subSerial,
+              };
+            });
+            const expanded = isExpanded(order.id);
+            const orderWithSerial = {
+              ...order,
+              serialNumber: parentSerial,
+              display_order_number: parentSerial,
+            };
+            return (
+              <div key={order.id} className="col-12">
+                <OrderCard
+                  order={adjustOrderForServiceTax(orderWithSerial)}
+                  suborders={suborders}
+                  isExpanded={expanded}
+                  onToggleExpand={() => toggleExpand(order.id)}
+                  onViewDetails={(ord) => setSelectedOrder(ord)}
+                  onViewEBill={(ord) => setEBillOrder(ord)}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
 

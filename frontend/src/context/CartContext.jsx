@@ -1057,14 +1057,29 @@ export const CartProvider = ({ children }) => {
     return getBillBreakdown(customIsTakeaway).grandTotal;
   };
 
-  const removeCoupon = () => {
+  const removeCoupon = (code = null) => {
     if (coupon && (coupon.isAutomatic || coupon.autoApply || coupon.auto_apply)) {
       userRemovedCouponRef.current = true;
     }
-    setCoupon(null);
     const branch = typeof window !== 'undefined' ? sessionStorage.getItem('foodie_public_branch') : null;
     if (branch) {
-      api.delete(`/cart/coupon/?branch=${branch}`).catch(() => {});
+      const q = code ? `?branch=${branch}&code=${encodeURIComponent(code)}` : `?branch=${branch}`;
+      api.delete(`/cart/coupon/${q}`).catch(() => {});
+    }
+    if (code && coupon?.appliedList && coupon.appliedList.length > 1) {
+      const remaining = coupon.appliedList.filter(c => c.code.toUpperCase() !== String(code).toUpperCase());
+      if (remaining.length > 0) {
+        setCoupon({
+          code: remaining[0].code,
+          discount: remaining[0].discount,
+          isAutomatic: remaining[0].isAutomatic,
+          appliedList: remaining
+        });
+      } else {
+        setCoupon(null);
+      }
+    } else {
+      setCoupon(null);
     }
   };
 
@@ -1151,21 +1166,28 @@ export const CartProvider = ({ children }) => {
   const applyCoupon = async (code) => {
     const codeUpper = (code || '').trim().toUpperCase();
     if (!codeUpper) return { success: false, message: 'Enter a coupon code.' };
-    if (coupon && coupon.code === codeUpper) {
-      return { success: true, message: `Coupon "${codeUpper}" is already applied.` };
-    }
     const branch = typeof window !== 'undefined' ? sessionStorage.getItem('foodie_public_branch') : null;
     if (!branch) return { success: false, message: 'Choose a restaurant before applying a coupon.' };
     try {
       const res = await api.post('/cart/coupon/', { branch: Number(branch), code: codeUpper });
       const pricing = res.data?.pricing || {};
-      const applied = (pricing.coupons || []).find((row) => String(row.code).toUpperCase() === codeUpper);
-      const rejected = (pricing.rejected_coupons || []).find((row) => String(row.code).toUpperCase() === codeUpper);
-      if (!applied) {
-        return { success: false, message: rejected?.reason || 'This coupon cannot be applied to this order.' };
+      const appliedList = pricing.coupons || [];
+      const appliedThis = appliedList.find((row) => String(row.code).toUpperCase() === codeUpper);
+      const rejectedThis = (pricing.rejected_coupons || []).find((row) => String(row.code).toUpperCase() === codeUpper);
+      if (!appliedThis) {
+        return { success: false, message: rejectedThis?.reason || 'This coupon cannot be applied to this order.' };
       }
       userRemovedCouponRef.current = false;
-      setCoupon({ code: applied.code, discount: Number(applied.discount || 0), isAutomatic: Boolean(applied.auto_applied) });
+      setCoupon({
+        code: appliedThis.code,
+        discount: Number(appliedThis.discount || 0),
+        isAutomatic: Boolean(appliedThis.auto_applied),
+        appliedList: appliedList.map(a => ({
+          code: a.code,
+          discount: Number(a.discount || 0),
+          isAutomatic: Boolean(a.auto_applied)
+        }))
+      });
       return { success: true, message: `Coupon "${codeUpper}" applied successfully!` };
     } catch (err) {
       return { success: false, message: err.response?.data?.detail || err.message || 'Failed to apply coupon' };
