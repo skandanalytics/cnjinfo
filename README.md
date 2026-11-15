@@ -1,4 +1,4 @@
-﻿# Foodie
+# Foodie
 
 Restaurant ordering app: customer QR / dine-in / takeaway, admin and employee dashboards, kitchen queue, inventory, and live order updates.
 
