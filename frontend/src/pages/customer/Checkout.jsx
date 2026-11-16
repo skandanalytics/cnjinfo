@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiCoffee, FiShoppingBag, FiCheckCircle } from 'react-icons/fi';
+import { FiCoffee, FiCheckCircle } from 'react-icons/fi';
 import CustomerLayout from '../../components/layout/CustomerLayout';
 import ServerBillSummary from '../../components/customer/ServerBillSummary';
 import CheckoutStepper from '../../components/customer/CheckoutStepper';
@@ -419,10 +419,7 @@ export const Checkout = () => {
                       minHeight: '64px'
                     }}
                   >
-                    <div className="d-flex align-items-center gap-2">
-                      <FiShoppingBag size={20} className="text-danger flex-shrink-0" />
-                      <span className="fw-bold text-dark fs-6">Takeaway</span>
-                    </div>
+                    <span className="fw-bold text-dark fs-6">Takeaway</span>
                   </div>
                 </div>
               </div>

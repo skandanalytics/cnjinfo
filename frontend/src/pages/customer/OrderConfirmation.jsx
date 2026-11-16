@@ -375,13 +375,13 @@ export const OrderConfirmation = () => {
               </span>
             </div>
 
-            <div className="d-flex align-items-center justify-content-between mb-2.5">
+            <div className="d-flex align-items-center justify-content-between py-2 border-bottom border-light">
               <span className="text-secondary small fw-medium">Order Type</span>
               <span className="fw-bold text-dark">{isTakeawayOrder ? 'Takeaway' : 'Dine-in'}</span>
             </div>
 
             {!isTakeawayOrder && (raw.table || raw.table_number) && (
-              <div className="d-flex align-items-center justify-content-between mb-2.5">
+              <div className="d-flex align-items-center justify-content-between py-2 border-bottom border-light">
                 <span className="text-secondary small fw-medium">Dining Table</span>
                 <span className="fw-bold text-dark">
                   {typeof raw.table === 'object' ? raw.table?.label || raw.table?.table_number : raw.table || raw.table_number}
@@ -389,7 +389,7 @@ export const OrderConfirmation = () => {
               </div>
             )}
 
-            <div className="d-flex align-items-center justify-content-between mb-2.5">
+            <div className="d-flex align-items-center justify-content-between py-2 border-bottom border-light">
               <span className="text-secondary small fw-medium">Payment</span>
               <span className="fw-bold text-dark" data-testid="payment-status">
                 {isPaid ? (
@@ -407,21 +407,30 @@ export const OrderConfirmation = () => {
                 )}
               </span>
             </div>
+
             {!isPaid && (String(raw.payment_status || '').toUpperCase() === 'PENDING' || String(raw.payment_method || '').toUpperCase() === 'UPI') && (
-              <div className="alert alert-warning py-2 px-3 small rounded-3 mb-2 text-start" style={{ fontSize: '12px' }}>
-                <i className="bi bi-info-circle me-1"></i>
-                Your UPI payment has been submitted and will be verified by the restaurant cashier.
+              <div 
+                className="py-2.5 px-3 rounded-3 my-2.5 text-start d-flex align-items-start gap-2 shadow-xs" 
+                style={{ 
+                  backgroundColor: '#FFFBEB', 
+                  border: '1px solid #FDE68A',
+                  color: '#92400E',
+                  fontSize: '12.5px' 
+                }}
+              >
+                <i className="bi bi-info-circle flex-shrink-0 mt-0.5" style={{ color: '#D97706' }}></i>
+                <span>Your UPI payment has been submitted and will be verified by the restaurant cashier.</span>
               </div>
             )}
 
-            <div className="d-flex align-items-center justify-content-between mb-2.5">
+            <div className="d-flex align-items-center justify-content-between py-2 border-bottom border-light">
               <span className="text-secondary small fw-medium">Items</span>
               <span className="fw-bold text-dark">
                 {(raw.items || []).length} items
               </span>
             </div>
 
-            <div className="d-flex align-items-center justify-content-between pt-2 border-top border-light">
+            <div className="d-flex align-items-center justify-content-between pt-3">
               <span className="text-secondary small fw-bold">Total</span>
               <span className="fw-bold fs-5" style={{ color: '#F20D2D' }} data-testid="order-total">
                 {formatCurrency(Number(raw.total_amount || raw.total || 0))}
@@ -430,7 +439,7 @@ export const OrderConfirmation = () => {
           </div>
 
           {/* Action Pill Buttons */}
-          <div className="d-flex flex-column flex-md-row align-items-stretch justify-content-center gap-3 pt-3">
+          <div className="d-flex flex-column flex-md-row align-items-stretch justify-content-center pt-3" style={{ gap: '14px' }}>
             <button
               type="button"
               onClick={handleOpenBill}

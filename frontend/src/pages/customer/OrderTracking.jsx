@@ -442,7 +442,7 @@ export const OrderTracking = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="d-flex flex-column gap-2.5 pt-2">
+              <div className="d-flex flex-column pt-3" style={{ gap: '14px' }}>
                 <button
                   type="button"
                   onClick={async () => {

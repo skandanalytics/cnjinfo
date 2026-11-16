@@ -481,22 +481,23 @@ export const CustomerLogin = () => {
                   transition: 'border-color 0.2s ease, box-shadow 0.2s ease'
                 }}
               >
-                <div className="d-flex align-items-center gap-1.5 ps-2.5 text-muted pe-2.5 border-end flex-shrink-0">
-                  <FiPhone size={15} style={{ color: '#64748B' }} />
-                  <span className="fw-bold text-dark small" style={{ fontSize: '13px' }}>{countryCode}</span>
+                <div className="d-flex align-items-center gap-2 px-3 text-muted border-end flex-shrink-0" style={{ paddingRight: '14px' }}>
+                  <FiPhone size={16} style={{ color: '#64748B' }} />
+                  <span className="fw-bold text-dark" style={{ fontSize: '14px' }}>{countryCode}</span>
                 </div>
                 <input
                   type="tel"
                   inputMode="numeric"
                   maxLength={10}
                   disabled={otpSent && otpLoading}
-                  className="form-control customer-phone-input border-0 shadow-none ps-2 text-dark fw-semibold w-100"
+                  className="form-control customer-phone-input border-0 shadow-none text-dark fw-semibold w-100"
                   style={{ 
-                    fontSize: '14px', 
+                    fontSize: '15px', 
                     backgroundColor: 'transparent',
                     outline: 'none',
                     boxShadow: 'none',
-                    border: 'none'
+                    border: 'none',
+                    paddingLeft: '16px'
                   }}
                   placeholder="Mobile number"
                   value={phone}

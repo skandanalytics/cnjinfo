@@ -7,7 +7,15 @@ import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../hooks/useAuth';
 import BackButton from '../../components/common/BackButton';
 import CheckoutStepper from '../../components/customer/CheckoutStepper';
-import { applyOrderContext, payOrderOnline, validateCheckout, fetchCustomerOrder, fetchCustomerBillPreview } from '../../services/customerCheckout';
+import {
+  applyOrderContext,
+  payOrderOnline,
+  validateCheckout,
+  fetchCustomerOrder,
+  fetchCustomerBillPreview,
+  startRazorpayStandardCheckout,
+  verifyRazorpayPayment
+} from '../../services/customerCheckout';
 import { TAKEAWAY, getOrderType, normalizeOrderType } from '../../utils/orderContext';
 import formatCurrency from '../../utils/formatCurrency';
 import api from '../../services/api';
@@ -192,10 +200,43 @@ export const Payment = () => {
     setLoading(true);
     setError('');
 
-    let order = existingOrder;
-    if (!existingOrderId) {
+    // Case 1: Mode A - Paying for an existing pre-placed order
+    if (existingOrderId) {
+      if (paymentMethod === 'COUNTER') {
+        navigate(`/customer/order-confirmation?order=${existingOrderId}`, {
+          replace: true,
+          state: { orderId: existingOrderId, paymentResult: { status: 'PENDING', method: 'COUNTER' } },
+        });
+        return;
+      }
+
+      let paymentResult = null;
       try {
-        order = await submitOrder(paymentMethod, effectiveOrderType);
+        paymentResult = await payOrderOnline(existingOrder, paymentMethod, user);
+      } catch (err) {
+        paymentResult = { status: 'FAILED', message: err.message };
+      }
+
+      setLoading(false);
+      submitted.current = false;
+
+      if (paymentResult?.status === 'PAID') {
+        setIsOrderPaid(true);
+        navigate(`/customer/order-confirmation?order=${existingOrderId}`, {
+          replace: true,
+          state: { orderId: existingOrderId, paymentResult },
+        });
+      } else {
+        setError(paymentResult?.message || 'Payment could not be completed. Please try again.');
+      }
+      return;
+    }
+
+    // Case 2: Mode B - Checkout from Cart with Pay at Counter
+    if (paymentMethod === 'COUNTER') {
+      let order = null;
+      try {
+        order = await submitOrder('COUNTER', effectiveOrderType);
       } catch (err) {
         console.error('Order placement error:', err);
         setError(`Order Placement Failed: ${err.message}`);
@@ -203,9 +244,6 @@ export const Payment = () => {
         submitted.current = false;
         return;
       }
-    }
-
-    if (paymentMethod === 'COUNTER') {
       navigate(`/customer/order-confirmation?order=${order.id}`, {
         replace: true,
         state: { orderId: order.id, paymentResult: { status: 'PENDING', method: 'COUNTER' } },
@@ -213,26 +251,70 @@ export const Payment = () => {
       return;
     }
 
-    // All online payment options (RAZORPAY, UPI, CARD) route securely through Razorpay Standard Checkout
+    // Case 3: Mode B - Checkout from Cart with Online Payment (RAZORPAY_UPI / RAZORPAY_CARD)
+    // DO NOT clear cart or create order before payment verification!
+    const totalPaise = Math.round(Number(totalAmount) * 100);
+    if (totalPaise < 100) {
+      setError('Order amount must be at least ₹1.00 for online payment.');
+      setLoading(false);
+      submitted.current = false;
+      return;
+    }
+
     let paymentResult = null;
     try {
-      paymentResult = await payOrderOnline(order, paymentMethod, user);
+      paymentResult = await startRazorpayStandardCheckout({
+        amount: totalPaise,
+        currency: 'INR',
+        paymentMethod,
+        customer: user,
+      });
     } catch (err) {
       paymentResult = { status: 'FAILED', message: err.message };
     }
 
+    if (paymentResult?.status !== 'PAID') {
+      // Payment was cancelled or failed:
+      // Cart remains 100% intact! No order is created!
+      setLoading(false);
+      submitted.current = false;
+      setError(paymentResult?.message || 'Payment could not be completed. Please try again.');
+      return;
+    }
+
+    // Payment Verified via Razorpay signature!
+    // Now create the customer order, link verified payment, clear cart, and navigate to confirmation.
+    let placedOrder = null;
+    try {
+      placedOrder = await submitOrder(paymentMethod, effectiveOrderType);
+    } catch (err) {
+      console.error('Order creation error after payment:', err);
+      setError(`Payment succeeded (ID: ${paymentResult.paymentId}), but creating order encountered an issue: ${err.message}. Please contact restaurant staff.`);
+      setLoading(false);
+      submitted.current = false;
+      return;
+    }
+
+    // Link payment with newly placed order in backend
+    try {
+      await verifyRazorpayPayment({
+        razorpay_order_id: paymentResult.razorpay_order_id,
+        razorpay_payment_id: paymentResult.razorpay_payment_id,
+        razorpay_signature: paymentResult.razorpay_signature,
+        order_id: placedOrder.id,
+        payment_method: paymentMethod,
+      });
+    } catch (e) {
+      console.warn('Could not link payment to order in verify endpoint:', e);
+    }
+
     setLoading(false);
     submitted.current = false;
-
-    if (paymentResult?.status === 'PAID') {
-      setIsOrderPaid(true);
-      navigate(`/customer/order-confirmation?order=${order.id}`, {
-        replace: true,
-        state: { orderId: order.id, paymentResult },
-      });
-    } else {
-      setError(paymentResult?.message || 'Payment could not be completed. Please try again.');
-    }
+    setIsOrderPaid(true);
+    navigate(`/customer/order-confirmation?order=${placedOrder.id}`, {
+      replace: true,
+      state: { orderId: placedOrder.id, paymentResult },
+    });
   };
 
   const syntheticCart = {

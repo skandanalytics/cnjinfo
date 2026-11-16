@@ -200,6 +200,25 @@ class VerifyPaymentView(APIView):
 
         # Check for linked Payment in DB
         payment = Payment.objects.filter(razorpay_order_id=data["razorpay_order_id"]).first()
+        if not payment and data.get("order_id"):
+            target_order = Order.objects.filter(pk=data["order_id"]).first()
+            if target_order:
+                req_method = str(data.get("payment_method") or "").strip().upper()
+                resolved_method = None
+                if req_method in ("UPI", "RAZORPAY_UPI"):
+                    resolved_method = Payment.Method.RAZORPAY_UPI
+                elif req_method in ("CARD", "RAZORPAY_CARD"):
+                    resolved_method = Payment.Method.RAZORPAY_CARD
+                else:
+                    resolved_method = Payment.Method.RAZORPAY
+                payment = Payment.objects.create(
+                    order=target_order,
+                    method=resolved_method,
+                    amount=target_order.total_amount,
+                    status=Payment.Status.PENDING,
+                    razorpay_order_id=data["razorpay_order_id"],
+                )
+
         if payment:
             # Additional Validations:
             # 1. Order exists and belongs to payment

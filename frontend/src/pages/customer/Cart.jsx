@@ -53,18 +53,8 @@ export const Cart = () => {
   const [showAllCoupons, setShowAllCoupons] = useState(false);
   const [availableCoupons, setAvailableCoupons] = useState([]);
   const [isFirstTime, setIsFirstTime] = useState(true);
-  const hasEverHadItemsRef = useRef(false);
 
   const { products } = useProducts();
-
-  useEffect(() => {
-    if (cartItems.length > 0) {
-      hasEverHadItemsRef.current = true;
-    } else if (hasEverHadItemsRef.current) {
-      // Deleting last item automatically redirects to customer home
-      navigate('/customer/home', { replace: true });
-    }
-  }, [cartItems.length, navigate]);
 
   useEffect(() => {
     let isMounted = true;
@@ -177,6 +167,17 @@ export const Cart = () => {
     } else {
       navigate('/customer/login', { state: { from: '/customer/checkout' } });
     }
+  };
+
+  const handleSaveAndContinue = () => {
+    try {
+      sessionStorage.setItem('foodie_cart', JSON.stringify(cartItems));
+      sessionStorage.setItem('foodie_guest_cart', JSON.stringify(cartItems));
+      sessionStorage.setItem('foodie_guest_cart_temp', JSON.stringify(cartItems));
+      localStorage.setItem('foodie_guest_cart', JSON.stringify(cartItems));
+      window.dispatchEvent(new CustomEvent('foodie_cart_updated'));
+    } catch (e) {}
+    navigate('/customer/home');
   };
 
   const currentNetSubtotal = Math.round(Number(serverCart?.pricing?.merchandise_total ?? getSubtotal()) * 100) / 100;
@@ -653,9 +654,9 @@ export const Cart = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => navigate('/customer/home')}
-                    className="btn btn-outline-danger w-100 rounded-pill py-2.5 fw-bold bg-white"
-                    style={{ height: '44px', fontSize: '14px', borderColor: 'var(--primary-color, #F20D2D)', color: 'var(--primary-color, #F20D2D)' }}
+                    onClick={handleSaveAndContinue}
+                    className="btn btn-outline-danger w-100 rounded-pill fw-bold bg-white d-flex align-items-center justify-content-center px-3"
+                    style={{ minHeight: '44px', height: 'auto', padding: '10px 16px', fontSize: '14px', borderColor: 'var(--primary-color, #F20D2D)', color: 'var(--primary-color, #F20D2D)' }}
                   >
                     Save and Continue (Add More Items)
                   </button>
@@ -734,9 +735,10 @@ export const Cart = () => {
                   Proceed to Checkout
                 </Button>
                 <Button 
-                  onClick={() => navigate('/customer/home')} 
+                  onClick={handleSaveAndContinue} 
                   variant="outline-primary" 
-                  className="py-2.5 fw-bold border-danger text-danger bg-white" style={{ height: '44px', fontSize: '14px' }}
+                  className="fw-bold border-danger text-danger bg-white d-flex align-items-center justify-content-center px-3" 
+                  style={{ minHeight: '44px', height: 'auto', padding: '10px 16px', fontSize: '14px' }}
                 >
                   Save and Continue (Add More Items)
                 </Button>

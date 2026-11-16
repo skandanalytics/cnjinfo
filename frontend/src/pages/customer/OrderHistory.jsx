@@ -147,7 +147,22 @@ export const OrderHistory = () => {
                   {/* Top Row: Order ID, Date, Status pill, Price */}
                   <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                     <div>
-                      <span className="font-monospace fw-bold text-dark fs-6">#{displayNo}</span>
+                      <div className="d-flex align-items-center gap-2">
+                        <span className="font-monospace fw-bold text-dark fs-6">#{displayNo}</span>
+                        {Boolean(ord.parent_order_id || ord.parent_order || (ord.continuation_index > 0)) && (
+                          <span 
+                            className="badge rounded-pill px-2 py-0.5 fw-semibold"
+                            style={{ 
+                              backgroundColor: '#F1F5F9', 
+                              color: '#475569', 
+                              border: '1px solid #CBD5E1', 
+                              fontSize: '10.5px' 
+                            }}
+                          >
+                            Sub-order of #{ord.parent_order_id || (typeof ord.parent_order === 'object' ? ord.parent_order.id : ord.parent_order) || String(displayNo).split('.')[0]}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-secondary small mt-0.5">
                         {ord.time || ord.created_at || 'Recent order'}
                       </div>
@@ -192,7 +207,7 @@ export const OrderHistory = () => {
                   </div>
 
                   {/* Bottom Row: 3 Action Pill Buttons */}
-                  <div className="d-flex align-items-center gap-2 pt-3 border-top border-light flex-wrap">
+                  <div className="d-flex align-items-center pt-3 border-top border-light flex-wrap" style={{ gap: '12px' }}>
                     <button
                       type="button"
                       onClick={() => setSelectedOrder(ord)}

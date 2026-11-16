@@ -224,18 +224,18 @@ export const CartItem = ({
 
         {/* Price and Quantity Control Row */}
         <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
-          <div className="d-flex align-items-center gap-1.5 flex-wrap">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
             {item.hasDiscount || item.discountPercent > 0 || (item.discountPrice > 0 && item.discountPrice < item.price) ? (
               <>
-                <span className="text-decoration-line-through text-muted small" style={{ fontSize: '11px' }}>
-                  {formatCurrency(item.price)}
-                </span>
-                <span className="fw-bold text-danger" style={{ fontSize: '14px' }}>
+                <span className="fw-bold text-danger" style={{ fontSize: '15px' }}>
                   {formatCurrency(displayUnit)}
+                </span>
+                <span className="text-decoration-line-through text-muted small" style={{ fontSize: '12px', color: '#94A3B8' }}>
+                  {formatCurrency(item.price)}
                 </span>
               </>
             ) : (
-              <span className="fw-bold text-danger" style={{ fontSize: '14px' }}>
+              <span className="fw-bold text-danger" style={{ fontSize: '15px' }}>
                 {formatCurrency(displayUnit)}
               </span>
             )}
@@ -317,16 +317,16 @@ export const CartItem = ({
               )}
 
               {/* Default instruction pills */}
-              <div className="d-flex align-items-center justify-content-between mb-1.5">
-                <label className="small fw-bold text-dark d-block mb-0" style={{ fontSize: '11px' }}>Select Preparation Note</label>
+              <div className="d-flex align-items-center justify-content-between mb-2">
+                <label className="small fw-bold text-dark d-block mb-0" style={{ fontSize: '12px' }}>Select Preparation Note</label>
                 {isSaving && (
-                  <span className="text-secondary small d-flex align-items-center" style={{ fontSize: '10px' }}>
+                  <span className="text-secondary small d-flex align-items-center" style={{ fontSize: '11px' }}>
                     <span className="spinner-border spinner-border-sm me-1" style={{ width: '10px', height: '10px' }}></span>
                     Auto-saving…
                   </span>
                 )}
               </div>
-              <div className="d-flex flex-wrap gap-1.5 mb-3">
+              <div className="d-flex flex-wrap gap-2 mb-3">
                 {[
                   'Less Spicy', 'Extra Spicy', 'No Onion', 'No Garlic',
                   'Less Salt', 'No Cheese', 'Well Cooked', 'Serve Hot'
@@ -335,11 +335,11 @@ export const CartItem = ({
                     key={inst}
                     type="button"
                     onClick={() => handleSelectPrepPill(inst)}
-                    className={`btn btn-sm rounded-pill py-0.5 px-2.5 transition-all text-nowrap hover-bg-light-red ${new RegExp(`(^|,\\s*)${inst}(,\\s*|$)`, 'i').test(instructionText)
-                        ? 'btn-danger text-white border-danger'
-                        : 'btn-outline-secondary'
+                    className={`btn btn-sm rounded-pill py-1 px-3 transition-all text-nowrap ${new RegExp(`(^|,\\s*)${inst}(,\\s*|$)`, 'i').test(instructionText)
+                        ? 'btn-danger text-white border-danger shadow-xs'
+                        : 'btn-outline-secondary bg-white'
                       }`}
-                    style={{ fontSize: '9px', fontWeight: '500' }}
+                    style={{ fontSize: '12px', fontWeight: '500' }}
                   >
                     {inst}
                   </button>

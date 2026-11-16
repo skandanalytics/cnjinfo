@@ -122,8 +122,64 @@ function mergeServerItems(serverItems, previous) {
 export const CartContext = createContext();
 
 export const CartProvider = ({ children }) => {
-  const [cartItems, setCartItems] = useState([]);
-  const [tableContext, setTableContext] = useState(null); // { tableNumber, tableId }
+  const [tableContext, setTableContext] = useState(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const raw = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+
+  const [cartItems, setCartItems] = useState(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      let tCtx = null;
+      const rawT = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+      if (rawT) {
+        try { tCtx = JSON.parse(rawT); } catch (e) {}
+      }
+      const rawA = sessionStorage.getItem('foodie_auth_customer') || localStorage.getItem('foodie_auth_customer') ||
+                   sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
+      let currUser = null;
+      if (rawA) {
+        try { currUser = JSON.parse(rawA)?.user; } catch (e) {}
+      }
+      
+      const keyCandidates = [];
+      if (currUser) {
+        const id = currUser.id
+          ? String(currUser.id)
+          : (currUser.phone ? String(currUser.phone).replace(/\D/g, '').slice(-10) : (currUser.email || 'customer'));
+        const baseKey = `foodie_cart_user_${id}`;
+        if (currUser.role === 'admin' || currUser.role === 'employee') {
+          const tId = tCtx?.tableId || tCtx?.tableNumber || tCtx?.id;
+          if (tId) keyCandidates.push(`${baseKey}_table_${tId}`);
+          keyCandidates.push(`${baseKey}_table_default`);
+        }
+        keyCandidates.push(baseKey);
+      }
+      keyCandidates.push(
+        'foodie_guest_cart',
+        'foodie_guest_cart_temp',
+        'foodie_guest_cart_unmerged',
+        'foodie_cart'
+      );
+
+      for (const k of keyCandidates) {
+        const raw = sessionStorage.getItem(k) || localStorage.getItem(k);
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          } catch (e) {}
+        }
+      }
+    } catch (e) {}
+    return [];
+  });
+
   const [coupon, setCoupon] = useState(null); // { code, discount }
   const [orderLogs, setOrderLogs] = useState([]);
   const [outOfStockModalData, setOutOfStockModalData] = useState(null);
@@ -140,8 +196,16 @@ export const CartProvider = ({ children }) => {
     const baseKey = `foodie_cart_user_${id}`;
     
     if (currentUser.role === 'admin' || currentUser.role === 'employee') {
-      const tId = ctx?.tableId || ctx?.tableNumber || 'default';
-      return `${baseKey}_table_${tId}`;
+      let activeCtx = ctx;
+      if (!activeCtx && typeof window !== 'undefined') {
+        try {
+          const rawT = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+          if (rawT) activeCtx = JSON.parse(rawT);
+        } catch (e) {}
+      }
+      const tId = activeCtx?.tableId || activeCtx?.tableNumber || activeCtx?.id || activeCtx?.label;
+      if (tId) return `${baseKey}_table_${tId}`;
+      return `${baseKey}_table_default`;
     }
     
     return baseKey;
@@ -150,9 +214,12 @@ export const CartProvider = ({ children }) => {
   const saveCartToStorage = (items, targetUser = user) => {
     const key = getCartStorageKey(targetUser);
     sessionStorage.setItem(key, JSON.stringify(items));
+    localStorage.setItem(key, JSON.stringify(items));
     if (!targetUser) {
       sessionStorage.setItem('foodie_guest_cart_temp', JSON.stringify(items));
       sessionStorage.setItem('foodie_guest_cart', JSON.stringify(items));
+      localStorage.setItem('foodie_guest_cart', JSON.stringify(items));
+      localStorage.setItem('foodie_guest_cart_temp', JSON.stringify(items));
     } else {
       // Ensure guest keys don't linger for an authenticated user
       sessionStorage.removeItem('foodie_guest_cart');
@@ -171,19 +238,19 @@ export const CartProvider = ({ children }) => {
 
   useEffect(() => {
     const key = getCartStorageKey(user);
-    let savedCart = sessionStorage.getItem(key);
+    let savedCart = sessionStorage.getItem(key) || localStorage.getItem(key);
     if (!savedCart && !user) {
-      savedCart = sessionStorage.getItem('foodie_guest_cart_temp') || sessionStorage.getItem('foodie_guest_cart');
+      savedCart = sessionStorage.getItem('foodie_guest_cart_temp') || localStorage.getItem('foodie_guest_cart_temp') ||
+                  sessionStorage.getItem('foodie_guest_cart') || localStorage.getItem('foodie_guest_cart');
     }
     const savedTable = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
     if (savedCart) {
       try {
-        setCartItems(JSON.parse(savedCart));
-      } catch (e) {
-        setCartItems([]);
-      }
-    } else {
-      setCartItems([]);
+        const parsed = JSON.parse(savedCart);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setCartItems(parsed);
+        }
+      } catch (e) {}
     }
 
     if (savedTable) {
@@ -310,11 +377,17 @@ export const CartProvider = ({ children }) => {
           if (!activeCart) {
             const key = getCartStorageKey(user, tableContext);
             let savedCart = sessionStorage.getItem(key) || localStorage.getItem(key);
-            if (!savedCart && !user) {
-              savedCart = sessionStorage.getItem('foodie_guest_cart_temp')
-                || sessionStorage.getItem('foodie_guest_cart')
-                || localStorage.getItem('foodie_guest_cart')
-                || localStorage.getItem('foodie_guest_cart_temp');
+            if (!savedCart) {
+              const fallbackKeys = [
+                'foodie_guest_cart',
+                'foodie_guest_cart_temp',
+                'foodie_guest_cart_unmerged',
+                'foodie_cart'
+              ];
+              for (const fk of fallbackKeys) {
+                savedCart = sessionStorage.getItem(fk) || localStorage.getItem(fk);
+                if (savedCart) break;
+              }
             }
             if (savedCart) {
               try {
@@ -325,8 +398,8 @@ export const CartProvider = ({ children }) => {
                 }
               } catch (e) {}
             }
-            setCartItems([]);
-            saveCartToStorage([], user);
+            // If we already have items in-memory, retain them rather than aggressively wiping
+            setCartItems(prev => (Array.isArray(prev) && prev.length > 0 ? prev : []));
             return;
           }
 

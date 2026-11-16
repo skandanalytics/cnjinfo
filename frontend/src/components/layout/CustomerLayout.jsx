@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import BottomNavigation from './BottomNavigation';
 import MobileFloatingCartBar from '../customer/MobileFloatingCartBar';
+import DesktopFloatingCartBar from '../customer/DesktopFloatingCartBar';
 import Header from './Header';
 import Footer from './Footer';
 import { useCart } from '../../hooks/useCart';
@@ -167,6 +168,9 @@ export const CustomerLayout = ({ children }) => {
 
       {/* Mobile Floating Green Cart Option with Unlock Offer (Visible only on mobile web) */}
       <MobileFloatingCartBar />
+
+      {/* Desktop Sticky Floating Cart CTA (Visible only on desktop screens) */}
+      <DesktopFloatingCartBar />
 
       {/* Bottom Sticky Navigation (Visible only on mobile devices when cart is empty) */}
       {!hasCartItems && (
