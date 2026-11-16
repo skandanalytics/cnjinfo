@@ -5,6 +5,7 @@ export const AppContext = createContext();
 
 export const AppProvider = ({ children }) => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const isFetchingRef = useRef(false);
 
@@ -43,7 +44,15 @@ export const AppProvider = ({ children }) => {
     };
   }, []);
 
-  const toggleSidebar = () => setSidebarCollapsed(!sidebarCollapsed);
+  const closeMobileDrawer = () => setMobileDrawerOpen(false);
+
+  const toggleSidebar = () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 992) {
+      setMobileDrawerOpen((prev) => !prev);
+    } else {
+      setSidebarCollapsed((prev) => !prev);
+    }
+  };
 
   const addNotification = async (text) => {
     try {
@@ -91,6 +100,9 @@ export const AppProvider = ({ children }) => {
   return (
     <AppContext.Provider value={{
       sidebarCollapsed,
+      mobileDrawerOpen,
+      setMobileDrawerOpen,
+      closeMobileDrawer,
       notifications,
       toggleSidebar,
       addNotification,

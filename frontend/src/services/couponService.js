@@ -143,7 +143,16 @@ export const couponService = {
     const { resolveAuthoritativeBranch } = await import('./branchResolution');
     const branchId = await resolveAuthoritativeBranch();
     if (!branchId) return [];
-    const menu = await api.get(`/public/branches/${branchId}/menu/`);
+    let menu;
+    try {
+      menu = await api.get(`/public/branches/${branchId}/menu/`);
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        sessionStorage.removeItem('foodie_public_branch');
+        localStorage.removeItem('foodie_public_branch');
+      }
+      return [];
+    }
     const offers = Array.isArray(menu.data?.offers) ? menu.data.offers : [];
     return offers
       .filter((c) => c.is_active !== false && c.status !== 'Inactive')

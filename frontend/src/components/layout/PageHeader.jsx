@@ -43,7 +43,7 @@ export const PageHeader = ({
           {subtitle && <p className="text-secondary small mb-0 mt-0.5">{subtitle}</p>}
         </div>
       </div>
-      {actions && <div className="d-flex align-items-center gap-2">{actions}</div>}
+      {actions && <div className="d-flex align-items-center gap-2 flex-wrap w-100 w-md-auto justify-content-start justify-content-md-end">{actions}</div>}
     </div>
   );
 };

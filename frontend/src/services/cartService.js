@@ -1,5 +1,6 @@
 import api from './api';
 import { extractApiErrorMessage } from '../utils/errorUtils';
+import { getActiveBranchId } from './branchResolution';
 
 const _isValidId = (id) => {
   if (id === undefined || id === null) return false;
@@ -82,7 +83,7 @@ const resolveBackendTablePk = async (tableInput) => {
 let _inFlightCartPromise = null;
 
 function customerBranchId() {
-  return sessionStorage.getItem('foodie_public_branch');
+  return getActiveBranchId();
 }
 
 export function isStaffOrdering() {

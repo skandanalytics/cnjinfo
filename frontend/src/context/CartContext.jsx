@@ -10,6 +10,7 @@ import OutOfStockModal from '../components/common/OutOfStockModal';
 import api from '../services/api';
 import { placeOrder as placeCustomerOrder } from '../services/customerCheckout';
 import { getOrderType, setOrderType, setSelectedTableId } from '../utils/orderContext';
+import { getActiveBranchId } from '../services/branchResolution';
 
 const parseInstructions = (text) => {
   if (!text) {
@@ -911,7 +912,7 @@ export const CartProvider = ({ children }) => {
   };
 
   const abandonStaffTableOrder = async () => {
-    const branch = Number(sessionStorage.getItem('foodie_public_branch'));
+    const branch = Number(getActiveBranchId());
     if (!Number.isFinite(branch) || branch <= 0) {
       throw new Error('The table-order session could not be identified.');
     }
@@ -1061,7 +1062,7 @@ export const CartProvider = ({ children }) => {
     if (coupon && (coupon.isAutomatic || coupon.autoApply || coupon.auto_apply)) {
       userRemovedCouponRef.current = true;
     }
-    const branch = typeof window !== 'undefined' ? sessionStorage.getItem('foodie_public_branch') : null;
+    const branch = getActiveBranchId();
     if (branch) {
       const q = code ? `?branch=${branch}&code=${encodeURIComponent(code)}` : `?branch=${branch}`;
       api.delete(`/cart/coupon/${q}`).catch(() => {});
@@ -1134,7 +1135,7 @@ export const CartProvider = ({ children }) => {
         } else if (best) {
           if (!coupon || coupon.code !== best.code) {
             setCoupon({ ...best, isAutomatic: true });
-            const branch = sessionStorage.getItem('foodie_public_branch');
+            const branch = getActiveBranchId();
             if (branch) {
               api.post('/cart/coupon/', { branch: Number(branch), code: best.code }).catch(() => {});
             }
@@ -1166,7 +1167,7 @@ export const CartProvider = ({ children }) => {
   const applyCoupon = async (code) => {
     const codeUpper = (code || '').trim().toUpperCase();
     if (!codeUpper) return { success: false, message: 'Enter a coupon code.' };
-    const branch = typeof window !== 'undefined' ? sessionStorage.getItem('foodie_public_branch') : null;
+    const branch = getActiveBranchId();
     if (!branch) return { success: false, message: 'Choose a restaurant before applying a coupon.' };
     try {
       const res = await api.post('/cart/coupon/', { branch: Number(branch), code: codeUpper });

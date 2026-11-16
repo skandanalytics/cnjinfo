@@ -305,6 +305,12 @@ export const getCustomerCategories = async (forceRefresh = false) => {
       return categories;
     } catch (e) {
       console.warn("Could not fetch customer categories:", e);
+      if (e?.response?.status === 404) {
+        sessionStorage.removeItem('foodie_public_branch');
+        localStorage.removeItem('foodie_public_branch');
+        sessionStorage.removeItem('foodie_branch_name');
+        localStorage.removeItem('foodie_branch_name');
+      }
     }
   }
   return cachedCustomerCategories || [];
@@ -430,14 +436,38 @@ export const productService = {
   getProducts: async (forceRefresh = false, branchIdOverride = null) => {
     const { isStaffScreen, listFoods } = await import('./adminApi');
     if (isStaffScreen()) return listFoods(branchIdOverride);
-    const branchId = await resolveCustomerBranchId();
+    let branchId = await resolveCustomerBranchId();
     const now = Date.now();
     if (!forceRefresh && cachedMappedProducts && String(cachedMappedProductsBranchId) === String(branchId) && (now - cachedMappedProductsTime < PRODUCTS_CACHE_TTL)) {
       return cachedMappedProducts;
     }
 
     if (branchId) {
-      const menuRes = await api.get(`/public/branches/${branchId}/menu/`);
+      let menuRes;
+      try {
+        menuRes = await api.get(`/public/branches/${branchId}/menu/`);
+      } catch (e) {
+        if (e?.response?.status === 404) {
+          sessionStorage.removeItem('foodie_public_branch');
+          localStorage.removeItem('foodie_public_branch');
+          sessionStorage.removeItem('foodie_branch_name');
+          localStorage.removeItem('foodie_branch_name');
+          // Reload active branches and fallback
+          try {
+            const listed = await api.get('/public/branches/');
+            const rows = Array.isArray(listed.data) ? listed.data : (listed.data?.results || []);
+            const pick = rows.find(r => r.is_primary && r.is_active !== false) || rows.find(r => r.is_active !== false);
+            if (pick) {
+              const nextId = String(pick.id);
+              sessionStorage.setItem('foodie_public_branch', nextId);
+              localStorage.setItem('foodie_public_branch', nextId);
+              menuRes = await api.get(`/public/branches/${nextId}/menu/`);
+              branchId = nextId;
+            }
+          } catch {}
+        }
+        if (!menuRes) throw e;
+      }
       const categories = (menuRes.data?.categories || []).map(c => ({
         id: c.id,
         name: c.name,

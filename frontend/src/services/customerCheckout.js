@@ -1,6 +1,7 @@
 import { notifyOrderCreated } from './notificationService';
 import api from './api';
 import { extractApiErrorMessage } from '../utils/errorUtils';
+import { getActiveBranchId } from './branchResolution';
 import {
   DINE_IN, DINE_IN_NEEDS_QR, getOrderType, getScannedTableQr, getSelectedTableId, getLastDineInTableId, normalizeOrderType,
 } from '../utils/orderContext';
@@ -32,7 +33,8 @@ export function checkoutErrorMessage(err, fallback = 'Could not place the order.
 }
 
 export function customerBranchId() {
-  const branch = Number(sessionStorage.getItem('foodie_public_branch'));
+  const b = getActiveBranchId();
+  const branch = Number(b);
   return Number.isFinite(branch) && branch > 0 ? branch : null;
 }
 

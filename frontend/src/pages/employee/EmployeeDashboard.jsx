@@ -159,7 +159,7 @@ export const EmployeeDashboard = () => {
       <PageHeader 
         title="Employee Dashboard" 
         actions={
-          <div className="d-flex align-items-center gap-2">
+          <div className="d-flex align-items-center gap-2 flex-wrap">
             <button
               onClick={() => navigate('/employee/pos')}
               className="btn btn-sm btn-danger text-white rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 shadow-sm"

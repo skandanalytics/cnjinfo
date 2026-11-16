@@ -1,5 +1,46 @@
 import api from './api';
 
+export function getActiveBranchId() {
+  if (typeof window === 'undefined') return null;
+
+  // 1. Authenticated staff / admin user check:
+  // If an active staff session exists, use the staff member's assigned branch or admin-selected branch.
+  try {
+    const rawUser = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
+    if (rawUser) {
+      const u = JSON.parse(rawUser)?.user;
+      if (u) {
+        // A. If employee has an assigned branch (e.g. Manager assigned to branch 13)
+        if (u.branchId) {
+          const bId = String(u.branchId).trim();
+          if (/^\d+$/.test(bId)) return bId;
+        }
+        // B. If Super Admin (or staff with selected branch in admin)
+        const storedAdmin = localStorage.getItem('foodie_admin_selected_branch') || sessionStorage.getItem('foodie_admin_selected_branch');
+        if (storedAdmin && storedAdmin !== 'ALL') {
+          const clean = String(storedAdmin).trim();
+          if (/^\d+$/.test(clean)) return clean;
+        }
+      }
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
+  // 2. Unauthenticated customer workflows / public visitor fallback:
+  try {
+    const pub = sessionStorage.getItem('foodie_public_branch') || localStorage.getItem('foodie_public_branch');
+    if (pub && pub !== 'ALL') {
+      const clean = String(pub).trim();
+      if (/^\d+$/.test(clean)) return clean;
+    }
+  } catch (e) {
+    /* ignore */
+  }
+
+  return null;
+}
+
 /**
  * Single Authoritative Branch Resolution Module for Customer App.
  *
@@ -91,35 +132,55 @@ export async function resolveAuthoritativeBranch({ forceRefresh = false } = {}) 
       }
     }
 
-    // 4. If no QR was scanned, check if customer previously chose a branch
+    // 4. Check active branches from public endpoint to validate saved choices and fallback
+    let listedRows = [];
+    try {
+      const listed = await api.get('/public/branches/');
+      listedRows = Array.isArray(listed.data) ? listed.data : (listed.data?.results || []);
+    } catch (e) {
+      console.warn('Failed to list public branches:', e);
+    }
+
+    // If no QR was scanned, check if customer previously chose a branch
     const source = sessionStorage.getItem('foodie_branch_source') || localStorage.getItem('foodie_branch_source');
     const saved = sessionStorage.getItem('foodie_public_branch') || localStorage.getItem('foodie_public_branch');
 
     if (saved && (source === 'chosen' || source === 'qr')) {
-      return saved;
+      // Validate that the saved branch actually exists in the active branches list
+      const exists = listedRows.length === 0 || listedRows.some((r) => String(r.id) === String(saved) && r.is_active !== false);
+      if (exists && listedRows.some((r) => String(r.id) === String(saved))) {
+        return saved;
+      }
+      // If the saved branch is invalid/stale, clear it and fall back
+      console.warn(`[BranchResolution] Cached branch ${saved} is invalid or inactive. Clearing and resolving fresh branch.`);
+      sessionStorage.removeItem('foodie_public_branch');
+      localStorage.removeItem('foodie_public_branch');
+      sessionStorage.removeItem('foodie_branch_name');
+      localStorage.removeItem('foodie_branch_name');
+      sessionStorage.removeItem('foodie_branch_source');
+      localStorage.removeItem('foodie_branch_source');
+      sessionStorage.removeItem('foodie_selected_table');
+      localStorage.removeItem('foodie_selected_table');
+      sessionStorage.removeItem('foodie_table_number');
+      localStorage.removeItem('foodie_table_number');
     }
 
-    // 5. Default fallback for non-QR customer visit (e.g. direct URL): pick primary or single active branch
-    try {
-      const listed = await api.get('/public/branches/');
-      const rows = Array.isArray(listed.data) ? listed.data : [];
-      if (rows.length > 0) {
-        const pick = rows.find((r) => r.is_primary) || rows[0];
-        if (pick) {
-          const bId = String(pick.id);
-          sessionStorage.setItem('foodie_public_branch', bId);
-          localStorage.setItem('foodie_public_branch', bId);
-          sessionStorage.setItem('foodie_branch_source', 'chosen');
-          localStorage.setItem('foodie_branch_source', 'chosen');
-          if (pick.name) {
-            sessionStorage.setItem('foodie_branch_name', pick.name);
-            localStorage.setItem('foodie_branch_name', pick.name);
-          }
-          return bId;
+    // 5. Default fallback for customer visit: pick primary or first active branch
+    if (listedRows.length > 0) {
+      const activeRows = listedRows.filter((r) => r.is_active !== false);
+      const pick = activeRows.find((r) => r.is_primary) || activeRows[0] || listedRows[0];
+      if (pick) {
+        const bId = String(pick.id);
+        sessionStorage.setItem('foodie_public_branch', bId);
+        localStorage.setItem('foodie_public_branch', bId);
+        sessionStorage.setItem('foodie_branch_source', 'chosen');
+        localStorage.setItem('foodie_branch_source', 'chosen');
+        if (pick.name) {
+          sessionStorage.setItem('foodie_branch_name', pick.name);
+          localStorage.setItem('foodie_branch_name', pick.name);
         }
+        return bId;
       }
-    } catch (e) {
-      console.warn('Failed to list public branches:', e);
     }
 
     return null;

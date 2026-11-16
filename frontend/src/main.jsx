@@ -12,6 +12,7 @@ import './styles/theme.css';
 import './styles/global.css';
 import './styles/admin.css';
 import './styles/customer.css';
+import './styles/responsive.css';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
 

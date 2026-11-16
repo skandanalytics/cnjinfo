@@ -20,7 +20,17 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
   const knownNotifIdsRef = useRef(null);
 
   const { sidebarCollapsed } = useContext(AppContext);
-  const sidebarWidth = sidebarCollapsed ? '70px' : '250px';
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 992 : false);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 992);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const sidebarWidth = isMobile ? '0px' : (sidebarCollapsed ? '70px' : '250px');
 
   const { branches } = useBranches();
   const isSuperAdmin = user?.backendRole === 'SUPER_ADMIN' || user?.is_superuser || (user?.role === 'admin' && !user?.branchId);
@@ -36,6 +46,9 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
       const bId = String(user.branchId);
       setSelectedBranch(bId);
       localStorage.setItem('foodie_admin_selected_branch', bId);
+      sessionStorage.setItem('foodie_admin_selected_branch', bId);
+      sessionStorage.setItem('foodie_public_branch', bId);
+      localStorage.setItem('foodie_public_branch', bId);
     }
   }, [isSuperAdmin, user?.branchId]);
 
@@ -85,6 +98,9 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
         const nextId = String(primary.id);
         setSelectedBranch(nextId);
         localStorage.setItem('foodie_admin_selected_branch', nextId);
+        sessionStorage.setItem('foodie_admin_selected_branch', nextId);
+        sessionStorage.setItem('foodie_public_branch', nextId);
+        localStorage.setItem('foodie_public_branch', nextId);
         window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: nextId } }));
       }
     }
@@ -94,6 +110,11 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
     const nextVal = e.target.value;
     setSelectedBranch(nextVal);
     localStorage.setItem('foodie_admin_selected_branch', nextVal);
+    sessionStorage.setItem('foodie_admin_selected_branch', nextVal);
+    if (nextVal && nextVal !== 'ALL') {
+      sessionStorage.setItem('foodie_public_branch', nextVal);
+      localStorage.setItem('foodie_public_branch', nextVal);
+    }
     window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: nextVal } }));
     window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
     window.dispatchEvent(new CustomEvent('foodie_products_updated'));
@@ -194,27 +215,33 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
       <div 
         className={`flex-grow-1 d-flex flex-column ${fullHeight ? 'admin-main-fullheight' : 'min-vh-100'} admin-main-content`} 
         style={{ 
-          marginLeft: sidebarWidth,
+          marginLeft: isMobile ? '0px' : sidebarWidth,
           minWidth: 0, 
           overflowX: 'hidden',
           transition: 'margin-left 0.2s ease'
         }}
       >
         {/* Admin Header */}
-        <header className="admin-header shadow-sm position-relative flex-shrink-0 d-flex align-items-center justify-content-between px-3 px-md-4 py-2" style={{ minHeight: '64px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)' }}>
-          <div className="d-flex align-items-center gap-3">
-            <button className="btn border-0 text-secondary p-1 d-flex align-items-center" onClick={toggleSidebar} title="Toggle Sidebar">
+        <header className="admin-header shadow-sm position-relative flex-shrink-0 d-flex align-items-center justify-content-between px-2 px-sm-3 px-md-4 py-2" style={{ minHeight: '60px', backgroundColor: 'var(--surface-color)', borderBottom: '1px solid var(--border-color)' }}>
+          <div className="d-flex align-items-center gap-2 gap-sm-3 overflow-hidden">
+            <button 
+              className="btn border-0 text-secondary p-1.5 d-flex align-items-center justify-content-center rounded-circle flex-shrink-0" 
+              onClick={toggleSidebar} 
+              title="Toggle Navigation Menu"
+              aria-label="Toggle Navigation Menu"
+              style={{ width: '38px', height: '38px' }}
+            >
               <FiAlignLeft size={22} />
             </button>
 
-            {/* Centered Branch Display (Plain text, not a dropdown or button, no arrows) */}
+            {/* Centered Branch Display (Responsive & Truncated on Mobile) */}
             {activeBranchText && (
-              <div className="d-flex align-items-center gap-2">
-                <FiMapPin className="text-danger flex-shrink-0" size={15} />
-                <span className="small text-secondary fw-semibold" style={{ fontSize: '13px' }}>
+              <div className="d-flex align-items-center gap-1.5 overflow-hidden" style={{ maxWidth: isMobile ? '160px' : '360px' }}>
+                <FiMapPin className="text-danger flex-shrink-0" size={14} />
+                <span className="small text-secondary fw-semibold d-none d-sm-inline" style={{ fontSize: '12px' }}>
                   Branch:
                 </span>
-                <span className="fw-bold text-dark" style={{ fontSize: '14px', letterSpacing: '-0.2px' }}>
+                <span className="fw-bold text-dark text-truncate" style={{ fontSize: '13px', letterSpacing: '-0.2px' }} title={activeBranchText}>
                   {activeBranchText}
                 </span>
               </div>
@@ -262,7 +289,7 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
                   />
                   <div 
                     className="dropdown-menu show position-absolute end-0 mt-2 shadow-lg border-0 p-3 rounded-4 bg-white text-start" 
-                    style={{ minWidth: '320px', maxWidth: '360px', zIndex: 1000, top: '100%', backgroundColor: 'var(--surface-color)' }}
+                    style={{ minWidth: isMobile ? '280px' : '320px', maxWidth: 'calc(100vw - 20px)', zIndex: 1000, top: '100%', backgroundColor: 'var(--surface-color)' }}
                   >
                     <div className="d-flex align-items-center justify-content-between border-bottom pb-2 mb-2">
                       <div className="fw-bold text-dark fs-6 d-flex align-items-center gap-2">

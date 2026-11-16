@@ -14,7 +14,8 @@ export const AddDishModal = ({
   isOpen,
   onClose,
   onAdd,
-  defaultCategory = ''
+  defaultCategory = '',
+  branchId = null
 }) => {
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
@@ -72,11 +73,17 @@ export const AddDishModal = ({
   };
 
   const [categories, setCategories] = useState([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
+  const [categoryError, setCategoryError] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
     const loadCategories = async () => {
+      setLoadingCategories(true);
+      setCategoryError('');
       try {
-        const catList = await menuService.getMenus();
+        const catList = await menuService.getMenus(branchId);
+        if (cancelled) return;
         const mapped = (catList || [])
           .filter(c => c.status !== 'Inactive' && c.is_active !== false)
           .map(c => {
@@ -99,9 +106,18 @@ export const AddDishModal = ({
           unique.push({ value: defaultCategory, label: defaultCategory });
           seen.add(defaultCategory);
         }
-        setCategories([{ value: '', label: 'Select a category' }, ...unique]);
+        if (unique.length === 0) {
+          setCategories([{ value: '', label: 'No categories available — create a category first', disabled: true }]);
+        } else {
+          setCategories([{ value: '', label: 'Select a category' }, ...unique]);
+        }
       } catch (e) {
+        if (cancelled) return;
         console.error("Failed to load categories:", e);
+        setCategoryError(e.message || 'Failed to load categories.');
+        setCategories([{ value: '', label: 'Failed to load categories', disabled: true }]);
+      } finally {
+        if (!cancelled) setLoadingCategories(false);
       }
     };
     if (isOpen) {
@@ -110,7 +126,8 @@ export const AddDishModal = ({
         setCategory(defaultCategory);
       }
     }
-  }, [isOpen, defaultCategory]);
+    return () => { cancelled = true; };
+  }, [isOpen, defaultCategory, branchId]);
 
   const foodTypes = [
     { value: 'veg', label: 'Vegetarian (Veg)' },
@@ -442,6 +459,7 @@ export const AddDishModal = ({
 
             {imageMode === 'file' ? (
               <input
+                key="add-dish-image-file-input"
                 ref={fileInputRef}
                 type="file"
                 accept="image/*"
@@ -450,10 +468,11 @@ export const AddDishModal = ({
               />
             ) : (
               <input
+                key="add-dish-image-url-input"
                 type="text"
                 className="form-control form-control-sm"
                 placeholder="Paste image URL (https://...)"
-                value={image}
+                value={image || ''}
                 onChange={(e) => {
                   setImage(e.target.value);
                   setImageFile(null);
@@ -467,7 +486,7 @@ export const AddDishModal = ({
             <Input 
               label="Dish Name *" 
               placeholder="e.g. Garlic Bread sticks" 
-              value={name} 
+              value={name || ''} 
               onChange={(e) => {
                 const v = e.target.value;
                 if (v.length === 1) setName(v.toUpperCase());
@@ -481,17 +500,25 @@ export const AddDishModal = ({
               <div className="col-6">
                 <Select 
                   label="Category"
-                  options={categories}
-                  value={category}
+                  options={loadingCategories ? [{ value: '', label: 'Loading categories...', disabled: true }] : categories}
+                  value={category || ''}
                   onChange={(e) => setCategory(e.target.value)}
+                  disabled={loadingCategories}
+                  error={categoryError || ''}
                   required
                 />
+                {categoryError && (
+                  <div className="text-danger small mt-n2 mb-2">{categoryError}</div>
+                )}
+                {!loadingCategories && !categoryError && categories.length > 0 && categories[0].disabled && (
+                  <div className="text-muted small mt-n2 mb-2">Create a category in Menu Management first.</div>
+                )}
               </div>
               <div className="col-6">
                 <Select 
                   label="Food Type"
                   options={foodTypes}
-                  value={foodType}
+                  value={foodType || 'veg'}
                   onChange={(e) => setFoodType(e.target.value)}
                   required
                 />
@@ -504,7 +531,7 @@ export const AddDishModal = ({
                   label="Price (₹) *" 
                   type="number"
                   placeholder="e.g. 199" 
-                  value={price} 
+                  value={price || ''} 
                   onKeyDown={(e) => {
                     if (['e', 'E', '+', '-'].includes(e.key)) e.preventDefault();
                   }}
@@ -519,7 +546,7 @@ export const AddDishModal = ({
                   min="0"
                   max="100"
                   placeholder="e.g. 25" 
-                  value={discountPercent} 
+                  value={discountPercent || ''} 
                   onChange={(e) => handleDiscountPercentChange(e.target.value)} 
                 />
               </div>
@@ -528,7 +555,7 @@ export const AddDishModal = ({
                   label="Discount Price (₹)" 
                   type="number"
                   placeholder="e.g. 149" 
-                  value={discountPrice} 
+                  value={discountPrice || ''} 
                   onChange={(e) => handleDiscountPriceChange(e.target.value)} 
                 />
               </div>
@@ -541,7 +568,7 @@ export const AddDishModal = ({
                   type="number"
                   min="0"
                   placeholder="e.g. 50" 
-                  value={stock} 
+                  value={stock ?? '0'} 
                   onKeyDown={(e) => {
                     if (['-', '+', 'e', 'E'].includes(e.key)) e.preventDefault();
                   }}
@@ -555,7 +582,7 @@ export const AddDishModal = ({
                 <Input 
                   label="Description" 
                   placeholder="Detail recipe ingredients" 
-                  value={description} 
+                  value={description || ''} 
                   onChange={(e) => {
                     const v = e.target.value;
                     if (v.length === 1) setDescription(v.toUpperCase());
@@ -575,7 +602,7 @@ export const AddDishModal = ({
                 <input
                   type="text"
                   placeholder="e.g. Extra Cheese"
-                  value={toppingName}
+                  value={toppingName || ''}
                   onChange={(e) => setToppingName(e.target.value)}
                   className="form-control form-control-sm"
                   style={{ flex: 2 }}
@@ -583,7 +610,7 @@ export const AddDishModal = ({
                 <input
                   type="number"
                   placeholder="Price (₹)"
-                  value={toppingPrice}
+                  value={toppingPrice || ''}
                   onChange={(e) => {
                     const cleanVal = e.target.value.replace(/[^0-9]/g, '').slice(0, 3);
                     setToppingPrice(cleanVal);

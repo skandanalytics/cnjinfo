@@ -577,9 +577,64 @@ export const Kitchen = () => {
         {loading ? (
           <Loader />
         ) : (
-          <div className="row g-3 align-items-stretch">
-            {/* Column 1: New Tickets */}
-            <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
+          <>
+            {/* Mobile Stage Selector Tabs (Visible only on < 768px) */}
+            <div className="d-flex d-md-none gap-1.5 mb-3 overflow-x-auto pb-1" style={{ WebkitOverflowScrolling: 'touch' }}>
+              <button
+                type="button"
+                onClick={() => setActiveStageTab('ALL')}
+                className={`btn btn-sm rounded-pill fw-bold px-3 py-1.5 flex-shrink-0 text-nowrap ${
+                  activeStageTab === 'ALL' ? 'btn-dark text-white' : 'btn-light border text-secondary'
+                }`}
+                style={{ fontSize: '12px' }}
+              >
+                All Stages ({pendingOrders.length + preparingOrders.length + readyOrders.length + completedOrders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveStageTab('NEW')}
+                className={`btn btn-sm rounded-pill fw-bold px-3 py-1.5 flex-shrink-0 text-nowrap ${
+                  activeStageTab === 'NEW' ? 'btn-danger text-white' : 'btn-light border text-secondary'
+                }`}
+                style={{ fontSize: '12px' }}
+              >
+                New ({pendingOrders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveStageTab('PREPARING')}
+                className={`btn btn-sm rounded-pill fw-bold px-3 py-1.5 flex-shrink-0 text-nowrap ${
+                  activeStageTab === 'PREPARING' ? 'btn-warning text-dark' : 'btn-light border text-secondary'
+                }`}
+                style={{ fontSize: '12px' }}
+              >
+                Preparing ({preparingOrders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveStageTab('READY')}
+                className={`btn btn-sm rounded-pill fw-bold px-3 py-1.5 flex-shrink-0 text-nowrap ${
+                  activeStageTab === 'READY' ? 'btn-info text-white' : 'btn-light border text-secondary'
+                }`}
+                style={{ fontSize: '12px' }}
+              >
+                Ready ({readyOrders.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveStageTab('COMPLETED')}
+                className={`btn btn-sm rounded-pill fw-bold px-3 py-1.5 flex-shrink-0 text-nowrap ${
+                  activeStageTab === 'COMPLETED' ? 'btn-success text-white' : 'btn-light border text-secondary'
+                }`}
+                style={{ fontSize: '12px' }}
+              >
+                Completed ({completedOrders.length})
+              </button>
+            </div>
+
+            <div className="row g-3 align-items-stretch">
+              {/* Column 1: New Tickets */}
+              <div className={`col-12 col-md-6 col-xl-3 flex-column ${activeStageTab === 'ALL' || activeStageTab === 'NEW' ? 'd-flex' : 'd-none d-md-flex'}`}>
               <div className="card border-0 rounded-0 shadow-xs overflow-hidden d-flex flex-column h-100 w-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Red Header Banner */}
                 <div 
@@ -706,7 +761,7 @@ export const Kitchen = () => {
             </div>
 
             {/* Column 2: Preparing */}
-            <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
+            <div className={`col-12 col-md-6 col-xl-3 flex-column ${activeStageTab === 'ALL' || activeStageTab === 'PREPARING' ? 'd-flex' : 'd-none d-md-flex'}`}>
               <div className="card border-0 rounded-0 shadow-xs overflow-hidden d-flex flex-column h-100 w-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Orange Header Banner */}
                 <div 
@@ -829,7 +884,7 @@ export const Kitchen = () => {
             </div>
 
             {/* Column 3: Ready / Serving */}
-            <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
+            <div className={`col-12 col-md-6 col-xl-3 flex-column ${activeStageTab === 'ALL' || activeStageTab === 'READY' ? 'd-flex' : 'd-none d-md-flex'}`}>
               <div className="card border-0 rounded-0 shadow-xs overflow-hidden d-flex flex-column h-100 w-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Cyan / Blue Header Banner */}
                 <div 
@@ -952,7 +1007,7 @@ export const Kitchen = () => {
             </div>
 
             {/* Column 4: Completed */}
-            <div className="col-12 col-md-6 col-xl-3 d-flex flex-column">
+            <div className={`col-12 col-md-6 col-xl-3 flex-column ${activeStageTab === 'ALL' || activeStageTab === 'COMPLETED' ? 'd-flex' : 'd-none d-md-flex'}`}>
               <div className="card border-0 rounded-0 shadow-xs overflow-hidden d-flex flex-column h-100 w-100" style={{ backgroundColor: '#F8FAFC', minHeight: '460px', height: '100%' }}>
                 {/* Solid Green Header Banner */}
                 <div 
@@ -1110,7 +1165,8 @@ export const Kitchen = () => {
               </div>
             </div>
           </div>
-        )}
+        </>
+      )}
       </div>
 
       <EBillModal

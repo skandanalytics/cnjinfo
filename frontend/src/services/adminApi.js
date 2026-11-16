@@ -60,15 +60,56 @@ function roleToApi(role) {
 
 let branchMemo = null;
 
+export function cleanBranchParam(val) {
+  if (val === null || val === undefined || typeof val === 'boolean') {
+    return null;
+  }
+  const str = String(val).trim();
+  if (!str || str === 'ALL' || str === 'all' || str === 'true' || str === 'false' || str === 'null' || str === 'undefined' || str === '[object Object]') {
+    return null;
+  }
+  if (/^\d+$/.test(str)) {
+    return str;
+  }
+  return null;
+}
+
 export function getSelectedAdminBranch() {
   try {
     const rawUser = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
     const u = rawUser ? JSON.parse(rawUser)?.user : null;
     const isSuperAdmin = u?.backendRole === 'SUPER_ADMIN' || u?.is_superuser || (u?.role === 'admin' && !u?.branchId);
     if (!isSuperAdmin) {
-      return u?.branchId ? String(u.branchId) : null;
+      return u?.branchId ? cleanBranchParam(u.branchId) : null;
     }
-    return localStorage.getItem('foodie_admin_selected_branch') || 'ALL';
+    const stored = localStorage.getItem('foodie_admin_selected_branch') || 'ALL';
+    const cleanedStored = cleanBranchParam(stored);
+    if (!cleanedStored) {
+      if (stored !== 'ALL') {
+        localStorage.removeItem('foodie_admin_selected_branch');
+      }
+      return null;
+    }
+    try {
+      const rawCached = localStorage.getItem('foodie_cached_branches');
+      if (rawCached) {
+        const branches = JSON.parse(rawCached);
+        if (Array.isArray(branches) && branches.length > 0) {
+          const exists = branches.some((b) => String(b.id) === String(cleanedStored));
+          if (!exists) {
+            const primary = branches.find((b) => b.is_primary && b.is_active) || branches.find((b) => b.is_active) || branches[0];
+            const fallback = primary ? cleanBranchParam(primary.id) : null;
+            if (fallback) {
+              localStorage.setItem('foodie_admin_selected_branch', fallback);
+            } else {
+              localStorage.removeItem('foodie_admin_selected_branch');
+            }
+            return fallback;
+          }
+        }
+      }
+    } catch {}
+    return cleanedStored;
   } catch {
     return null;
   }
@@ -139,6 +180,13 @@ export async function staffLogin(code, password) {
   const authPayload = JSON.stringify({ user, isAuthenticated: true });
   sessionStorage.setItem('foodie_auth_admin', authPayload);
   localStorage.setItem('foodie_auth_admin', authPayload);
+  if (user.branchId) {
+    const bId = String(user.branchId);
+    sessionStorage.setItem('foodie_admin_selected_branch', bId);
+    localStorage.setItem('foodie_admin_selected_branch', bId);
+    sessionStorage.setItem('foodie_public_branch', bId);
+    localStorage.setItem('foodie_public_branch', bId);
+  }
   return { token: data.access, refresh: data.refresh, user };
 }
 
@@ -169,8 +217,12 @@ export async function syncStaffProfile() {
     localStorage.setItem('foodie_auth_admin', payload);
     if (updatedUser.branchId) {
       branchMemo = updatedUser.branchId;
-      localStorage.setItem('foodie_admin_selected_branch', String(updatedUser.branchId));
-      window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: String(updatedUser.branchId) } }));
+      const bId = String(updatedUser.branchId);
+      sessionStorage.setItem('foodie_admin_selected_branch', bId);
+      localStorage.setItem('foodie_admin_selected_branch', bId);
+      sessionStorage.setItem('foodie_public_branch', bId);
+      localStorage.setItem('foodie_public_branch', bId);
+      window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: bId } }));
     }
     return updatedUser;
   } catch (err) {
@@ -297,14 +349,11 @@ export async function listTableViews() {
 }
 
 export async function listTables(branchId = null) {
-  let targetBranch = branchId;
+  let targetBranch = cleanBranchParam(branchId);
   if (!targetBranch) {
-    const selected = getSelectedAdminBranch();
-    if (selected && selected !== 'ALL') {
-      targetBranch = selected;
-    }
+    targetBranch = getSelectedAdminBranch();
   }
-  const query = targetBranch && targetBranch !== 'ALL' ? `?branch=${encodeURIComponent(targetBranch)}` : '';
+  const query = targetBranch ? `?branch=${encodeURIComponent(targetBranch)}` : '';
   return listOf(await staffJson(`/tables/${query}`)).map(mapTable);
 }
 
@@ -389,15 +438,23 @@ function mapCategory(c) {
 }
 
 export async function listCategories(branchId = null) {
-  let targetBranch = branchId;
+  let targetBranch = cleanBranchParam(branchId);
   if (!targetBranch) {
-    const selected = getSelectedAdminBranch();
-    if (selected && selected !== 'ALL') {
-      targetBranch = selected;
-    }
+    targetBranch = getSelectedAdminBranch();
   }
-  const query = targetBranch && targetBranch !== 'ALL' ? `?branch=${encodeURIComponent(targetBranch)}` : '';
-  return listOf(await staffJson(`/categories/${query}`)).map(mapCategory);
+  const query = targetBranch ? `?branch=${encodeURIComponent(targetBranch)}` : '';
+  try {
+    return listOf(await staffJson(`/categories/${query}`)).map(mapCategory);
+  } catch (err) {
+    if (targetBranch && (err?.status === 400 || err?.status === 404)) {
+      console.warn(`[Categories] Branch ${targetBranch} invalid or not found, falling back to all accessible categories.`);
+      localStorage.removeItem('foodie_admin_selected_branch');
+      try {
+        return listOf(await staffJson('/categories/')).map(mapCategory);
+      } catch {}
+    }
+    throw err;
+  }
 }
 
 export async function createCategory(data) {
@@ -493,14 +550,11 @@ async function stockMap() {
 }
 
 export async function listFoods(branchId = null) {
-  let targetBranch = branchId;
+  let targetBranch = cleanBranchParam(branchId);
   if (!targetBranch) {
-    const selected = getSelectedAdminBranch();
-    if (selected && selected !== 'ALL') {
-      targetBranch = selected;
-    }
+    targetBranch = getSelectedAdminBranch();
   }
-  const query = targetBranch && targetBranch !== 'ALL' ? ('&branch=' + encodeURIComponent(targetBranch)) : '';
+  const query = targetBranch ? ('&branch=' + encodeURIComponent(targetBranch)) : '';
   const [foods, stocks] = await Promise.all([
     staffJson('/foods/?is_active=true' + query),
     stockMap(),
@@ -509,7 +563,8 @@ export async function listFoods(branchId = null) {
 }
 
 async function categoryIdByName(name, branchId, { create = true } = {}) {
-  const query = branchId ? `?branch=${encodeURIComponent(branchId)}` : '';
+  const clean = cleanBranchParam(branchId);
+  const query = clean ? `?branch=${encodeURIComponent(clean)}` : '';
   const categories = listOf(await staffJson(`/categories/${query}`));
   const wanted = String(name || '').trim().toLowerCase();
   const found = categories.find((c) => String(c.name).trim().toLowerCase() === wanted);
@@ -794,14 +849,11 @@ function mapCoupon(c) {
 }
 
 export async function listCoupons(branchId = null) {
-  let targetBranch = branchId;
+  let targetBranch = cleanBranchParam(branchId);
   if (!targetBranch) {
-    const selected = getSelectedAdminBranch();
-    if (selected && selected !== 'ALL') {
-      targetBranch = selected;
-    }
+    targetBranch = getSelectedAdminBranch();
   }
-  const query = targetBranch && targetBranch !== 'ALL' ? `?branch=${encodeURIComponent(targetBranch)}` : '';
+  const query = targetBranch ? `?branch=${encodeURIComponent(targetBranch)}` : '';
   return listOf(await staffJson(`/coupons/${query}`)).map(mapCoupon);
 }
 
@@ -1133,16 +1185,13 @@ export async function listOrdersForUi(options = {}) {
   if (isEmployee) {
     isMine = true;
   }
-  let targetBranch = options?.branchId || null;
+  let targetBranch = cleanBranchParam(options?.branchId);
   if (!targetBranch && !isEmployee) {
-    const selected = getSelectedAdminBranch();
-    if (selected && selected !== 'ALL') {
-      targetBranch = selected;
-    }
+    targetBranch = getSelectedAdminBranch();
   }
   const params = [];
   if (isMine) params.push('mine=1');
-  if (targetBranch && targetBranch !== 'ALL') params.push(`branch=${encodeURIComponent(targetBranch)}`);
+  if (targetBranch) params.push(`branch=${encodeURIComponent(targetBranch)}`);
   if (options?.fromDate) params.push(`from_date=${encodeURIComponent(options.fromDate)}`);
   if (options?.toDate) params.push(`to_date=${encodeURIComponent(options.toDate)}`);
   const query = params.length > 0 ? `?${params.join('&')}` : '';

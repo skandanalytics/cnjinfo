@@ -19,13 +19,13 @@ export const Select = ({
       )}
       <select
         className={`form-select rounded-3 py-2 ${error ? 'is-invalid' : ''}`}
-        value={value}
+        value={value ?? ''}
         onChange={onChange}
         required={required}
         {...props}
       >
         {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
+          <option key={opt.value} value={opt.value} disabled={opt.disabled}>
             {opt.label}
           </option>
         ))}

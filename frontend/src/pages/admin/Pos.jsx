@@ -228,6 +228,14 @@ export const Pos = () => {
   const [placedOrder, setPlacedOrder] = useState(null);
   const [viewingEBill, setViewingEBill] = useState(null);
   const [mobilePosTab, setMobilePosTab] = useState('menu'); // 'menu' | 'order'
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' ? window.innerWidth < 992 : false);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 992);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const [parentOrder, setParentOrder] = useState(null);
   const [trackedOrder, setTrackedOrder] = useState(null);
   const [showTrackedOrderModal, setShowTrackedOrderModal] = useState(false);
@@ -1458,7 +1466,12 @@ export const Pos = () => {
           {/* LEFT COLUMN: Food Selection Workspace (~65%) */}
           <div 
             className={`pos-food-catalog-area flex-column min-h-0 overflow-y-auto ${mobilePosTab !== 'menu' ? 'd-none d-lg-flex' : 'd-flex'}`}
-            style={{ flex: '0 0 65%', maxWidth: '65%', paddingRight: '4px' }}
+            style={{ 
+              flex: isMobile ? '1 1 100%' : '0 0 65%', 
+              maxWidth: isMobile ? '100%' : '65%', 
+              width: isMobile ? '100%' : undefined,
+              paddingRight: isMobile ? '0' : '4px' 
+            }}
           >
             
             {/* 1. Header Row: Cart Icon, Heading, Subtitle & Search Bar */}
@@ -2111,7 +2124,11 @@ export const Pos = () => {
           {/* RIGHT COLUMN: Order Panel (~35%) */}
           <div 
             className={`pos-order-panel-container flex-column min-h-0 ${mobilePosTab !== 'order' ? 'd-none d-lg-flex' : 'd-flex'}`}
-            style={{ flex: '0 0 35%', maxWidth: '35%' }}
+            style={{ 
+              flex: isMobile ? '1 1 100%' : '0 0 35%', 
+              maxWidth: isMobile ? '100%' : '35%', 
+              width: isMobile ? '100%' : undefined 
+            }}
           >
             <div 
               className="card border-0 shadow-sm d-flex flex-column h-100 overflow-hidden"
@@ -3262,6 +3279,24 @@ export const Pos = () => {
             }
           }}
         />
+
+        {/* Floating Mobile Cart Bar (when dishes tab is active and cart has items) */}
+        {isMobile && mobilePosTab === 'menu' && cartItems.length > 0 && (
+          <div 
+            className="d-lg-none position-fixed bottom-0 start-0 end-0 p-2.5 bg-white border-top shadow-lg"
+            style={{ zIndex: 1020 }}
+          >
+            <button
+              type="button"
+              onClick={() => setMobilePosTab('order')}
+              className="btn btn-danger w-100 py-2.5 rounded-pill fw-bold d-flex align-items-center justify-content-between px-3.5 shadow-sm"
+              style={{ fontSize: '13px' }}
+            >
+              <span>🛒 {cartItems.reduce((acc, i) => acc + (i.quantity || 1), 0)} items • {formatCurrency(billSummary.grandTotal)}</span>
+              <span className="d-flex align-items-center gap-1">View Order Ticket →</span>
+            </button>
+          </div>
+        )}
 
         {/* Toast Notification for Stock Availability */}
         <Toast

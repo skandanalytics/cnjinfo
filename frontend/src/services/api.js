@@ -141,8 +141,8 @@ api.interceptors.response.use(
        */
       if (error.response.status === 401) {
         const currentPath = window.location.pathname;
-        const isAdminRoute = currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || currentPath === '/login';
-        if ((currentPath.startsWith('/admin') || currentPath.startsWith('/employee')) && !error.config?._retried) {
+        const isAdminRoute = currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || currentPath.startsWith('/db') || currentPath === '/login';
+        if ((currentPath.startsWith('/admin') || currentPath.startsWith('/employee') || currentPath.startsWith('/db')) && !error.config?._retried) {
           return import('./staffClient').then(async ({ refreshStaffSession, clearStaffSession }) => {
             try {
               const access = await refreshStaffSession();

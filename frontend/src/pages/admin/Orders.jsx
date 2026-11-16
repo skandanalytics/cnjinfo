@@ -42,7 +42,7 @@ export const Orders = () => {
 
   const [activeTab, setActiveTab] = useState(getInitialTab);
   const [typeFilter, setTypeFilter] = useState('ALL'); // 'ALL' | 'DINE_IN' | 'TAKEAWAY'
-  const [viewMode, setViewMode] = useState('table'); // 'table' | 'cards'
+  const [viewMode, setViewMode] = useState(() => (typeof window !== 'undefined' && window.innerWidth < 768) ? 'cards' : 'table'); // 'table' | 'cards'
   const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [expandedParents, setExpandedParents] = useState(() => new Set());

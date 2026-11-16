@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { staffJson, clearStaffSession } from '../../services/staffClient';
+import { staffJson, clearStaffSession, getStaffAccess } from '../../services/staffClient';
+import { clearOrderNotifications } from '../../services/notificationService';
 import { staffLogin } from '../../services/adminApi';
 import api from '../../config/api';
 
@@ -8,10 +9,16 @@ const PHRASE = 'DELETE ALL APPLICATION DATA';
 
 async function publicJson(path, options = {}) {
   try {
+    const headers = { ...(options.headers || {}) };
+    const access = getStaffAccess();
+    if (access && !headers.Authorization) {
+      headers.Authorization = `Bearer ${access}`;
+    }
     const res = await api({
       url: `/db${path}`,
       method: options.method || 'GET',
       data: options.body,
+      headers,
     });
     return res.data;
   } catch (err) {
@@ -24,8 +31,14 @@ async function publicJson(path, options = {}) {
 
 function readSession() {
   try {
-    const token = sessionStorage.getItem('foodie_staff_access');
-    const raw = sessionStorage.getItem('foodie_auth_admin');
+    const token =
+      sessionStorage.getItem('foodie_staff_access') ||
+      sessionStorage.getItem('foodie_token_admin') ||
+      localStorage.getItem('foodie_staff_access') ||
+      localStorage.getItem('foodie_token_admin');
+    const raw =
+      sessionStorage.getItem('foodie_auth_admin') ||
+      localStorage.getItem('foodie_auth_admin');
     if (!token || !raw) return null;
     return JSON.parse(raw).user || null;
   } catch {
@@ -215,7 +228,8 @@ export default function DatabaseConsole() {
     setNotice('');
     try {
       const body = Object.fromEntries(form.entries());
-      const created = session
+      const access = getStaffAccess();
+      const created = (session || access)
         ? await staffJson('/db/create-admin/', { method: 'POST', body: JSON.stringify(body) })
         : await publicJson('/create-admin/', { method: 'POST', body });
       setShowCreateAdmin(false);
@@ -303,6 +317,7 @@ export default function DatabaseConsole() {
       if (!result?.reset) {
         throw new Error('The reset did not complete.');
       }
+      clearOrderNotifications();
       clearStaffSession();
       setSession(null);
       setOverview(null);

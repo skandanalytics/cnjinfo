@@ -201,7 +201,25 @@ export const clearNotificationCache = () => {
   cachedNotificationsTime = 0;
 };
 
+export const clearOrderNotifications = () => {
+  clearNotificationCache();
+  try {
+    localStorage.removeItem(LOCAL_NOTIF_KEY);
+    localStorage.removeItem(CLEARED_NOTIF_KEY);
+    localStorage.removeItem(CLEARED_AT_KEY);
+    localStorage.removeItem(READ_ORDER_NOTIF_KEY);
+  } catch (error) {
+    console.warn('Unable to remove local order notifications:', error);
+  }
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('foodie_notifications_updated'));
+    } catch {}
+  }
+};
+
 export const notificationService = {
+  clearOrderNotifications,
   getNotifications: async (forceRefresh = false) => {
     const now = Date.now();
     if (!forceRefresh && cachedNotificationsList && (now - cachedNotificationsTime < NOTIFICATION_CACHE_TTL)) {

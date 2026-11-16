@@ -28,9 +28,10 @@ const isCategoryDeleted = (id, name, originalName, deletedList) => {
 };
 
 export const menuService = {
-  getMenus: async () => {
+  getMenus: async (branchOrRefresh = null) => {
     const { isStaffScreen, listCategories } = await import('./adminApi');
-    if (isStaffScreen()) return listCategories();
+    const branchId = typeof branchOrRefresh === 'boolean' ? null : branchOrRefresh;
+    if (isStaffScreen()) return listCategories(branchId);
     let rawCategories = [];
     try {
       rawCategories = await getCachedCategories();
