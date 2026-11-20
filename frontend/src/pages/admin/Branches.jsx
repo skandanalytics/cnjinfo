@@ -410,7 +410,7 @@ export const Branches = () => {
               <input 
                 type="text"
                 name="name"
-                maxLength={15}
+                maxLength={30}
                 className="form-control rounded-3"
                 style={{ height: '42px', border: '1.5px solid #CBD5E1', fontSize: '14px' }}
                 placeholder="Tumakuru Main"
@@ -418,7 +418,7 @@ export const Branches = () => {
                 onChange={handleFormChange}
                 required
               />
-              <span className="text-muted" style={{ fontSize: '11px' }}>Maximum 15 characters</span>
+              <span className="text-muted" style={{ fontSize: '11px' }}>Maximum 30 characters</span>
             </div>
 
             {editingBranch ? (
@@ -577,8 +577,8 @@ export const Branches = () => {
                   name="openTime"
                   value={formData.openTime}
                   onChange={handleFormChange}
-                  className="form-select rounded-3 border bg-light text-dark shadow-2xs w-100"
-                  style={{ height: '42px', padding: '8px 16px', fontSize: '13.5px', borderColor: '#CBD5E1', cursor: 'pointer' }}
+                  className="form-select rounded-3 border bg-light text-dark shadow-2xs w-100 px-3 py-2"
+                  style={{ height: '42px', padding: '10px 16px', fontSize: '13.5px', borderColor: '#CBD5E1', cursor: 'pointer' }}
                   required
                 >
                   {TIME_OPTIONS.map((t) => (
@@ -597,8 +597,8 @@ export const Branches = () => {
                   name="closeTime"
                   value={formData.closeTime}
                   onChange={handleFormChange}
-                  className="form-select rounded-3 border bg-light text-dark shadow-2xs w-100"
-                  style={{ height: '42px', padding: '8px 16px', fontSize: '13.5px', borderColor: '#CBD5E1', cursor: 'pointer' }}
+                  className="form-select rounded-3 border bg-light text-dark shadow-2xs w-100 px-3 py-2"
+                  style={{ height: '42px', padding: '10px 16px', fontSize: '13.5px', borderColor: '#CBD5E1', cursor: 'pointer' }}
                   required
                 >
                   {TIME_OPTIONS.map((t) => (

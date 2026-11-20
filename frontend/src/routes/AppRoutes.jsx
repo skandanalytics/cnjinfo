@@ -57,6 +57,7 @@ export const AppRoutes = () => {
       <Route path="/customer/payment" element={<Payment />} />
       <Route path="/customer/order-confirmation" element={<OrderConfirmation />} />
       <Route path="/customer/orders" element={<OrderHistory />} />
+      <Route path="/customer/order-tracking" element={<OrderTracking />} />
       <Route path="/customer/order-tracking/:orderId" element={<OrderTracking />} />
       <Route path="/customer/display-board" element={<DisplayBoard />} />
       <Route path="/display-board" element={<DisplayBoard />} />

@@ -1131,14 +1131,22 @@ export const CartProvider = ({ children }) => {
     return getBillBreakdown(customIsTakeaway).grandTotal;
   };
 
-  const removeCoupon = (code = null) => {
-    if (coupon && (coupon.isAutomatic || coupon.autoApply || coupon.auto_apply)) {
-      userRemovedCouponRef.current = true;
-    }
+  const removeCoupon = async (code = null) => {
+    userRemovedCouponRef.current = true;
+    try {
+      sessionStorage.setItem('foodie_user_dismissed_coupons', '1');
+    } catch (e) {}
+
+    let serverData = null;
     const branch = getActiveBranchId();
     if (branch) {
       const q = code ? `?branch=${branch}&code=${encodeURIComponent(code)}` : `?branch=${branch}`;
-      api.delete(`/cart/coupon/${q}`).catch(() => {});
+      try {
+        const res = await api.delete(`/cart/coupon/${q}`);
+        serverData = res?.data || null;
+      } catch (err) {
+        console.error("Error removing coupon from server:", err);
+      }
     }
     if (code && coupon?.appliedList && coupon.appliedList.length > 1) {
       const remaining = coupon.appliedList.filter(c => c.code.toUpperCase() !== String(code).toUpperCase());
@@ -1155,6 +1163,7 @@ export const CartProvider = ({ children }) => {
     } else {
       setCoupon(null);
     }
+    return serverData;
   };
 
   const userRemovedCouponRef = useRef(false);
@@ -1182,7 +1191,12 @@ export const CartProvider = ({ children }) => {
       // If cart is emptied, reset the dismissal states so new orders can get the coupon again
       if (currentSubtotal === 0) {
         userRemovedCouponRef.current = false;
+        try {
+          sessionStorage.removeItem('foodie_user_dismissed_coupons');
+        } catch (e) {}
       }
+
+      const userDismissed = userRemovedCouponRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('foodie_user_dismissed_coupons') === '1');
 
       const firstTime = await isFirstTimeCustomer(user);
 
@@ -1203,7 +1217,7 @@ export const CartProvider = ({ children }) => {
         eligible.sort((a, b) => calculateCouponDiscount(b, currentSubtotal) - calculateCouponDiscount(a, currentSubtotal));
         const best = eligible[0];
         if (!isMounted) return;
-        if (userRemovedCouponRef.current) {
+        if (userDismissed) {
           if (coupon?.isAutomatic) setCoupon(null);
         } else if (best) {
           if (!coupon || coupon.code !== best.code) {
@@ -1252,6 +1266,9 @@ export const CartProvider = ({ children }) => {
         return { success: false, message: rejectedThis?.reason || 'This coupon cannot be applied to this order.' };
       }
       userRemovedCouponRef.current = false;
+      try {
+        sessionStorage.removeItem('foodie_user_dismissed_coupons');
+      } catch (e) {}
       setCoupon({
         code: appliedThis.code,
         discount: Number(appliedThis.discount || 0),
@@ -1262,7 +1279,7 @@ export const CartProvider = ({ children }) => {
           isAutomatic: Boolean(a.auto_applied)
         }))
       });
-      return { success: true, message: `Coupon "${codeUpper}" applied successfully!` };
+      return { success: true, message: `Coupon "${codeUpper}" applied successfully!`, data: res.data };
     } catch (err) {
       return { success: false, message: err.response?.data?.detail || err.message || 'Failed to apply coupon' };
     }
@@ -1272,6 +1289,10 @@ export const CartProvider = ({ children }) => {
 
   const resetLocalCart = () => {
     sessionStorage.setItem('foodie_checkout_in_progress', '1');
+    try {
+      sessionStorage.removeItem('foodie_user_dismissed_coupons');
+    } catch (e) {}
+    userRemovedCouponRef.current = false;
     setCartItems([]);
     setCoupon(null);
     saveCartToStorage([], user);

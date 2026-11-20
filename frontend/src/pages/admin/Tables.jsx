@@ -22,6 +22,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useCart } from '../../hooks/useCart';
 import { OrderContext } from '../../context/OrderContext';
 import TrackOrderModal from '../../components/orders/TrackOrderModal';
+import OrderDetailsModal from '../../components/orders/OrderDetailsModal';
 import EBillModal from '../../components/orders/EBillModal';
 import Toast from '../../components/common/Toast';
 import { orderService } from '../../services/orderService';
@@ -56,7 +57,7 @@ export const Tables = () => {
   const [trackingTable, setTrackingTable] = useState(null);
 
   const isFetchingRef = React.useRef(false);
-  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_selected_branch') || '') : '');
+  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_admin_selected_branch') || '') : '');
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
@@ -98,7 +99,7 @@ export const Tables = () => {
     setLoading(true);
     setTablesLoadError('');
     try {
-      const data = await tableService.getTables();
+      const data = await tableService.getTables(targetBranchId);
       setTables(Array.isArray(data) ? data : []);
     } catch (e) {
       setTables([]);
@@ -106,8 +107,8 @@ export const Tables = () => {
     }
     try {
       const [dishesData] = await Promise.all([
-        productService.getProducts(true).catch(() => []),
-        menuService.getMenus().catch(() => []),
+        productService.getProducts(true, targetBranchId).catch(() => []),
+        menuService.getMenus(targetBranchId).catch(() => []),
       ]);
       const orderable = (dishesData || []).some((dish) => Number(dish.stock) > 0 && dish.status !== 'Out of Stock');
       setHasDishes(orderable);
@@ -121,7 +122,7 @@ export const Tables = () => {
 
   const fetchTablesSilently = async () => {
     try {
-      const data = await tableService.getTables();
+      const data = await tableService.getTables(targetBranchId);
       if (Array.isArray(data)) {
         setTables(data);
         setTablesLoadError('');
@@ -130,7 +131,7 @@ export const Tables = () => {
       setTablesLoadError(tablesAuthMessage(e));
     }
     try {
-      const dishesData = await productService.getProducts(true).catch(() => []);
+      const dishesData = await productService.getProducts(true, targetBranchId).catch(() => []);
       const orderable = (dishesData || []).some((dish) => Number(dish.stock) > 0 && dish.status !== 'Out of Stock');
       setHasDishes(orderable);
     } catch {
@@ -142,11 +143,13 @@ export const Tables = () => {
     fetchTables();
     const handleUpdated = () => fetchTablesSilently();
     const handleBranchSync = (e) => {
-      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_selected_branch') ?? '');
+      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_admin_selected_branch') ?? '');
       if (lastBranchRef.current === nextBranch) return;
       lastBranchRef.current = nextBranch;
       if (e?.detail?.branchId && e.detail.branchId !== 'ALL') {
         setTargetBranchId(Number(e.detail.branchId));
+      } else {
+        setTargetBranchId(null);
       }
       fetchTables();
     };
@@ -310,6 +313,11 @@ export const Tables = () => {
       // Find from orders context if not directly on table
       const activeOrd = (orders || []).find(o => {
         if (!o) return false;
+        const isNonTable = String(o.order_type || o.orderType || '').toUpperCase() === 'TAKEAWAY' ||
+          String(o.order_type || o.orderType || '').toUpperCase() === 'SELF_SERVICE' ||
+          String(o.table || '').toLowerCase() === 'takeaway' ||
+          String(o.table || '').toLowerCase() === 'self service';
+        if (isNonTable) return false;
         const INACTIVE = ['completed', 'cancelled', 'canceled', 'done', 'settled', 'delivered', 'rejected', 'void'];
         if (INACTIVE.includes(String(o.status || '').toLowerCase().trim())) return false;
         const tId = String(o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : (typeof o.table === 'number' ? o.table : ''))).trim();
@@ -326,6 +334,11 @@ export const Tables = () => {
       // If table is Occupied, check orders list for the latest non-cancelled session root on this table
       const sessionOrd = (orders || []).find(o => {
         if (!o) return false;
+        const isNonTable = String(o.order_type || o.orderType || '').toUpperCase() === 'TAKEAWAY' ||
+          String(o.order_type || o.orderType || '').toUpperCase() === 'SELF_SERVICE' ||
+          String(o.table || '').toLowerCase() === 'takeaway' ||
+          String(o.table || '').toLowerCase() === 'self service';
+        if (isNonTable) return false;
         const s = String(o.status || '').toLowerCase().trim();
         if (s === 'cancelled' || s === 'canceled' || s === 'rejected') return false;
         const tId = String(o.table_id || o.tableId || (typeof o.table === 'object' ? o.table?.id : (typeof o.table === 'number' ? o.table : ''))).trim();
@@ -444,6 +457,11 @@ export const Tables = () => {
     const tableIdStr = String(table.id || '').trim();
     return (orders || []).find(o => {
       if (!o) return false;
+      const isNonTable = String(o.order_type || o.orderType || '').toUpperCase() === 'TAKEAWAY' ||
+        String(o.order_type || o.orderType || '').toUpperCase() === 'SELF_SERVICE' ||
+        String(o.table || '').toLowerCase() === 'takeaway' ||
+        String(o.table || '').toLowerCase() === 'self service';
+      if (isNonTable) return false;
       const s = String(o.status || '').toLowerCase().trim();
       if (!ONGOING_ORDER_STATUSES.includes(s) && s !== 'completed') return false;
 
@@ -467,6 +485,10 @@ export const Tables = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredTables = tables.filter((t) => {
+    if (targetBranchId && targetBranchId !== 'ALL') {
+      const bId = t.branch?.id || t.branch || t.branch_id;
+      if (!bId || String(bId) !== String(targetBranchId)) return false;
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       const num = String(t.number || t.table_number || '').toLowerCase();
@@ -804,19 +826,23 @@ export const Tables = () => {
         </div>
       </Modal>
 
-      {/* Track Existing Order Popup Modal */}
+      {/* Order Details Popup Modal (Triggered by Eye Icon on Occupied Tables) */}
       {trackingTable && trackingOrder && (
-        <TrackOrderModal
+        <OrderDetailsModal
           isOpen={Boolean(trackingTable && trackingOrder)}
           order={trackingOrder}
-          table={trackingTable}
           onClose={() => {
             setTrackingTable(null);
             setTrackingOrder(null);
           }}
+          onStatusChange={async () => {
+            fetchTables();
+            setTrackingTable(null);
+            setTrackingOrder(null);
+          }}
           onContinueOrder={handleContinueFromModal}
-          onProceedToBill={handleProceedToBillFromModal}
-          loading={trackingLoading}
+          onViewEBill={(ord) => setViewingBillOrder(ord)}
+          onOrderUpdated={() => fetchTables()}
         />
       )}
 

@@ -107,18 +107,31 @@ export function usesServerCart(user) {
 }
 
 export async function ensureGuestToken() {
-  const existing = sessionStorage.getItem('foodie_guest_token');
-  if (existing) return existing;
-  const issued = await api.post('/cart/guest-token/');
-  const token = issued.data?.guest_token;
-  if (!token) throw new Error('Could not start a guest cart session.');
-  sessionStorage.setItem('foodie_guest_token', token);
-  return token;
+  const existing = sessionStorage.getItem('foodie_guest_token') || localStorage.getItem('foodie_guest_token');
+  if (existing) {
+    sessionStorage.setItem('foodie_guest_token', existing);
+    localStorage.setItem('foodie_guest_token', existing);
+    return existing;
+  }
+  try {
+    const issued = await api.post('/cart/guest-token/');
+    const token = issued.data?.guest_token;
+    if (token) {
+      sessionStorage.setItem('foodie_guest_token', token);
+      localStorage.setItem('foodie_guest_token', token);
+      return token;
+    }
+  } catch {}
+  const fallback = 'gst_' + Date.now() + '_' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+  sessionStorage.setItem('foodie_guest_token', fallback);
+  localStorage.setItem('foodie_guest_token', fallback);
+  return fallback;
 }
 
 async function fetchCartView() {
   const branch = customerBranchId();
   if (!branch) return null;
+  await ensureGuestToken();
   const res = await api.get(`/cart/?branch=${branch}`);
   return res.data;
 }

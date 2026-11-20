@@ -22,9 +22,14 @@ export const OrderHistory = () => {
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
   const [activeTab, setActiveTab] = useState('ALL');
 
-  const fetchHistorySilently = async () => {
+  const [phoneQuery, setPhoneQuery] = useState(() => user?.phone || getCustomerPhone() || '');
+  const [phoneInput, setPhoneInput] = useState('');
+  const [showPhoneEdit, setShowPhoneEdit] = useState(false);
+
+  const fetchOrdersByPhone = async (queryPhone, isSilent = false) => {
+    if (!isSilent) setLoading(true);
     try {
-      const activeQuery = user?.phone || getCustomerPhone() || user?.id;
+      const activeQuery = queryPhone || user?.phone || getCustomerPhone() || user?.id;
       const data = await orderService.getOrders(activeQuery, true, true);
       setOrders(data);
       if (selectedOrder) {
@@ -33,28 +38,35 @@ export const OrderHistory = () => {
       }
     } catch (e) {
       console.error(e);
+    } finally {
+      if (!isSilent) setLoading(false);
     }
   };
 
   useEffect(() => {
-    const fetchHistory = async () => {
-      setLoading(true);
-      try {
-        const activeQuery = user?.phone || getCustomerPhone() || user?.id;
-        const data = await orderService.getOrders(activeQuery, true, true);
-        setOrders(data);
-      } catch (e) {
-        console.error(e);
-      }
-      setLoading(false);
-    };
-    fetchHistory();
-    const handleUpdate = () => fetchHistorySilently();
+    const active = user?.phone || getCustomerPhone() || user?.id || '';
+    if (active) {
+      setPhoneQuery(active);
+    }
+    fetchOrdersByPhone(active);
+    const handleUpdate = () => fetchOrdersByPhone(active, true);
     window.addEventListener('foodie_orders_updated', handleUpdate);
     return () => {
       window.removeEventListener('foodie_orders_updated', handleUpdate);
     };
   }, [user]);
+
+  const handlePhoneSubmit = (e) => {
+    e.preventDefault();
+    const clean = String(phoneInput).replace(/\D/g, '').slice(-10);
+    if (clean.length === 10) {
+      sessionStorage.setItem('customer_mobile', clean);
+      localStorage.setItem('customer_mobile', clean);
+      setPhoneQuery(clean);
+      setShowPhoneEdit(false);
+      fetchOrdersByPhone(clean);
+    }
+  };
 
   const normalizeStatus = (status) => {
     const s = String(status || '').toLowerCase().trim();
@@ -85,18 +97,72 @@ export const OrderHistory = () => {
     );
   }
 
-  const currentPhone = user?.phone || getCustomerPhone();
+  const currentPhone = phoneQuery || user?.phone || getCustomerPhone();
 
   return (
     <CustomerLayout>
       <main className="pt-3 pb-5 mx-auto" style={{ maxWidth: '840px' }}>
-        <div className="d-flex align-items-center gap-3 mb-4 pe-3 pe-sm-0">
-          <BackButton to="/customer/home" />
-          <div className="pe-2">
-            <h3 className="fw-bold text-dark mb-1 pe-3">My Orders</h3>
-            <p className="text-secondary small mb-0">Track and view all past orders</p>
+        <div className="d-flex align-items-center justify-content-between gap-3 mb-4 pe-3 pe-sm-0 flex-wrap">
+          <div className="d-flex align-items-center gap-3">
+            <BackButton to="/customer/home" />
+            <div className="pe-2">
+              <h3 className="fw-bold text-dark mb-1 pe-3">My Orders</h3>
+              <p className="text-secondary small mb-0">Track and view all past orders</p>
+            </div>
           </div>
+          {currentPhone && !showPhoneEdit && (
+            <div className="d-flex align-items-center gap-2 bg-light px-3 py-1.5 rounded-pill border">
+              <span className="small text-secondary">Mobile:</span>
+              <span className="small fw-bold text-dark font-monospace">+91 {currentPhone}</span>
+              <button
+                type="button"
+                onClick={() => { setShowPhoneEdit(true); setPhoneInput(currentPhone); }}
+                className="btn btn-link btn-sm p-0 text-danger text-decoration-none small fw-semibold ms-1"
+                style={{ fontSize: '11px' }}
+              >
+                Change
+              </button>
+            </div>
+          )}
         </div>
+
+        {(!currentPhone || showPhoneEdit) && (
+          <form onSubmit={handlePhoneSubmit} className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white">
+            <label className="small fw-semibold text-secondary mb-1">
+              Enter Customer Mobile Number to View Orders:
+            </label>
+            <div className="d-flex gap-2">
+              <div className="input-group">
+                <span className="input-group-text bg-light border-end-0 text-muted small fw-bold">+91</span>
+                <input
+                  type="tel"
+                  maxLength={10}
+                  className="form-control border-start-0"
+                  placeholder="Enter 10-digit mobile (e.g. 9876543210)"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={phoneInput.replace(/\D/g, '').length !== 10}
+                className="btn btn-danger px-4 rounded-pill fw-bold flex-shrink-0"
+                style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D' }}
+              >
+                Search Orders
+              </button>
+              {showPhoneEdit && currentPhone && (
+                <button
+                  type="button"
+                  onClick={() => setShowPhoneEdit(false)}
+                  className="btn btn-outline-secondary px-3 rounded-pill fw-semibold flex-shrink-0"
+                >
+                  Cancel
+                </button>
+              )}
+            </div>
+          </form>
+        )}
 
         {/* Filter Tabs matching Screenshot 11 */}
         <div className="d-flex align-items-center gap-2 mb-4 overflow-auto pb-1">
@@ -148,7 +214,9 @@ export const OrderHistory = () => {
                   <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                     <div>
                       <div className="d-flex align-items-center gap-2">
-                        <span className="font-monospace fw-bold text-dark fs-6">#{displayNo}</span>
+                        <span className="font-monospace fw-bold text-dark fs-6">
+                          {Boolean(ord.parent_order_id || ord.parent_order || (ord.continuation_index > 0)) ? `Sub Order #${displayNo}` : `Order #${displayNo}`}
+                        </span>
                         {Boolean(ord.parent_order_id || ord.parent_order || (ord.continuation_index > 0)) && (
                           <span 
                             className="badge rounded-pill px-2 py-0.5 fw-semibold"
@@ -159,7 +227,7 @@ export const OrderHistory = () => {
                               fontSize: '10.5px' 
                             }}
                           >
-                            Sub-order of #{ord.parent_order_id || (typeof ord.parent_order === 'object' ? ord.parent_order.id : ord.parent_order) || String(displayNo).split('.')[0]}
+                            Sub-order of #{ord.parent_order_id || (typeof ord.parent_order === 'object' ? ord.parent_order.id : ord.parent_order) || String(displayNo).split(/[-.]/)[0]}
                           </span>
                         )}
                       </div>

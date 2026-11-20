@@ -123,7 +123,7 @@ class CartView(CartBase):
 
 class ContextSerializer(serializers.Serializer):
     branch = serializers.IntegerField()
-    order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY"])
+    order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY", "SELF_SERVICE"])
     qr = serializers.UUIDField(required=False)
     table = serializers.IntegerField(required=False, min_value=1)
     cart = serializers.IntegerField(required=False, allow_null=True)

@@ -4,8 +4,10 @@ from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 logger = logging.getLogger(__name__)
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework import serializers, status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -47,19 +49,34 @@ def _sees_every_order(user):
 class OrderListCreateView(APIView):
     def get_permissions(self):
         if self.request.method == "POST":
+            guest_token = self.request.META.get("HTTP_X_GUEST_TOKEN", "")
+            if len(guest_token) >= 20:
+                return [AllowAny()]
             return [_CustomerOrStaff()]
+        elif self.request.method == "GET":
+            if self.request.query_params.get("phone") or self.request.query_params.get("mobile"):
+                return [AllowAny()]
+            return [_AnyActive()]
         return [_AnyActive()]
 
     def post(self, request):
         ser = PlaceOrderSerializer(data=request.data)
         ser.is_valid(raise_exception=True)
         raw_cart_id = ser.validated_data.get("cart_id") or ser.validated_data.get("cart")
+        guest_token = request.META.get("HTTP_X_GUEST_TOKEN")
         if raw_cart_id:
             from apps.carts.models import Cart
             target_cart = Cart.objects.filter(pk=raw_cart_id).first()
-            if target_cart and target_cart.user_id != request.user.id:
-                return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
-                                status=status.HTTP_403_FORBIDDEN)
+            if target_cart:
+                if request.user.is_authenticated:
+                    if target_cart.user_id != request.user.id:
+                        return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                        status=status.HTTP_403_FORBIDDEN)
+                elif guest_token and len(guest_token) >= 20:
+                    from apps.carts.services import hash_token
+                    if target_cart.guest_token != hash_token(guest_token):
+                        return Response({"detail": "You do not have access to this cart.", "code": "cart_forbidden"},
+                                        status=status.HTTP_403_FORBIDDEN)
         try:
             parent_order_id = ser.validated_data.get("parent_order_id") or ser.validated_data.get("parent_order")
             order, created = create_from_cart(request.user, ser.validated_data["branch"],
@@ -68,7 +85,8 @@ class OrderListCreateView(APIView):
                                               service_tax_enabled=ser.validated_data.get("service_tax_enabled", True),
                                               parent_order_id=parent_order_id,
                                               customer_phone=ser.validated_data.get("customer_phone", ""),
-                                              customer_name=ser.validated_data.get("customer_name", ""))
+                                              customer_name=ser.validated_data.get("customer_name", ""),
+                                              guest_token=guest_token)
         except OrderError as exc:
             return _error(exc)
         if created:
@@ -77,21 +95,43 @@ class OrderListCreateView(APIView):
 
     def get(self, request):
         user = request.user
-        if user.user_type == "CUSTOMER":
-            qs = Order.objects.filter(customer=user)
+        phone_param = request.query_params.get("phone") or request.query_params.get("mobile")
+
+        if phone_param:
+            clean_phone = "".join(filter(str.isdigit, str(phone_param)))[-10:]
+            if user.is_authenticated and user.user_type != "CUSTOMER":
+                emp = get_active_employee(user)
+                if emp is None and not getattr(user, "is_superuser", False):
+                    return Response({"detail": "No active staff profile."}, status=403)
+                qs = Order.objects.filter(Q(customer_phone=clean_phone) | Q(customer__phone=clean_phone))
+                if emp and emp.branch_id is not None:
+                    qs = qs.filter(branch_id=emp.branch_id)
+            elif user.is_authenticated:
+                qs = Order.objects.filter(Q(customer=user) | Q(customer_phone=clean_phone) | Q(customer__phone=clean_phone))
+            else:
+                if len(clean_phone) == 10:
+                    qs = Order.objects.filter(Q(customer_phone=clean_phone) | Q(customer__phone=clean_phone))
+                else:
+                    qs = Order.objects.none()
         else:
-            emp = get_active_employee(user)
-            if emp is None and not getattr(user, "is_superuser", False):
-                return Response({"detail": "No active staff profile."}, status=403)
-            qs = Order.objects.all()
-            if emp and emp.branch_id is not None:
-                qs = qs.filter(branch_id=emp.branch_id)
-            elif request.query_params.get("branch"):
-                branch_param = request.query_params.get("branch")
-                if branch_param and branch_param.upper() != "ALL":
-                    qs = qs.filter(branch_id=branch_param)
-            if not _sees_every_order(user) or request.query_params.get("mine") == "1":
-                qs = qs.filter(placed_by=user)
+            if not user.is_authenticated:
+                return Response({"detail": "Authentication credentials or phone number required."}, status=401)
+            if user.user_type == "CUSTOMER":
+                qs = Order.objects.filter(customer=user)
+            else:
+                emp = get_active_employee(user)
+                if emp is None and not getattr(user, "is_superuser", False):
+                    return Response({"detail": "No active staff profile."}, status=403)
+                qs = Order.objects.all()
+                if emp and emp.branch_id is not None:
+                    qs = qs.filter(branch_id=emp.branch_id)
+                elif request.query_params.get("branch"):
+                    branch_param = request.query_params.get("branch")
+                    if branch_param and branch_param.upper() != "ALL":
+                        qs = qs.filter(branch_id=branch_param)
+                if not _sees_every_order(user) or request.query_params.get("mine") == "1":
+                    qs = qs.filter(placed_by=user)
+
         status_filter = request.query_params.get("status")
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -114,6 +154,7 @@ class OrderListCreateView(APIView):
             except (ValueError, TypeError):
                 pass
 
+        qs = qs.order_by("-id")
         return Response([serialize_order(o) for o in qs.select_related("placed_by", "table").prefetch_related("items", "status_history")])
 
     def _ip(self, request):
@@ -130,7 +171,7 @@ class AssistedItemSerializer(serializers.Serializer):
 class AssistedOrderSerializer(serializers.Serializer):
     table = serializers.IntegerField(min_value=1, required=False, allow_null=True)
     branch = serializers.IntegerField(min_value=1, required=False, allow_null=True)
-    order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY"], default="DINE_IN")
+    order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY", "SELF_SERVICE"], default="DINE_IN")
     parent_order = serializers.IntegerField(required=False, allow_null=True)
     parent_order_id = serializers.IntegerField(required=False, allow_null=True)
     items = AssistedItemSerializer(many=True)
@@ -145,8 +186,19 @@ class AssistedOrderSerializer(serializers.Serializer):
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
+        ord_type = attrs.get("order_type")
         phone = (attrs.get("customer_phone") or "").strip()
         parent_id = attrs.get("parent_order_id") or attrs.get("parent_order")
+
+        # For Self Service: table is null, customer phone is optional
+        if ord_type == "SELF_SERVICE":
+            attrs["table"] = None
+            if phone:
+                digits = "".join(filter(str.isdigit, phone))
+                if len(digits) < 7:
+                    raise serializers.ValidationError({"customer_phone": "Please enter a valid mobile number."})
+            return attrs
+
         if not parent_id and not phone:
             table_id = attrs.get("table")
             if table_id:

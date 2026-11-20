@@ -65,7 +65,10 @@ export const DishCard = ({
       style={{ 
         backgroundColor: '#FFFFFF', 
         borderColor: '#E2E8F0',
-        borderRadius: '16px'
+        borderRadius: '16px',
+        filter: isOutOfStock ? 'grayscale(100%)' : 'none',
+        opacity: isOutOfStock ? 0.8 : 1,
+        transition: 'filter 0.2s ease, opacity 0.2s ease'
       }}
     >
       {/* Dish Image Box with Badges (Visible and functional in Menu Management) */}

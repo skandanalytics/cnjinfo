@@ -103,6 +103,12 @@ def breakdown(order):
     elif paid_amount > 0:
         payment_status = "PARTIAL"
 
+    is_self_service = (root.order_type == "SELF_SERVICE" or root.order_type == getattr(Order.Type, "SELF_SERVICE", "SELF_SERVICE"))
+    if is_self_service:
+        payment_status = "COUNTER_PAID"
+
+    table_label = "Self Service" if is_self_service else root.table_label
+
     return {
         "order_id": order.id,
         "root_order_id": root.id,
@@ -117,7 +123,7 @@ def breakdown(order):
         } if branch else {
             "id": None, "name": root.branch_name, "code": "", "address": "", "city": "", "phone": "", "email": "",
         }),
-        "order_type": root.order_type, "table_label": root.table_label, "placed_at": placed,
+        "order_type": root.order_type, "table_label": table_label, "placed_at": placed,
         "customer_name": contact.get("customer_name") or "",
         "customer_phone": contact.get("customer_phone") or root.customer_phone or (root.customer.phone if root.customer else ""),
         "status": root.status,
@@ -151,7 +157,8 @@ def preview_bill(order):
 @transaction.atomic
 def ensure_final_invoice(order):
     is_takeaway = (order.order_type == Order.Type.TAKEAWAY)
-    if order.status != Order.Status.COMPLETED and not (is_takeaway and order.status == Order.Status.SERVED):
+    is_self_service = (order.order_type in (Order.Type.SELF_SERVICE, "SELF_SERVICE", getattr(Order.Type, "SELF_SERVICE", "SELF_SERVICE")))
+    if order.status != Order.Status.COMPLETED and not (is_takeaway and order.status == Order.Status.SERVED) and not is_self_service:
         raise BillingError("The invoice is available after the order is completed.", "invoice_not_ready", 409)
     existing = Invoice.objects.filter(order_id=order.pk).first()
     if existing:

@@ -8,13 +8,13 @@ export function formatOrderDisplayNumber(order, fallbackId = '') {
   if (typeof order === 'string' || typeof order === 'number') {
     return String(order);
   }
-  const displayNo =
+  let displayNo =
     order.serialNumber ||
     order.serial_order_number ||
     order.serial_number ||
     order.display_order_number ||
     order.display_number ||
-    (order.parent_order_id && Number(order.continuation_index) > 0 ? `${order.parent_order_id}.${order.continuation_index}` : null) ||
+    (order.parent_order_id && Number(order.continuation_index) > 0 ? `${order.parent_order_id}-${order.continuation_index}` : null) ||
     order.orderNumber ||
     order.order_number ||
     order.id ||
@@ -22,7 +22,11 @@ export function formatOrderDisplayNumber(order, fallbackId = '') {
     order.order_id ||
     fallbackId ||
     '';
-  return String(displayNo);
+  let str = String(displayNo);
+  if (str.includes('.') && (order.parent_order_id || Number(order.continuation_index) > 0 || order.isSubOrder)) {
+    str = str.replace('.', '-');
+  }
+  return str;
 }
 
 /**

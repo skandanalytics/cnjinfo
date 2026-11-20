@@ -77,7 +77,7 @@ export function rememberDineInTableId(id) {
 }
 
 export function getSelectedTableId() {
-  const id = Number(sessionStorage.getItem(TABLE_KEY));
+  const id = Number(sessionStorage.getItem(TABLE_KEY) || localStorage.getItem(TABLE_KEY));
   if (Number.isInteger(id) && id > 0) return id;
   const lastId = getLastDineInTableId();
   if (lastId) return lastId;

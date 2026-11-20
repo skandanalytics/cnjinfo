@@ -1128,3 +1128,23 @@ input[type="checkbox"].foodie-checkbox.checkbox-vegan:focus-visible {
 .animate-fade-in {
   animation: foodieFadeIn var(--transition-normal) forwards;
 }
+
+/* Consistent card spacing and layout stability */
+.card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* Primary buttons consistent foodie red */
+.btn-primary-custom,
+.btn-danger {
+  background-color: var(--primary-color, #F20D2D);
+  border-color: var(--primary-color, #F20D2D);
+  color: #FFFFFF;
+}
+
+.btn-primary-custom:hover,
+.btn-danger:hover {
+  background-color: var(--primary-hover-color, #D00B26);
+  border-color: var(--primary-hover-color, #D00B26);
+  color: #FFFFFF;
+}

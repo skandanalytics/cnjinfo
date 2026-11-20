@@ -464,7 +464,7 @@ export const PaymentModal = ({
                       }`}
                       style={{ fontSize: '13px' }}
                     >
-                      <FiSmartphone size={16} /> Razorpay UPI
+                      <FiSmartphone size={16} className="me-1.5" /> Razorpay UPI
                     </button>
 
                     <button
@@ -477,7 +477,7 @@ export const PaymentModal = ({
                       }`}
                       style={{ fontSize: '13px' }}
                     >
-                      <FiDollarSign size={16} /> Cash
+                      <FiDollarSign size={16} className="me-1.5" /> Cash
                     </button>
 
                     {cardEnabled && (
@@ -495,7 +495,7 @@ export const PaymentModal = ({
                         }`}
                         style={{ fontSize: '13px' }}
                       >
-                        <FiCreditCard size={16} /> Card
+                        <FiCreditCard size={16} className="me-1.5" /> Card
                       </button>
                     )}
                   </div>

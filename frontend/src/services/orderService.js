@@ -228,9 +228,14 @@ export const getCustomerPhone = () => {
     }
 
     const keys = [
+      'customer_mobile',
+      'customer_phone',
       'foodie_customer_phone',
       'foodie_user_phone',
-      'foodie_last_phone'
+      'foodie_last_phone',
+      'phone',
+      'user_phone',
+      'mobile'
     ];
     for (const k of keys) {
       const p = localStorage.getItem(k) || sessionStorage.getItem(k);
@@ -757,7 +762,6 @@ export const orderService = {
     const opts = typeof userId === 'object' && userId !== null ? userId : (options || {});
     if (isStaffScreen()) return listOrdersForUi(opts);
     const hasCustomerToken = typeof window !== 'undefined' && (sessionStorage.getItem('foodie_token_customer') || localStorage.getItem('foodie_token_customer'));
-    if (!hasCustomerToken) return [];
     const isExplicitAll = userId === 'ALL' || userId === 'all' || userId === '__ALL__';
     const isCurrentPathAdminOrEmployee = typeof window !== 'undefined' && (
       window.location.pathname.startsWith('/admin') ||
@@ -781,6 +785,15 @@ export const orderService = {
       }
     }
 
+    if (!hasCustomerToken && !isAdminContext && !targetPhone) {
+      let hasLocalOrders = false;
+      try {
+        const guestArr = JSON.parse(localStorage.getItem('foodie_guest_order_ids') || '[]');
+        if (guestArr.length > 0) hasLocalOrders = true;
+      } catch {}
+      if (!hasLocalOrders) return [];
+    }
+
     const isEmailInput = typeof rawInput === 'string' && rawInput.includes('@');
     const targetEmail = currentCustomer?.email ? String(currentCustomer.email).toLowerCase().trim() : (isEmailInput ? rawInput.toLowerCase().trim() : null);
     const targetUserId = currentCustomer?.id ? String(currentCustomer.id) : (typeof userId === 'object' && userId.id ? String(userId.id) : (!isEmailInput && targetPhone !== rawInput && rawInput ? rawInput : null));
@@ -794,6 +807,9 @@ export const orderService = {
     const deletedOrderIds = new Set(JSON.parse(localStorage.getItem('foodie_deleted_order_ids') || '[]').map(String));
 
     let ordersUrl = '/orders/';
+    if (targetPhone && !isAdminContext) {
+      ordersUrl += `?phone=${encodeURIComponent(targetPhone)}`;
+    }
     const ordersPromise = api.get(ordersUrl, bypassCache ? { bypassCache: true } : {});
     const secondaryPromise = includeDetails ? Promise.all([
       api.get('/orders/order-items/?page_size=100').catch(() => ({ data: [] })),

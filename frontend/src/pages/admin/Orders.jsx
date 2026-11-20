@@ -10,24 +10,49 @@ import Loader from '../../components/common/Loader';
 import { OrderContext } from '../../context/OrderContext';
 import { restaurantService } from '../../services/restaurantService';
 import { useAuth } from '../../hooks/useAuth';
+import { useBranch } from '../../context/BranchContext';
 import EBillModal from '../../components/orders/EBillModal';
 import Toast from '../../components/common/Toast';
-import { FiEye, FiFileText, FiGrid, FiList, FiChevronDown, FiChevronRight, FiClock } from 'react-icons/fi';
+import { FiEye, FiFileText, FiGrid, FiList, FiChevronDown, FiChevronRight, FiClock, FiCheck } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 import { formatOrderDisplayNumber } from '../../utils/orderNumber';
 
 export const Orders = () => {
   const { user } = useAuth();
+  const { workingBranchId, selectedBranch, primaryBranch } = useBranch();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { orders, setOrders, loading, updateStatus, fetchOrders } = useContext(OrderContext);
   const [search, setSearch] = useState('');
   const [restaurants, setRestaurants] = useState([]);
-  const [branchFilter, setBranchFilter] = useState('ALL');
+  const effectiveBranch = selectedBranch === 'ALL'
+    ? 'ALL'
+    : (selectedBranch || workingBranchId || (primaryBranch ? String(primaryBranch.id) : 'ALL'));
+  const branchFilter = effectiveBranch;
   const [employeeFilter, setEmployeeFilter] = useState('ALL');
   const [employees, setEmployees] = useState([]);
   const [eBillOrder, setEBillOrder] = useState(null);
   const [toast, setToast] = useState({ show: false, message: '', type: 'add' });
+  const [cleaningOrderId, setCleaningOrderId] = useState(null);
+  const [cleanedOrders, setCleanedOrders] = useState(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem('foodie_cleaned_order_ids') || '[]').map(String));
+    } catch {
+      return new Set();
+    }
+  });
+
+  useEffect(() => {
+    const handleStorage = (e) => {
+      if (e.key === 'foodie_cleaned_order_ids') {
+        try {
+          setCleanedOrders(new Set(JSON.parse(e.newValue || '[]').map(String)));
+        } catch {}
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   const getInitialTab = () => {
     const p = (searchParams.get('status') || searchParams.get('tab') || '').toLowerCase();
@@ -163,6 +188,153 @@ export const Orders = () => {
       }).catch(() => {});
     });
   }, [searchParams, orders]);
+
+  const handleCleanTable = async (ord) => {
+    const tableId = ord.tableId || ord.table_id || (typeof ord.table === 'object' ? ord.table?.id : null);
+    if (!tableId) {
+      setToast({ show: true, message: 'No table assigned to this order.', type: 'remove' });
+      return;
+    }
+    setCleaningOrderId(ord.id);
+    try {
+      const { tableService } = await import('../../services/tableService');
+      await tableService.cleanTable(tableId);
+      const ordIdStr = String(ord.id);
+      setCleanedOrders((prev) => {
+        const next = new Set(prev);
+        next.add(ordIdStr);
+        try {
+          localStorage.setItem('foodie_cleaned_order_ids', JSON.stringify([...next]));
+        } catch {}
+        return next;
+      });
+      setToast({ show: true, message: 'Table marked as Cleaned!', type: 'add' });
+      window.dispatchEvent(new CustomEvent('foodie_tables_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
+      await fetchOrders(false);
+    } catch (err) {
+      console.error('Failed to clean table:', err);
+      setToast({ show: true, message: err?.message || 'Could not clean table.', type: 'remove' });
+    } finally {
+      setCleaningOrderId(null);
+    }
+  };
+
+  const renderTableStatusBadge = (order, isPaid, isSelfService, isTakeaway) => {
+    // 1. Takeaway orders: show '—'
+    if (isTakeaway) {
+      return <span className="text-muted fw-semibold">—</span>;
+    }
+
+    // 2. Self Service orders: show '—'
+    if (isSelfService) {
+      return <span className="text-muted fw-semibold">—</span>;
+    }
+
+    // 3. Check if order has a table assigned
+    const hasTable = Boolean(
+      order.tableId ||
+      order.table_id ||
+      (typeof order.table === 'object' && order.table?.id) ||
+      (typeof order.table === 'string' && order.table.trim() && !['takeaway', 'self service'].includes(order.table.toLowerCase().trim()))
+    );
+
+    if (!hasTable) {
+      return <span className="text-muted fw-semibold">—</span>;
+    }
+
+    // 4. Check order completion status
+    const isCompletedSt = ['completed', 'delivered', 'done', 'settled'].includes(
+      String(order.status || order.backendStatus || '').toLowerCase().trim()
+    );
+
+    // 5. Disabled cases:
+    // If Payment = Unpaid OR Order Status is Pending / Preparing / Ready / Serving / Cancelled
+    if (!isPaid || !isCompletedSt) {
+      return (
+        <span
+          className="badge rounded-pill fw-medium px-2.5 py-1 text-muted"
+          style={{
+            backgroundColor: '#F1F5F9',
+            color: '#64748B',
+            border: '1px solid #E2E8F0',
+            fontSize: '11px',
+            letterSpacing: '0.2px'
+          }}
+          title={!isPaid ? 'Payment must be Paid before table can be cleaned' : 'Order must be Completed before table can be cleaned'}
+        >
+          Not Available
+        </span>
+      );
+    }
+
+    // 6. Dine-In Orders with Payment = Paid AND Order Status = Completed:
+    const isCleaned = cleanedOrders.has(String(order.id));
+    const isCleaning = cleaningOrderId === order.id;
+
+    if (isCleaned) {
+      return (
+        <span
+          className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1"
+          style={{
+            backgroundColor: 'rgba(22, 163, 74, 0.1)',
+            color: '#16A34A',
+            border: '1px solid rgba(22, 163, 74, 0.25)',
+            fontSize: '11px'
+          }}
+          title="Table is cleaned and available"
+        >
+          <FiCheck size={12} className="text-success" />
+          Cleaned
+        </span>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          handleCleanTable(order);
+        }}
+        disabled={isCleaning}
+        className="btn btn-sm rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-xs border"
+        style={{
+          backgroundColor: '#FEF3C7',
+          color: '#B45309',
+          borderColor: '#FCD34D',
+          fontSize: '11px',
+          cursor: isCleaning ? 'wait' : 'pointer',
+          transition: 'all 0.15s ease'
+        }}
+        onMouseEnter={(e) => {
+          if (!isCleaning) {
+            e.currentTarget.style.backgroundColor = '#FDE68A';
+            e.currentTarget.style.borderColor = '#F59E0B';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!isCleaning) {
+            e.currentTarget.style.backgroundColor = '#FEF3C7';
+            e.currentTarget.style.borderColor = '#FCD34D';
+          }
+        }}
+        title="Click to mark table as Cleaned"
+        aria-label="Mark Table Cleaned"
+      >
+        <span
+          style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: '#D97706',
+            display: 'inline-block'
+          }}
+        />
+        {isCleaning ? 'Cleaning...' : 'Ready To Clean'}
+      </button>
+    );
+  };
 
   const tabs = ['All', 'Pending', 'Preparing', 'Ready', 'Serving', 'Completed', 'Cancelled'];
 
@@ -311,8 +483,11 @@ export const Orders = () => {
     }
 
     // Branch filter
-    if (bFilter !== 'ALL' && String(o.branchId || o.branch_id || '') !== String(bFilter)) {
-      return false;
+    if (bFilter && bFilter !== 'ALL') {
+      const ordBranch = o.branchId || o.branch_id || (typeof o.branch === 'object' ? o.branch?.id : o.branch);
+      if (!ordBranch || String(ordBranch) !== String(bFilter)) {
+        return false;
+      }
     }
 
     // Employee filter
@@ -410,17 +585,26 @@ export const Orders = () => {
     // Payment filter
     if (payFilter !== 'ALL') {
       const pay = String(o.paymentStatus || o.payment_status || '').toUpperCase();
-      if (payFilter === 'PAID' && pay !== 'PAID') return false;
-      if (payFilter === 'UNPAID' && pay === 'PAID') return false;
+      const isPaid = pay === 'PAID' || pay === 'COUNTER_PAID' || o.is_paid || o.isPaid;
+      if (payFilter === 'PAID' && !isPaid) return false;
+      if (payFilter === 'UNPAID' && isPaid) return false;
     }
 
     // Type filter
     if (tFilter !== 'ALL') {
-      const isTakeaway =
+      const isSelfService =
+        String(o.orderType || o.order_type || o.source || '').toUpperCase().includes('SELF_SERVICE') ||
+        String(o.orderType || o.order_type || '').toLowerCase().includes('self service') ||
+        String(o.table || '').toLowerCase() === 'self service';
+      const isTakeaway = !isSelfService && (
         String(o.orderType || o.order_type || o.source || '').toUpperCase().includes('TAKEAWAY') ||
-        String(o.table || '').toLowerCase() === 'takeaway';
-      if (tFilter === 'DINE_IN' && isTakeaway) return false;
+        String(o.table || '').toLowerCase() === 'takeaway'
+      );
+      const isDineIn = !isSelfService && !isTakeaway;
+
+      if (tFilter === 'DINE_IN' && !isDineIn) return false;
       if (tFilter === 'TAKEAWAY' && !isTakeaway) return false;
+      if (tFilter === 'SELF_SERVICE' && !isSelfService) return false;
     }
 
     return true;
@@ -470,7 +654,7 @@ export const Orders = () => {
       if (cleanSearchQuery) {
         const parentSerial = parentSerialMap.get(pKey) || formatOrderDisplayNumber(parent, parent.id);
         const subMatchesSearch = suborders.some((sub, sIdx) => {
-          const subSerial = `${parentSerial}.${sub.continuation_index || (sIdx + 1)}`;
+          const subSerial = `${parentSerial}-${sub.continuation_index || (sIdx + 1)}`;
           const subDisplay = String(formatOrderDisplayNumber(sub, sub.id) || '').toLowerCase();
           const cleanSub = subDisplay.replace(/^#/, '');
           return (
@@ -531,22 +715,6 @@ export const Orders = () => {
         actions={
           orders && orders.length > 0 ? (
             <div className="d-flex align-items-center gap-2 flex-wrap">
-              {user?.role !== 'employee' && !window.location.pathname.includes('/employee/') && restaurants.length > 1 && (
-                <select
-                  value={branchFilter}
-                  onChange={(e) => setBranchFilter(e.target.value)}
-                  className="form-select form-select-sm rounded-pill border-secondary-subtle fw-semibold px-3 py-1.5"
-                  style={{ width: '160px', fontSize: '12px', cursor: 'pointer', backgroundColor: '#ffffff' }}
-                  aria-label="Filter by Branch"
-                >
-                  <option value="ALL">All Branches</option>
-                  {restaurants.map(r => (
-                    <option key={r.id} value={String(r.id)}>
-                      {r.name || `Branch #${r.id}`}
-                    </option>
-                  ))}
-                </select>
-              )}
               <select
                 value={paymentFilter}
                 onChange={(e) => setPaymentFilter(e.target.value)}
@@ -639,6 +807,16 @@ export const Orders = () => {
             >
               Takeaway
             </button>
+            <button
+              type="button"
+              onClick={() => setTypeFilter('SELF_SERVICE')}
+              className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold transition-all border-0 ${
+                typeFilter === 'SELF_SERVICE' ? 'text-white shadow-xs' : 'text-secondary bg-transparent'
+              }`}
+              style={{ fontSize: '12px', backgroundColor: typeFilter === 'SELF_SERVICE' ? 'var(--primary-color, #F20D2D)' : 'transparent' }}
+            >
+              Self Service
+            </button>
           </div>
 
           {/* Order Status Filter Pills */}
@@ -714,6 +892,7 @@ export const Orders = () => {
                   <th className="py-3">Amount</th>
                   <th className="py-3">Status</th>
                   <th className="py-3">Payment</th>
+                  <th className="py-3">Table Status</th>
                   <th className="text-end pe-4 py-3">Actions</th>
                 </tr>
               </thead>
@@ -724,13 +903,17 @@ export const Orders = () => {
                   const expanded = isExpanded(order.id);
                   const hasSuborders = suborders.length > 0;
                   const adj = adjustOrderForServiceTax(order);
-                  const isTakeaway = String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('TAKEAWAY') || 
-                    String(order.table || '').toLowerCase() === 'takeaway';
+                  const isSelfService = String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('SELF_SERVICE') || 
+                    String(order.orderType || order.order_type || '').toLowerCase().includes('self service') ||
+                    String(order.table || '').toLowerCase() === 'self service';
+                  const isTakeaway = !isSelfService && (String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('TAKEAWAY') || 
+                    String(order.table || '').toLowerCase() === 'takeaway');
                   const rawTable = order.table ? String(order.table).replace(/^(table\s*|t-?)/i, '').trim() : '';
-                  const displayTable = isTakeaway ? '—' : (rawTable ? `T${rawTable.padStart(2, '0')}` : (order.table || '—'));
+                  const displayTable = isSelfService ? 'Self Service' : (isTakeaway ? '—' : (rawTable ? `T${rawTable.padStart(2, '0')}` : (order.table || '—')));
                   const parentSerial = parentSerialMap.get(pKey) || formatOrderDisplayNumber(order, order.id);
                   const displayNo = parentSerial;
-                  const isPaid = String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID';
+                  const isCounterPaid = isSelfService || String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'COUNTER_PAID';
+                  const isPaid = isCounterPaid || String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' || Boolean(order.is_paid || order.isPaid);
                   const customerDisplay = order.customerName || order.customer_name || (order.customerPhone || order.customer_phone ? order.customerPhone || order.customer_phone : 'Walk-in');
 
                   // Status Badge Variant
@@ -814,8 +997,14 @@ export const Orders = () => {
                           {displayTable}
                         </td>
                         <td className="py-3" style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
-                          <span className="badge rounded-pill px-2.5 py-1" style={{ backgroundColor: isTakeaway ? 'rgba(37, 99, 235, 0.1)' : 'rgba(242, 13, 45, 0.08)', color: isTakeaway ? '#2563EB' : 'var(--primary-color)' }}>
-                            {isTakeaway ? 'Takeaway' : 'Dine-In'}
+                          <span 
+                            className="badge rounded-pill px-2.5 py-1" 
+                            style={{ 
+                              backgroundColor: isSelfService ? 'rgba(16, 185, 129, 0.1)' : isTakeaway ? 'rgba(37, 99, 235, 0.1)' : 'rgba(242, 13, 45, 0.08)', 
+                              color: isSelfService ? '#059669' : isTakeaway ? '#2563EB' : 'var(--primary-color)' 
+                            }}
+                          >
+                            {isSelfService ? 'Self Service' : isTakeaway ? 'Takeaway' : 'Dine-In'}
                           </span>
                         </td>
                         <td className="py-3 fw-medium text-truncate" style={{ fontSize: '13px', maxWidth: '140px', color: 'var(--text-primary)' }}>
@@ -831,28 +1020,35 @@ export const Orders = () => {
                         </td>
                         <td className="py-3">
                           <div className="d-flex flex-column align-items-start gap-1">
-                            {isPaid ? (
-                              <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A' }}>
-                                ● Paid
+                            {isCounterPaid ? (
+                              <span className="fw-semibold" style={{ color: '#16A34A', fontSize: '13px' }}>
+                                Counter Paid
+                              </span>
+                            ) : isPaid ? (
+                              <span className="fw-semibold" style={{ color: '#16A34A', fontSize: '13px' }}>
+                                Paid
                               </span>
                             ) : (String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PENDING' || String(order.payment_method || '').toUpperCase() === 'UPI') ? (
                               <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#B45309', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
                                 ● Pending Verification
                               </span>
                             ) : (
-                              <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
+                              <span className="badge rounded-pill fw-semibold px-2.5 py-1 mt-0.5" style={{ fontSize: '11px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
                                 ● Unpaid
                               </span>
                             )}
-                            {(order.paymentMethodName || order.payment_method) && (
+                            {(order.paymentMethodName || order.payment_method) && !isCounterPaid && (
                               <span className="text-secondary small fw-medium" style={{ fontSize: '10.5px' }}>
                                 {String(order.paymentMethodName || order.payment_method).toUpperCase()}
                               </span>
                             )}
                           </div>
                         </td>
+                        <td className="py-3" onClick={(e) => e.stopPropagation()}>
+                          {renderTableStatusBadge(order, isPaid, isSelfService, isTakeaway)}
+                        </td>
                         <td className="text-end pe-4 py-3" onClick={(e) => e.stopPropagation()}>
-                          <div className="d-flex align-items-center justify-content-end" style={{ gap: '12px' }}>
+                          <div className="d-flex align-items-center justify-content-end" style={{ gap: '10px' }}>
                             <button
                               type="button"
                               onClick={() => setSelectedOrder({ ...order, serialNumber: parentSerial, display_order_number: parentSerial })}
@@ -882,8 +1078,9 @@ export const Orders = () => {
                         const isLastSub = sIdx === suborders.length - 1;
                         const subAdj = adjustOrderForServiceTax(sub);
                         const subContinuationIndex = sub.continuation_index || (sIdx + 1);
-                        const subDisplayNo = `${parentSerial}.${subContinuationIndex}`;
-                        const subIsPaid = String(sub.paymentStatus || sub.payment_status || '').toUpperCase() === 'PAID';
+                        const subDisplayNo = `${parentSerial}-${subContinuationIndex}`;
+                        const subIsCounterPaid = isSelfService || String(sub.paymentStatus || sub.payment_status || '').toUpperCase() === 'COUNTER_PAID';
+                        const subIsPaid = subIsCounterPaid || String(sub.paymentStatus || sub.payment_status || '').toUpperCase() === 'PAID' || Boolean(sub.is_paid || sub.isPaid);
                         const subCustomer = sub.customerName || sub.customer_name || customerDisplay;
                         const subTime = sub.time || (sub.created_at ? new Date(sub.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) : '');
 
@@ -949,12 +1146,16 @@ export const Orders = () => {
                             </td>
                             <td className="py-2.5">
                               <div className="d-flex flex-column align-items-start gap-0.5">
-                                {subIsPaid ? (
-                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5" style={{ fontSize: '10.5px', backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A' }}>
-                                    ● Paid
+                                {subIsCounterPaid ? (
+                                  <span className="fw-semibold" style={{ color: '#16A34A', fontSize: '12px' }}>
+                                    Counter Paid
+                                  </span>
+                                ) : subIsPaid ? (
+                                  <span className="fw-semibold" style={{ color: '#16A34A', fontSize: '12px' }}>
+                                    Paid
                                   </span>
                                 ) : (
-                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5" style={{ fontSize: '10.5px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
+                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5 mt-0.5" style={{ fontSize: '10.5px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
                                     ● Unpaid
                                   </span>
                                 )}
@@ -964,6 +1165,9 @@ export const Orders = () => {
                                   </span>
                                 )}
                               </div>
+                            </td>
+                            <td className="py-2.5 text-muted small">
+                              —
                             </td>
                             <td className="text-end pe-4 py-2.5">
                               <div className="d-flex align-items-center justify-content-end" style={{ gap: '8px' }}>
@@ -1013,7 +1217,7 @@ export const Orders = () => {
             const rawSuborders = subordersMap.get(pKey) || subordersMap.get(String(order.orderNumber)) || [];
             const suborders = rawSuborders.map((sub, sIdx) => {
               const subIndex = sub.continuation_index !== undefined && sub.continuation_index !== null ? sub.continuation_index : (sIdx + 1);
-              const subSerial = `${parentSerial}.${subIndex}`;
+              const subSerial = `${parentSerial}-${subIndex}`;
               return {
                 ...sub,
                 serialNumber: subSerial,
@@ -1077,11 +1281,11 @@ export const Orders = () => {
             try {
               const { proceedToBill } = await import('../../services/adminApi');
               await proceedToBill(targetId);
+              setEBillOrder(null);
+              setSelectedOrder(null);
               await fetchOrders(false);
               window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: targetId, status: 'Completed' } }));
               window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
-              setEBillOrder(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
-              setSelectedOrder(prev => (prev && String(prev.id) === String(targetId)) ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : prev);
               setToast({
                 show: true,
                 message: `Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`,

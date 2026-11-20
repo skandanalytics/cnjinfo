@@ -359,7 +359,8 @@ export const OrderConfirmation = () => {
             {cancelled ? 'Order Cancelled' : 'Order Placed Successfully!'}
           </h3>
           <p className="text-muted small mb-4">
-            Order Number: <span className="font-monospace fw-bold text-dark" data-testid="order-number">#{displayNo}</span>
+            {Boolean(raw.parent_order_id || raw.parent_order || (raw.continuation_index > 0)) ? 'Sub Order ' : 'Order '}
+            <span className="font-monospace fw-bold text-dark" data-testid="order-number">#{displayNo}</span>
           </p>
 
           {/* Key Value Details matching Screenshot 8 & 9 */}

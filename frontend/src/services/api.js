@@ -69,7 +69,14 @@ api.interceptors.request.use(
     if (token && token !== 'dummy-token') {
       config.headers.Authorization = `Bearer ${token}`;
     } else {
-      const guestToken = sessionStorage.getItem('foodie_guest_token') || localStorage.getItem('foodie_guest_token');
+      let guestToken = sessionStorage.getItem('foodie_guest_token') || localStorage.getItem('foodie_guest_token');
+      if (!guestToken && !isAdminRoute) {
+        guestToken = 'gst_' + Date.now() + '_' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+        try {
+          sessionStorage.setItem('foodie_guest_token', guestToken);
+          localStorage.setItem('foodie_guest_token', guestToken);
+        } catch {}
+      }
       if (guestToken) config.headers['X-Guest-Token'] = guestToken;
     }
 
@@ -214,6 +221,17 @@ api.interceptors.response.use(
             }
           }
         }
+      }
+
+      if (error.response?.data?.code === 'guest_token_required' && !error.config?._retried) {
+        const freshGuestToken = 'gst_' + Date.now() + '_' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+        try {
+          sessionStorage.setItem('foodie_guest_token', freshGuestToken);
+          localStorage.setItem('foodie_guest_token', freshGuestToken);
+        } catch {}
+        error.config._retried = true;
+        error.config.headers['X-Guest-Token'] = freshGuestToken;
+        return api(error.config);
       }
 
       return Promise.reject(error);

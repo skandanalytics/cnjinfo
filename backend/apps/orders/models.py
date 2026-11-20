@@ -11,6 +11,7 @@ class Order(models.Model):
     class Type(models.TextChoices):
         DINE_IN = "DINE_IN", "Dine-In"
         TAKEAWAY = "TAKEAWAY", "Takeaway"
+        SELF_SERVICE = "SELF_SERVICE", "Self Service"
 
     # Canonical statuses (decision Q2: Accept moves PENDING -> PREPARING). Transitions are enforced in the service layer.
     class Status(models.TextChoices):
@@ -59,7 +60,7 @@ class Order(models.Model):
     table = models.ForeignKey("branches.DiningTable", on_delete=models.SET_NULL, null=True, blank=True,
                               related_name="orders")
     table_label = models.CharField(max_length=60, blank=True)  # snapshot
-    order_type = models.CharField(max_length=10, choices=Type.choices)
+    order_type = models.CharField(max_length=20, choices=Type.choices)
     source = models.CharField(max_length=10, choices=Source.choices, default=Source.CUSTOMER)
     placed_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True,
                                   related_name="placed_orders")  # employee who took an assisted order
@@ -108,16 +109,19 @@ class Order(models.Model):
             # A dine-in order keeps its table label after the table itself is deleted.
             models.CheckConstraint(
                 condition=((models.Q(order_type="DINE_IN") & (models.Q(table__isnull=False) | ~models.Q(table_label="")))
-                           | models.Q(order_type="TAKEAWAY", table__isnull=True)),
+                           | models.Q(order_type__in=["TAKEAWAY", "SELF_SERVICE"], table__isnull=True)),
                 name="ck_order_table_matches_type"),
         ]
 
     @property
     def display_number(self):
         if self.display_order_number:
+            if "." in self.display_order_number and self.parent_order_id:
+                return self.display_order_number.replace(".", "-")
             return self.display_order_number
         if self.parent_order_id and self.continuation_index > 0:
-            return f"{self.parent_order_id}.{self.continuation_index}"
+            parent_display = self.parent_order.display_number if self.parent_order else str(self.parent_order_id)
+            return f"{parent_display}-{self.continuation_index}"
         return str(self.id)
 
     def __str__(self):

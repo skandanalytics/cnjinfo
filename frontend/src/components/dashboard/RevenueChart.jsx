@@ -23,8 +23,21 @@ export const RevenueChart = ({
   const chartData = (data || []).map(d => ({
     sales: d.sales !== undefined ? d.sales : (d.value !== undefined ? d.value : 0),
     label: d.label !== undefined ? d.label : (d.day !== undefined ? d.day : ''),
+    fullName: d.fullName || d.name || d.label || '',
     count: d.count || 0
   }));
+
+  const normalizedPeriod = (() => {
+    const p = String(period || '').toLowerCase();
+    if (p.includes('hour') || p === 'today') return 'Hourly';
+    if (p.includes('dai') || p.includes('7 day')) return 'Daily';
+    if (p.includes('month (week)') || p === 'weekly') return 'Weekly';
+    if (p.includes('month')) return 'Monthly';
+    return 'Weekly';
+  })();
+
+  const revenueSubtitle = `${normalizedPeriod} Revenue Distribution`;
+  const cleanComparison = comparison && !comparison.toLowerCase().includes('distribution') ? comparison : '';
 
   const maxSales = Math.max(...chartData.map(d => d.sales), 1);
   const totalSales = totalRevenue !== undefined 
@@ -98,8 +111,8 @@ export const RevenueChart = ({
             )}
           </div>
           <p className="small mb-0 mt-1" style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
-            {period === 'Today' ? "Today's Revenue" : period === 'Weekly' ? "Weekly Revenue" : period === 'Monthly' ? "Monthly Revenue" : period === 'Quarterly' ? "Quarterly Revenue" : period === 'Yearly' ? "Yearly Revenue" : "Period Revenue"}: <span className="fw-bold" style={{ color: 'var(--text-primary)' }}>{formatCurrency(totalSales)}</span>
-            {comparison ? ` (${comparison})` : ''}
+            {revenueSubtitle}: <span className="fw-bold" style={{ color: 'var(--text-primary)' }}>{formatCurrency(totalSales)}</span>
+            {cleanComparison ? ` (${cleanComparison})` : ''}
           </p>
         </div>
 
@@ -107,7 +120,7 @@ export const RevenueChart = ({
         <div className="d-flex align-items-center gap-2">
           <div className="position-relative">
             <select
-              value={period}
+              value={normalizedPeriod}
               onChange={(e) => onPeriodChange && onPeriodChange(e.target.value)}
               className="form-select form-select-sm rounded-pill fw-semibold text-secondary"
               style={{
@@ -123,24 +136,23 @@ export const RevenueChart = ({
               }}
               aria-label="Sales Overview Period Selector"
             >
-              <option value="Weekly">Weekly (7 Days)</option>
-              <option value="Today">Today (Hourly)</option>
-              <option value="Monthly">Monthly (Weeks)</option>
-              <option value="Quarterly">Quarterly (Months)</option>
-              <option value="Yearly">Yearly (Quarters)</option>
+              <option value="Hourly">Hourly</option>
+              <option value="Daily">Daily</option>
+              <option value="Weekly">Weekly</option>
+              <option value="Monthly">Monthly</option>
             </select>
           </div>
         </div>
       </div>
 
       {/* Top Highlights Banner */}
-      {peakItem && peakItem.sales > 0 && (
+      {peakItem && (
         <div 
           className="d-flex align-items-center justify-content-between px-3 py-2 rounded-3 mb-3" 
           style={{ backgroundColor: 'var(--primary-subtle)', border: '1px solid rgba(200, 16, 46, 0.2)' }}
         >
           <span className="small text-danger fw-semibold" style={{ fontSize: '11.5px' }}>
-            🔥 Peak: <strong>{peakItem.label}</strong> with <strong>{formatCurrency(peakItem.sales)}</strong>
+            🔥 Peak: <strong>{peakItem.fullName || peakItem.label}</strong> with <strong>{formatCurrency(peakItem.sales)}</strong>
           </span>
           <span className="badge rounded-pill px-2 py-0.5" style={{ fontSize: '10px', backgroundColor: 'var(--primary-color)', color: '#fff' }}>
             Highest Sales

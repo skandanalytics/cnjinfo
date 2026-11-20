@@ -27,7 +27,7 @@ import {
   FiSearch, FiX, FiPlus, FiMinus, FiTrash2, FiShoppingBag, 
   FiLayers, FiTag, FiCheck, FiDollarSign, FiClock, FiPercent,
   FiPrinter, FiUser, FiPhone, FiAlertCircle, FiRefreshCw, FiChevronLeft,
-  FiCreditCard, FiGrid, FiList, FiSave, FiShoppingCart, FiEdit2
+  FiCreditCard, FiGrid, FiList, FiSave, FiShoppingCart, FiEdit2, FiCoffee
 } from 'react-icons/fi';
 import { getShortTableNumber } from '../../components/tables/TableCard';
 
@@ -67,7 +67,8 @@ export const Pos = () => {
   const [posViewMode, setPosViewMode] = useState('grid');
 
   // POS Order State
-  const initialType = (searchParams.get('type') || '').toLowerCase() === 'takeaway' ? 'TAKEAWAY' : 'DINE_IN';
+  const typeParam = (searchParams.get('type') || '').toLowerCase();
+  const initialType = typeParam === 'takeaway' ? 'TAKEAWAY' : (typeParam === 'self_service' || typeParam === 'selfservice') ? 'SELF_SERVICE' : 'DINE_IN';
   const [orderType, setOrderType] = useState(() => {
     try {
       const stored = sessionStorage.getItem('foodie_pos_cart');
@@ -237,6 +238,8 @@ export const Pos = () => {
   }, []);
 
   const [parentOrder, setParentOrder] = useState(null);
+  const previouslySelectedTableRef = useRef(null);
+  const previousParentOrderRef = useRef(null);
   const [trackedOrder, setTrackedOrder] = useState(null);
   const [showTrackedOrderModal, setShowTrackedOrderModal] = useState(false);
 
@@ -267,6 +270,30 @@ export const Pos = () => {
     initBranches();
     return () => { isMounted = false; };
   }, [user]);
+
+  // Synchronize POS working branch when Super Admin switches global branch context
+  useEffect(() => {
+    const handleBranchSync = async (e) => {
+      if (user?.role === 'employee' && user?.branchId) return;
+      const rawBranch = e?.detail?.branchId;
+      let targetId = null;
+      if (!rawBranch || rawBranch === 'ALL') {
+        try {
+          const { currentBranchId } = await import('../../services/adminApi');
+          targetId = await currentBranchId();
+        } catch {
+          targetId = branches[0]?.id || 1;
+        }
+      } else {
+        targetId = Number(rawBranch);
+      }
+      if (targetId && Number(targetId) !== Number(selectedBranchId)) {
+        setSelectedBranchId(Number(targetId));
+      }
+    };
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
+    return () => window.removeEventListener('foodie_branch_selected', handleBranchSync);
+  }, [user, branches, selectedBranchId]);
 
   const getSelectedTableLabel = (tbl) => {
     if (!tbl) return '';
@@ -474,12 +501,15 @@ export const Pos = () => {
 
       const [dishList, catList, couponList] = await Promise.all([
         productService.getProducts(true, branchId).catch(() => []),
-        menuService.getMenus().catch(() => []),
-        couponService.getCoupons().catch(() => [])
+        menuService.getMenus(branchId).catch(() => []),
+        couponService.getCoupons(branchId).catch(() => [])
       ]);
 
       const filteredTables = Array.isArray(tableList) 
-        ? tableList.filter(t => !t.branch || Number(t.branch) === Number(branchId))
+        ? tableList.filter(t => {
+            const tBranch = t.branch?.id || t.branch || t.branch_id;
+            return !branchId || String(tBranch) === String(branchId);
+          })
         : [];
       setTables(filteredTables);
 
@@ -678,14 +708,39 @@ export const Pos = () => {
 
   // Handle switching order type
   const handleToggleOrderType = (type) => {
-    setOrderType(type);
-    setOrderError('');
-    if (type === 'TAKEAWAY') {
+    if (orderType === 'DINE_IN' && type !== 'DINE_IN') {
+      if (selectedTable) {
+        previouslySelectedTableRef.current = selectedTable;
+      }
+      if (parentOrder) {
+        previousParentOrderRef.current = parentOrder;
+      }
       setSelectedTable(null);
       setParentOrder(null);
+    } else if (orderType !== 'DINE_IN' && type === 'DINE_IN') {
+      if (previouslySelectedTableRef.current) {
+        setSelectedTable(previouslySelectedTableRef.current);
+      }
+      if (previousParentOrderRef.current) {
+        setParentOrder(previousParentOrderRef.current);
+      }
+    }
+
+    setOrderType(type);
+    if (type !== 'TAKEAWAY' && appliedCoupon) {
+      setAppliedCoupon(null);
+    }
+    setOrderError('');
+    if (type === 'TAKEAWAY') {
       setSearchParams({ type: 'takeaway' }, { replace: true });
+    } else if (type === 'SELF_SERVICE') {
+      setSearchParams({ type: 'self_service' }, { replace: true });
     } else {
-      setSearchParams({}, { replace: true });
+      if (previouslySelectedTableRef.current) {
+        setSearchParams({ table: previouslySelectedTableRef.current.id }, { replace: true });
+      } else {
+        setSearchParams({}, { replace: true });
+      }
     }
   };
 
@@ -1153,7 +1208,7 @@ export const Pos = () => {
 
   // Auto-apply eligible coupon when cart changes (Takeaway only; Dine-in coupons applied at Complete Session)
   useEffect(() => {
-    if (orderType === 'DINE_IN') {
+    if (orderType !== 'TAKEAWAY') {
       if (appliedCoupon) setAppliedCoupon(null);
       return;
     }
@@ -1215,7 +1270,7 @@ export const Pos = () => {
     } else if (appliedCoupon?.isAutomatic) {
       setAppliedCoupon(null);
     }
-  }, [cartItems, coupons, appliedCoupon]);
+  }, [cartItems, coupons, appliedCoupon, orderType]);
 
   // Apply Coupon
   const handleApplyCoupon = (code) => {
@@ -1256,7 +1311,7 @@ export const Pos = () => {
   };
 
   // Submit Order Action
-  const handleSubmitOrder = async (isPaid = false, selectedMethod = 'CASH') => {
+  const handleSubmitOrder = async (isPaid = false, selectedMethod = 'CASH', paymentResult = null, options = {}) => {
     setOrderError('');
     if (cartItems.length === 0) {
       setOrderError('Add at least one dish to the order.');
@@ -1280,14 +1335,25 @@ export const Pos = () => {
 
     // Only validate phone when NOT continuing an existing order
     if (!parentOrder) {
-      if (!effectivePhone) {
-        setOrderError('Customer mobile number is required.');
-        return;
-      }
-      const cleanDigits = effectivePhone.replace(/\D/g, '');
-      if (cleanDigits.length < 10) {
-        setOrderError('Please enter a valid 10-digit customer mobile number.');
-        return;
+      if (orderType !== 'SELF_SERVICE') {
+        if (!effectivePhone) {
+          setOrderError('Customer mobile number is required.');
+          return;
+        }
+        const cleanDigits = effectivePhone.replace(/\D/g, '');
+        if (cleanDigits.length < 10) {
+          setOrderError('Please enter a valid 10-digit customer mobile number.');
+          return;
+        }
+      } else {
+        // Self Service: customer mobile is optional, but if entered, must be 10 digits
+        if (effectivePhone) {
+          const cleanDigits = effectivePhone.replace(/\D/g, '');
+          if (cleanDigits.length > 0 && cleanDigits.length < 10) {
+            setOrderError('Please enter a valid 10-digit customer mobile number.');
+            return;
+          }
+        }
       }
     }
 
@@ -1308,12 +1374,12 @@ export const Pos = () => {
     const methodMap = {
       'UPI': 'RAZORPAY_UPI',
       'RAZORPAY_UPI': 'RAZORPAY_UPI',
-      'COUNTER': 'CASH',
+      'COUNTER': 'COUNTER',
       'CASH': 'CASH',
       'CARD': 'RAZORPAY_CARD',
       'RAZORPAY_CARD': 'RAZORPAY_CARD',
     };
-    const apiPaymentMethod = methodMap[selectedMethod] || 'CASH';
+    const apiPaymentMethod = orderType === 'SELF_SERVICE' ? 'COUNTER' : (methodMap[selectedMethod] || 'CASH');
 
     const payload = {
       order_type: orderType,
@@ -1325,8 +1391,8 @@ export const Pos = () => {
       customer_phone: resolvedPhone,
       customer_name: resolvedName,
       payment_method: apiPaymentMethod,
-      mark_paid: isPaid,
-      service_tax_enabled: serviceTaxEnabled,
+      mark_paid: orderType === 'SELF_SERVICE' ? true : isPaid,
+      service_tax_enabled: orderType === 'DINE_IN' ? serviceTaxEnabled : false,
     };
 
     if (parentOrder) {
@@ -1337,10 +1403,29 @@ export const Pos = () => {
     try {
       const order = await createAssistedOrder(payload);
       setShowPaymentModal(false);
-      setPlacedOrder({
-        ...order,
-        is_paid: isPaid,
-      });
+
+      if (options?.autoPrint || orderType === 'SELF_SERVICE') {
+        const ebillData = {
+          ...order,
+          autoPrint: true,
+          order_type: 'SELF_SERVICE',
+          orderType: 'Self Service',
+          payment_status: 'COUNTER_PAID',
+          paymentStatus: 'COUNTER_PAID',
+          payment_status_label: 'Counter Paid',
+          payment_method: 'COUNTER',
+          paymentMethod: 'COUNTER',
+          paymentMethodName: 'Counter Paid',
+          is_paid: true,
+          branchName: branches.find(b => String(b.id) === String(selectedBranchId))?.name || 'Main Branch',
+        };
+        setViewingEBill(ebillData);
+      } else {
+        setPlacedOrder({
+          ...order,
+          is_paid: isPaid,
+        });
+      }
 
       // Clear current cart & inputs
       userDismissedCouponRef.current = false;
@@ -1349,8 +1434,14 @@ export const Pos = () => {
       setCustomerPhone('');
       setCustomerName('');
       setParentOrder(null);
+      try {
+        sessionStorage.removeItem('foodie_pos_cart');
+      } catch (e) {}
+      setHasSavedCart(false);
       if (orderType === 'DINE_IN') {
         setSelectedTable(null);
+        previouslySelectedTableRef.current = null;
+        previousParentOrderRef.current = null;
         setSearchParams({}, { replace: true });
       }
 
@@ -1358,7 +1449,7 @@ export const Pos = () => {
       notifyOrderCreated({
         id: order.id,
         order_number: order.order_number || order.orderNumber,
-        table: selectedTable?.number || selectedTable?.table_number || (orderType === 'TAKEAWAY' ? 'Takeaway' : 'N/A'),
+        table: selectedTable?.number || selectedTable?.table_number || (orderType === 'TAKEAWAY' ? 'Takeaway' : orderType === 'SELF_SERVICE' ? 'Self Service' : 'N/A'),
         total_amount: billSummary.grandTotal
       });
       window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: order.id, order } }));
@@ -1369,6 +1460,10 @@ export const Pos = () => {
     } finally {
       setSubmittingOrder(false);
     }
+  };
+
+  const handlePlaceOrderAndPrintBill = async () => {
+    await handleSubmitOrder(true, 'COUNTER', null, { autoPrint: true });
   };
 
   const handleResetOrder = () => {
@@ -1386,9 +1481,13 @@ export const Pos = () => {
     setOrderError('');
     setCouponError('');
     setShowClearConfirm(false);
+    try {
+      sessionStorage.removeItem('foodie_pos_cart');
+    } catch (e) {}
+    setHasSavedCart(false);
   };
 
-  const canSubmitOrder = !submittingOrder && cartItems.length > 0 && (orderType === 'TAKEAWAY' || Boolean(selectedTable));
+  const canSubmitOrder = !submittingOrder && cartItems.length > 0 && (orderType === 'TAKEAWAY' || orderType === 'SELF_SERVICE' || Boolean(selectedTable));
 
   // Block Cooks / Kitchen Staff from creating POS assisted orders
   const isCook = Boolean(
@@ -1930,7 +2029,9 @@ export const Pos = () => {
                             backgroundColor: '#FFFFFF',
                             border: '1px solid #E2E8F0',
                             transition: 'transform 0.2s ease, box-shadow 0.2s ease',
-                            minHeight: '210px'
+                            minHeight: '210px',
+                            filter: isOutOfStock ? 'grayscale(100%)' : 'none',
+                            opacity: isOutOfStock ? 0.75 : 1
                           }}
                         >
 {/* Header row with Veg/Non-Veg icon & optional Bestseller/Popular pill (Dish images hidden in POS) */}
@@ -2001,28 +2102,33 @@ export const Pos = () => {
                               </div>
                             </div>
 
-                            {/* Price Row with Availability Status Dot (Anchored at fixed position) */}
-                            <div className="d-flex align-items-center justify-content-between mt-auto pt-2 flex-wrap gap-2" style={{ minHeight: '28px' }}>
-                              <div className="d-flex align-items-baseline gap-1.5 flex-wrap">
-                                <span className="fw-bold" style={{ color: '#F20D2D', fontSize: '16px' }}>
-                                  {formatCurrency(dish.sellingPrice || dish.price)}
-                                </span>
-                                {dish.hasDiscount && dish.price > (dish.sellingPrice || dish.price) && (
-                                  <span className="text-muted text-decoration-line-through small" style={{ fontSize: '12px', color: '#94A3B8' }}>
-                                    {formatCurrency(dish.price)}
+                            {/* Price & Discounted Price Row (Layout: Price, Discounted Price, Proper Gap) */}
+                            <div className="mt-auto pt-2">
+                              <div className="d-flex align-items-baseline gap-2 flex-wrap">
+                                {dish.hasDiscount && dish.price > (dish.sellingPrice || dish.price) ? (
+                                  <>
+                                    <span className="text-muted text-decoration-line-through small" style={{ fontSize: '13px', color: '#94A3B8' }}>
+                                      {formatCurrency(dish.price)}
+                                    </span>
+                                    <span className="fw-bold" style={{ color: '#F20D2D', fontSize: '16.5px' }}>
+                                      {formatCurrency(dish.sellingPrice || dish.price)}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="fw-bold" style={{ color: '#F20D2D', fontSize: '16.5px' }}>
+                                    {formatCurrency(dish.sellingPrice || dish.price)}
                                   </span>
                                 )}
                               </div>
 
-                              {/* Stock status pill/dot in price row where it never collides with buttons */}
-                              <div className="d-inline-flex align-items-center" style={{ gap: '8px' }} title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}>
+                              {/* Stock status moved below price */}
+                              <div className="d-inline-flex align-items-center mt-1" style={{ gap: '6px' }} title={isOutOfStock ? 'Out of Stock' : isLowStock ? 'Low Stock' : 'In Stock'}>
                                 <span
                                   className="rounded-circle flex-shrink-0"
                                   style={{
-                                    width: '8px',
-                                    height: '8px',
+                                    width: '7px',
+                                    height: '7px',
                                     backgroundColor: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A',
-                                    boxShadow: isOutOfStock ? '0 0 0 2px rgba(220, 38, 38, 0.2)' : isLowStock ? '0 0 0 2px rgba(217, 119, 6, 0.2)' : '0 0 0 2px rgba(22, 163, 74, 0.2)'
                                   }}
                                 />
                                 <span style={{ fontSize: '11px', color: isOutOfStock ? '#DC2626' : isLowStock ? '#D97706' : '#16A34A', fontWeight: 500 }}>
@@ -2052,34 +2158,35 @@ export const Pos = () => {
                                 </button>
                               </div>
 
-                              {/* Right: Add / Stepper container (Initial state has only Add) */}
+                              {/* Right: Add / Stepper container with improved spacing */}
                               <div className="d-flex align-items-center ms-auto">
                                 {cartQty > 0 ? (
                                   <div 
                                     className="d-flex align-items-center justify-content-between bg-white border px-2 shadow-xs"
                                     style={{
-                                      height: '32px',
-                                      borderRadius: '16px',
-                                      borderColor: '#E2E8F0',
-                                      minWidth: '80px'
+                                      height: '34px',
+                                      borderRadius: '17px',
+                                      borderColor: '#CBD5E1',
+                                      minWidth: '94px',
+                                      gap: '8px'
                                     }}
                                   >
                                     <button
                                       type="button"
                                       className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
-                                      style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '16px', lineHeight: 1 }}
+                                      style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '17px', width: '22px', height: '22px', lineHeight: 1 }}
                                       onClick={() => handleDecrementDish(dish)}
                                       title="Decrease quantity"
                                     >
                                       −
                                     </button>
-                                    <span className="fw-bold small px-1.5" style={{ fontSize: '13px', color: '#0F172A' }}>
+                                    <span className="fw-bold small px-1 text-center" style={{ fontSize: '13px', color: '#0F172A', minWidth: '18px' }}>
                                       {cartQty}
                                     </span>
                                     <button
                                       type="button"
                                       className="btn btn-link p-0 border-0 fw-bold d-flex align-items-center justify-content-center"
-                                      style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '16px', lineHeight: 1 }}
+                                      style={{ color: '#F20D2D', textDecoration: 'none', fontSize: '17px', width: '22px', height: '22px', lineHeight: 1 }}
                                       onClick={() => handleIncrementDish(dish)}
                                       title="Increase quantity"
                                     >
@@ -2141,16 +2248,16 @@ export const Pos = () => {
               }}
             >
               
-              {/* 1. Service Type Toggle: Dine-In vs Takeaway */}
-              <div className="d-flex align-items-center gap-2">
+              {/* 1. Service Type Toggle: Dine-In vs Takeaway vs Self Service */}
+              <div className="d-flex align-items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('DINE_IN')}
-                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all shadow-xs"
+                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-1.5 fw-semibold transition-all shadow-xs px-1"
                   style={{
-                    height: '42px',
+                    height: '40px',
                     borderRadius: '12px',
-                    fontSize: '13.5px',
+                    fontSize: '13px',
                     backgroundColor: orderType === 'DINE_IN' ? '#F20D2D' : '#FFFFFF',
                     color: orderType === 'DINE_IN' ? '#FFFFFF' : '#334155',
                     borderColor: orderType === 'DINE_IN' ? '#F20D2D' : '#E2E8F0',
@@ -2158,18 +2265,18 @@ export const Pos = () => {
                     borderStyle: 'solid'
                   }}
                 >
-                  <FiLayers size={16} />
+                  <FiLayers size={15} />
                   <span>Dine-in</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('TAKEAWAY')}
-                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all shadow-xs"
+                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-1.5 fw-semibold transition-all shadow-xs px-1"
                   style={{
-                    height: '42px',
+                    height: '40px',
                     borderRadius: '12px',
-                    fontSize: '13.5px',
+                    fontSize: '13px',
                     backgroundColor: orderType === 'TAKEAWAY' ? '#F20D2D' : '#FFFFFF',
                     color: orderType === 'TAKEAWAY' ? '#FFFFFF' : '#334155',
                     borderColor: orderType === 'TAKEAWAY' ? '#F20D2D' : '#E2E8F0',
@@ -2177,15 +2284,34 @@ export const Pos = () => {
                     borderStyle: 'solid'
                   }}
                 >
-                  <FiShoppingBag size={16} />
+                  <FiShoppingBag size={15} />
                   <span>Takeaway</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleToggleOrderType('SELF_SERVICE')}
+                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-1.5 fw-semibold transition-all shadow-xs px-1"
+                  style={{
+                    height: '40px',
+                    borderRadius: '12px',
+                    fontSize: '13px',
+                    backgroundColor: orderType === 'SELF_SERVICE' ? '#F20D2D' : '#FFFFFF',
+                    color: orderType === 'SELF_SERVICE' ? '#FFFFFF' : '#334155',
+                    borderColor: orderType === 'SELF_SERVICE' ? '#F20D2D' : '#E2E8F0',
+                    borderWidth: '1px',
+                    borderStyle: 'solid'
+                  }}
+                >
+                  <FiCoffee size={15} />
+                  <span>Self Service</span>
                 </button>
               </div>
 
               {/* 2. Dining / Customer Selectors Row */}
               <div className="row g-2">
                 
-                {/* Select Table * (or Counter for Takeaway) */}
+                {/* Select Table * (or Counter for Takeaway/Self Service) */}
                 <div className="col-6">
                   <label className="form-label mb-1 fw-bold text-dark" style={{ fontSize: '11.5px', color: '#1E293B' }}>
                     {orderType === 'DINE_IN' ? 'Select Table *' : 'Service Counter'}
@@ -2227,6 +2353,14 @@ export const Pos = () => {
                         )}
                         <span className="text-secondary small ms-2" style={{ fontSize: '10px' }}>▼</span>
                       </div>
+                    </div>
+                  ) : orderType === 'SELF_SERVICE' ? (
+                    <div 
+                      className="d-flex align-items-center gap-2 px-2.5 py-1.5 bg-light rounded-3 border border-light-subtle"
+                      style={{ height: '38px', fontSize: '12px', color: '#475569' }}
+                    >
+                      <FiCoffee className="text-danger flex-shrink-0" />
+                      <span className="fw-semibold text-truncate">Self Service (No Table)</span>
                     </div>
                   ) : (
                     <div 
@@ -2273,7 +2407,7 @@ export const Pos = () => {
                       type="tel"
                       className="form-control form-control-sm border-light-subtle shadow-xs"
                       style={{ height: '38px', borderRadius: '0 10px 10px 0', fontSize: '12.5px' }}
-                      placeholder="Customer Mobile (e.g. 9876543210)"
+                      placeholder={orderType === 'SELF_SERVICE' ? "Customer Mobile (Optional)" : "Customer Mobile (e.g. 9876543210)"}
                       value={customerPhone}
                       onChange={(e) => {
                         setCustomerPhone(e.target.value.replace(/\D/g, '').slice(0, 10));
@@ -2589,53 +2723,22 @@ export const Pos = () => {
                   </div>
                 )}
 
-                {/* 6. Action Buttons Row: Confirm Order (Dine-In) or Save Order & Proceed to Payment (Takeaway) */}
+                {/* 6. Action Buttons Row:
+                    - When Dine-In: Confirm Order AND Proceed to Payment
+                    - When Takeaway: Confirm Order AND Proceed to Payment
+                    - When Self Service: Hide Proceed to Payment, Show single primary action "Place Order & Print Bill"
+                */}
                 <div className="d-flex align-items-center gap-2 pt-1">
-                  <button
-                    type="button"
-                    disabled={!canSubmitOrder || submittingOrder}
-                    onClick={() => handleSubmitOrder(false)}
-                    className={`btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 transition-all ${
-                      orderType === 'DINE_IN' ? 'text-white shadow-sm' : 'shadow-xs'
-                    }`}
-                    style={{
-                      height: '44px',
-                      borderRadius: '12px',
-                      fontSize: '13px',
-                      backgroundColor: orderType === 'DINE_IN' ? '#F20D2D' : '#FFFFFF',
-                      borderColor: '#F20D2D',
-                      borderWidth: '1.5px',
-                      borderStyle: 'solid',
-                      color: orderType === 'DINE_IN' ? '#FFFFFF' : '#F20D2D',
-                      boxShadow: orderType === 'DINE_IN' ? '0 4px 12px rgba(242, 13, 45, 0.25)' : 'none',
-                      opacity: !canSubmitOrder ? 0.5 : 1
-                    }}
-                    title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
-                  >
-                    {submittingOrder ? (
-                      <span>Placing...</span>
-                    ) : (
-                      <>
-                        <FiSave size={16} />
-                        <span>Confirm Order</span>
-                      </>
-                    )}
-                  </button>
-
-                  {orderType === 'TAKEAWAY' && (
+                  {orderType === 'SELF_SERVICE' ? (
                     <button
                       type="button"
                       disabled={!canSubmitOrder || submittingOrder}
-                      onClick={() => {
-                        if (!canSubmitOrder) return;
-                        setOrderError('');
-                        setShowPaymentModal(true);
-                      }}
+                      onClick={handlePlaceOrderAndPrintBill}
                       className="btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
                       style={{
-                        height: '44px',
+                        height: '46px',
                         borderRadius: '12px',
-                        fontSize: '13px',
+                        fontSize: '13.5px',
                         backgroundColor: '#F20D2D',
                         borderColor: '#F20D2D',
                         borderWidth: '1.5px',
@@ -2644,9 +2747,70 @@ export const Pos = () => {
                         opacity: !canSubmitOrder ? 0.5 : 1
                       }}
                     >
-                      <FiCreditCard size={17} />
-                      <span>Proceed to Payment</span>
+                      {submittingOrder ? (
+                        <span>Placing & Printing...</span>
+                      ) : (
+                        <>
+                          <FiPrinter size={17} />
+                          <span>Place Order & Print Bill</span>
+                        </>
+                      )}
                     </button>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        disabled={!canSubmitOrder || submittingOrder}
+                        onClick={() => handleSubmitOrder(false)}
+                        className="btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 transition-all shadow-xs"
+                        style={{
+                          height: '44px',
+                          borderRadius: '12px',
+                          fontSize: '13px',
+                          backgroundColor: '#FFFFFF',
+                          borderColor: '#F20D2D',
+                          borderWidth: '1.5px',
+                          borderStyle: 'solid',
+                          color: '#F20D2D',
+                          opacity: !canSubmitOrder ? 0.5 : 1
+                        }}
+                        title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
+                      >
+                        {submittingOrder ? (
+                          <span>Placing...</span>
+                        ) : (
+                          <>
+                            <FiSave size={16} />
+                            <span>Confirm Order</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        disabled={!canSubmitOrder || submittingOrder}
+                        onClick={() => {
+                          if (!canSubmitOrder) return;
+                          setOrderError('');
+                          setShowPaymentModal(true);
+                        }}
+                        className="btn flex-fill fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
+                        style={{
+                          height: '44px',
+                          borderRadius: '12px',
+                          fontSize: '13px',
+                          backgroundColor: '#F20D2D',
+                          borderColor: '#F20D2D',
+                          borderWidth: '1.5px',
+                          borderStyle: 'solid',
+                          boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)',
+                          opacity: !canSubmitOrder ? 0.5 : 1
+                        }}
+                      >
+                        <FiCreditCard size={17} />
+                        <span>Proceed to Payment</span>
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -2939,53 +3103,40 @@ export const Pos = () => {
                       </div>
                     ) : (
                       /* Table Grid */
-                      <div className="row row-cols-2 row-cols-sm-3 row-cols-md-4 row-cols-lg-5 g-2.5 overflow-auto" style={{ maxHeight: '420px' }}>
+                      <div className="tables-grid overflow-auto" style={{ maxHeight: '420px', padding: '4px' }}>
                         {filteredTableList.map((table) => {
                           const isSelected = selectedTable && String(selectedTable.id) === String(table.id);
-                          const shortName = getShortTableNumber(table.number || table.table_number || table.id);
+                          const shortOnlyNumber = getShortTableNumber(table.number || table.table_number || table.id);
                           const isOccupied = table.status === 'Occupied' || Boolean(table.is_occupied) || table.status === 'Reserved' || table.is_active === false;
-                          const activeOrderId = table.active_order_id || (table.active_order && table.active_order.id);
                           const statusText = isOccupied ? (table.status === 'Reserved' ? 'Reserved' : 'Occupied') : 'Available';
 
                           return (
-                            <div key={table.id} className="col">
+                            <div key={table.id}>
                               <div
                                 onClick={() => {
                                   if (isOccupied) return;
                                   handleSelectTable(table);
                                 }}
-                                className={`p-3 border text-start transition-all d-flex flex-column justify-content-between ${
+                                className={`p-2 border text-center transition-all d-flex align-items-center justify-content-center ${
                                   isOccupied 
-                                    ? 'opacity-85'
+                                    ? 'opacity-75'
                                     : isSelected 
-                                    ? 'shadow-xs cursor-pointer' 
+                                    ? 'shadow-sm cursor-pointer' 
                                     : 'hover-shadow cursor-pointer'
                                 }`}
                                 style={{ 
+                                  aspectRatio: '1 / 1',
                                   cursor: isOccupied ? 'not-allowed' : 'pointer', 
-                                  minHeight: '52px',
-                                  borderRadius: '0px',
-                                  backgroundColor: isOccupied ? '#FEF2F2' : '#F0FDF4',
-                                  border: isOccupied ? '1.5px solid #FECACA' : isSelected ? '2px solid #16A34A' : '1.5px solid #BBF7D0'
+                                  borderRadius: '10px',
+                                  backgroundColor: isOccupied ? '#FEF2F2' : isSelected ? '#DCFCE7' : '#FFFFFF',
+                                  border: isOccupied ? '1.5px solid #FECACA' : isSelected ? '2px solid #16A34A' : '1px solid #E2E8F0',
+                                  transition: 'all 0.15s ease'
                                 }}
-                                title={isOccupied ? `${shortName} is ${statusText} (Cannot be selected)` : `Select ${shortName}`}
+                                title={isOccupied ? `Table ${shortOnlyNumber} is ${statusText} (Cannot be selected)` : `Select Table ${shortOnlyNumber}`}
                               >
-                                <div>
-                                  <div className="d-flex align-items-center justify-content-between">
-                                    <span className="fw-bold fs-6 text-dark">
-                                      {shortName}
-                                    </span>
-                                    <span
-                                      className="rounded-circle d-inline-block flex-shrink-0"
-                                      style={{
-                                        width: '10px',
-                                        height: '10px',
-                                        backgroundColor: isOccupied ? '#DC2626' : '#16A34A'
-                                      }}
-                                      title={statusText}
-                                    />
-                                  </div>
-                                </div>
+                                <span className="fw-bold fs-5 text-dark">
+                                  {shortOnlyNumber}
+                                </span>
                               </div>
                             </div>
                           );
@@ -3167,6 +3318,8 @@ export const Pos = () => {
               <p className="text-muted small mb-3">
                 {placedOrder.order_type === 'TAKEAWAY' || placedOrder.orderType === 'Takeaway'
                   ? 'Takeaway Order ticket dispatched to kitchen'
+                  : placedOrder.order_type === 'SELF_SERVICE' || placedOrder.orderType === 'Self Service'
+                  ? 'Self Service Order ticket dispatched to kitchen'
                   : (() => {
                       const rawT = placedOrder.table_label || placedOrder.table_number || placedOrder.table;
                       const num = tableService.getCanonicalTableNumber(rawT);

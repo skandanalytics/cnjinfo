@@ -9,6 +9,7 @@ import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import BranchRequiredState from '../../components/common/BranchRequiredState';
 import { useBranches } from '../../hooks/useBranches';
+import { useBranch } from '../../context/BranchContext';
 import SearchBar from '../../components/common/SearchBar';
 import EditDishModal from '../../components/menu/EditDishModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
@@ -21,6 +22,7 @@ import { getImageUrl, FOOD_IMAGE_PLACEHOLDER } from '../../utils/imageUtils';
 
 export const Offers = () => {
   const { hasBranches, loading: branchesLoading } = useBranches();
+  const { workingBranchId } = useBranch();
   const [activeTab, setActiveTab] = useState('dishes'); // 'dishes' | 'coupons'
   const [coupons, setCoupons] = useState([]);
   const [discountedDishes, setDiscountedDishes] = useState([]);
@@ -80,7 +82,7 @@ export const Offers = () => {
   const [toastInfo, setToastInfo] = useState({ show: false, message: '', type: 'remove' });
 
   const isFetchingRef = React.useRef(false);
-  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_selected_branch') || '') : '');
+  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_admin_selected_branch') || '') : '');
 
   const fetchData = async () => {
     if (isFetchingRef.current) return;
@@ -88,8 +90,8 @@ export const Offers = () => {
     setLoading(true);
     try {
       const [couponData, dishData] = await Promise.all([
-        couponService.getCoupons(),
-        productService.getProducts(true)
+        couponService.getCoupons(workingBranchId),
+        productService.getProducts(true, workingBranchId)
       ]);
       const loadedCoupons = couponData || [];
       const loadedDishes = dishData || [];
@@ -110,7 +112,7 @@ export const Offers = () => {
 
   const fetchDataSilently = async () => {
     try {
-      const data = await couponService.getCoupons();
+      const data = await couponService.getCoupons(workingBranchId);
       const seenCoupons = new Set();
       const uniqueCoupons = (data || []).filter(c => {
         const key = String(c.id || c.code || '').toUpperCase().trim();
@@ -120,7 +122,7 @@ export const Offers = () => {
       });
       setCoupons(uniqueCoupons);
 
-      const dishes = await productService.getProducts();
+      const dishes = await productService.getProducts(false, workingBranchId);
       const seenDishes = new Set();
       const onOffer = (dishes || []).filter(d => {
         if (!d || !d.id) return false;
@@ -146,7 +148,7 @@ export const Offers = () => {
       if (event.key === 'foodie_data_sync' || event.key === 'foodie_inventory_sync_trigger') handleSync();
     };
     const handleBranchSync = (e) => {
-      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_selected_branch') ?? '');
+      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_admin_selected_branch') ?? '');
       if (lastBranchRef.current === nextBranch) return;
       lastBranchRef.current = nextBranch;
       fetchData();

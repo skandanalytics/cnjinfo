@@ -107,6 +107,7 @@ export const AvailableCouponsModal = ({
     setProcessingCode(code);
     try {
       await onApplyCoupon(code);
+      if (onClose) onClose();
     } finally {
       setProcessingCode(null);
     }

@@ -7,7 +7,7 @@ import { FiPhone, FiCheckCircle, FiChevronDown, FiArrowLeft, FiShoppingBag } fro
 import { COUNTRY_CODES, detectUserCountryCode, fetchGeolocationCountryCode } from '../../utils/countryCodes';
 import { cartService } from '../../services/cartService';
 import { applyOrderContext } from '../../services/customerCheckout';
-import { getOrderType } from '../../utils/orderContext';
+import { getOrderType, setOrderType, hasDineInTable, getSelectedTableId, setSelectedTableId } from '../../utils/orderContext';
 
 export const CustomerLogin = () => {
   const navigate = useNavigate();
@@ -23,7 +23,7 @@ export const CustomerLogin = () => {
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
   const [showDiningOption, setShowDiningOption] = useState(Boolean(location.state?.chooseDining));
-  const [selectedDining, setSelectedDining] = useState('DINE_IN');
+  const [selectedDining, setSelectedDining] = useState(() => getOrderType() || 'DINE_IN');
   const isQrSession = typeof window !== 'undefined' && Boolean(
     sessionStorage.getItem('foodie_table_qr') || localStorage.getItem('foodie_table_qr') ||
     (sessionStorage.getItem('foodie_branch_source') === 'qr')
@@ -215,6 +215,54 @@ export const CustomerLogin = () => {
     }
   };
 
+  const getExistingValidDiningOption = () => {
+    const type = getOrderType();
+    if (type === 'TAKEAWAY') {
+      return { type: 'TAKEAWAY' };
+    }
+    if (type === 'DINE_IN') {
+      const tableId = sessionStorage.getItem('foodie_selected_table') || localStorage.getItem('foodie_selected_table');
+      const tableNum = sessionStorage.getItem('foodie_table_number') || localStorage.getItem('foodie_table_number');
+      let tableObj = null;
+      try {
+        const raw = sessionStorage.getItem('foodie_table') || localStorage.getItem('foodie_table');
+        if (raw) tableObj = JSON.parse(raw);
+      } catch (e) {}
+
+      const hasTable = Boolean(
+        hasDineInTable() ||
+        tableId ||
+        (tableObj && (tableObj.tableId || tableObj.id || (tableObj.tableNumber && String(tableObj.tableNumber).toLowerCase() !== 'takeaway'))) ||
+        tableNum
+      );
+
+      if (hasTable) {
+        return {
+          type: 'DINE_IN',
+          tableId: tableId || tableObj?.tableId || tableObj?.id,
+          tableNumber: tableNum || tableObj?.tableNumber,
+          tableObj
+        };
+      }
+    }
+    return null;
+  };
+
+  const handleSkipLogin = () => {
+    const existing = getExistingValidDiningOption();
+    if (existing) {
+      if (destination) {
+        navigate(destination, { replace: true });
+      } else if (Array.isArray(cartItems) && cartItems.length > 0) {
+        navigate('/customer/checkout', { replace: true });
+      } else {
+        navigate('/customer/home', { replace: true });
+      }
+    } else {
+      setShowDiningOption(true);
+    }
+  };
+
   const handleVerifyOTP = async (e) => {
     if (e) e.preventDefault();
     const fullOtp = otpArray.join('');
@@ -242,6 +290,54 @@ export const CustomerLogin = () => {
       // Isolate customer session: clear any previous order continuation from old sessions
       sessionStorage.removeItem('foodie_parent_order_id');
       localStorage.removeItem('foodie_parent_order_id');
+
+      // Check if a valid dining option already exists from previous selection
+      const existingDining = getExistingValidDiningOption();
+      if (existingDining) {
+        if (existingDining.type === 'TAKEAWAY') {
+          sessionStorage.setItem('foodie_order_type', 'TAKEAWAY');
+          localStorage.setItem('foodie_order_type', 'TAKEAWAY');
+          const takeawayObj = {
+            tableId: null,
+            id: null,
+            tableNumber: 'Takeaway',
+            orderType: 'TAKEAWAY',
+            isTakeaway: true
+          };
+          sessionStorage.setItem('foodie_table', JSON.stringify(takeawayObj));
+          localStorage.setItem('foodie_table', JSON.stringify(takeawayObj));
+          if (setTable) setTable(takeawayObj);
+          try { await applyOrderContext('TAKEAWAY'); } catch (e) {}
+        } else if (existingDining.type === 'DINE_IN') {
+          sessionStorage.setItem('foodie_order_type', 'DINE_IN');
+          localStorage.setItem('foodie_order_type', 'DINE_IN');
+          if (existingDining.tableId) {
+            sessionStorage.setItem('foodie_selected_table', String(existingDining.tableId));
+            localStorage.setItem('foodie_selected_table', String(existingDining.tableId));
+          }
+          if (existingDining.tableNumber) {
+            sessionStorage.setItem('foodie_table_number', String(existingDining.tableNumber));
+            localStorage.setItem('foodie_table_number', String(existingDining.tableNumber));
+          }
+          if (existingDining.tableObj && setTable) {
+            setTable(existingDining.tableObj);
+          }
+          try { await applyOrderContext('DINE_IN', existingDining.tableId); } catch (e) {}
+        }
+
+        // Do not ask dining option again. Continue directly.
+        setShowDiningOption(false);
+        if (destination) {
+          navigate(destination, { replace: true });
+        } else if (hasGuestCartItems) {
+          navigate('/customer/checkout', { replace: true });
+        } else {
+          navigate('/customer/home', { replace: true });
+        }
+        return;
+      }
+
+      // No dining option has been selected previously -> Prompt user
       setShowDiningOption(true);
     } catch (err) {
       if (err.retryAfter > 0) {
@@ -634,7 +730,7 @@ export const CustomerLogin = () => {
             <div className="mt-4">
               <button
                 type="button"
-                onClick={() => setShowDiningOption(true)}
+                onClick={handleSkipLogin}
                 className="btn btn-link text-decoration-none fw-bold small p-0"
                 style={{ color: '#F20D2D', fontSize: '13.5px' }}
               >

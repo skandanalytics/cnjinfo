@@ -59,7 +59,8 @@ export const Cart = () => {
   useEffect(() => {
     let isMounted = true;
     const fetchCouponsAndEligibility = async () => {
-      const data = await couponService.getCoupons().catch(() => []);
+      const activeBranch = customerBranchId();
+      const data = await couponService.getCoupons(activeBranch).catch(() => []);
       const now = new Date();
       const activeOnly = (Array.isArray(data) ? data : []).filter(c => {
         if (c.is_active === false || c.status === 'Inactive' || c.isActive === false) return false;
@@ -119,30 +120,11 @@ export const Cart = () => {
     setPromoMessage(res.message);
     setPromoSuccess(res.success);
     setPromoCode(code);
+    if (res.success && res.data) {
+      setServerCart(res.data);
+      sessionStorage.setItem('foodie_cached_server_cart', JSON.stringify(res.data));
+    }
   };
-
-  const handleRemovePromo = (code = null) => {
-    removeCoupon(code);
-    setPromoMessage(code ? `Coupon ${code} removed` : 'Coupon removed');
-    setPromoSuccess(true);
-    setPromoCode('');
-  };
-
-  if (cartItems.length === 0) {
-    return (
-      <CustomerLayout>
-        <main className="px-3 pt-5 text-center">
-          <EmptyState
-            title="Your Cart is Empty"
-            description="Browse our menu and add delicious food to order!"
-            icon="bi-cart-x"
-            buttonText="Browse Food"
-            onButtonClick={() => navigate('/customer/home')}
-          />
-        </main>
-      </CustomerLayout>
-    );
-  }
 
   const handleApplyPromo = async (e) => {
     e.preventDefault();
@@ -151,6 +133,32 @@ export const Cart = () => {
     const res = await applyCoupon(promoCode);
     setPromoMessage(res.message);
     setPromoSuccess(res.success);
+    if (res.success && res.data) {
+      setServerCart(res.data);
+      sessionStorage.setItem('foodie_cached_server_cart', JSON.stringify(res.data));
+    }
+  };
+
+  const handleRemovePromo = async (code = null) => {
+    const updatedServerCart = await removeCoupon(code);
+    setPromoMessage(code ? `Coupon ${code} removed` : 'Coupon removed');
+    setPromoSuccess(true);
+    setPromoCode('');
+    if (updatedServerCart) {
+      setServerCart(updatedServerCart);
+      sessionStorage.setItem('foodie_cached_server_cart', JSON.stringify(updatedServerCart));
+    } else {
+      const branch = customerBranchId();
+      if (branch) {
+        try {
+          const res = await api.get(`/cart/?branch=${branch}`, { bypassCache: true });
+          if (res.data) {
+            setServerCart(res.data);
+            sessionStorage.setItem('foodie_cached_server_cart', JSON.stringify(res.data));
+          }
+        } catch {}
+      }
+    }
   };
 
   const handleCheckout = () => {
@@ -181,6 +189,13 @@ export const Cart = () => {
   };
 
   const currentNetSubtotal = Math.round(Number(serverCart?.pricing?.merchandise_total ?? getSubtotal()) * 100) / 100;
+  const appliedList = Array.isArray(serverCart?.pricing?.coupons) && serverCart.pricing.coupons.length > 0
+    ? serverCart.pricing.coupons
+    : (Array.isArray(coupon?.appliedList) && coupon.appliedList.length > 0
+        ? coupon.appliedList
+        : (coupon ? [coupon] : []));
+  const appliedCodes = new Set((appliedList || []).map(a => String(a?.code || '').trim().toUpperCase()).filter(Boolean));
+
   const suggestion = availableCoupons
     .filter((row) => row.is_active !== false && row.status !== 'Inactive')
     .filter((row) => isFirstTime || !(row.isFirstTimeOffer || row.is_first_time_offer))
@@ -263,6 +278,22 @@ export const Cart = () => {
       : (cartTypesSet.size === 1 && cartTypesSet.has('vegan'))
         ? 'Vegan'
         : 'Recommended';
+
+  if (cartItems.length === 0) {
+    return (
+      <CustomerLayout>
+        <main className="px-3 pt-5 text-center">
+          <EmptyState
+            title="Your Cart is Empty"
+            description="Browse our menu and add delicious food to order!"
+            icon="bi-cart-x"
+            buttonText="Browse Food"
+            onButtonClick={() => navigate('/customer/home')}
+          />
+        </main>
+      </CustomerLayout>
+    );
+  }
 
   return (
     <CustomerLayout>
@@ -405,66 +436,96 @@ export const Cart = () => {
               </span>
 
               {(() => {
-                const appliedList = serverCart?.pricing?.coupons?.length > 0
-                  ? serverCart.pricing.coupons
-                  : (coupon?.appliedList?.length > 0 ? coupon.appliedList : (coupon ? [coupon] : []));
                 const totalDiscountVal = Number(serverCart?.pricing?.coupon_discount_total || getDiscount() || 0);
                 const maxCoupons = isFirstTime ? 2 : 1;
-                const canApplyMore = appliedList.length < maxCoupons;
+                const canApplyMore = (appliedList || []).length < maxCoupons;
 
                 return (
                   <>
-                    {appliedList.length > 0 && (
+                    {(appliedList || []).length > 0 && (
                       <div className="card rounded-3 bg-success-subtle border border-success-subtle p-3 mb-3 text-start">
                         <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
                           <span className="small text-success fw-bold">
-                            Applied Coupons ({appliedList.length}/{maxCoupons}):
+                            Applied Coupons:
                           </span>
                           <span className="badge rounded-pill fw-bold bg-success text-white px-2.5 py-1" style={{ fontSize: '11px' }}>
                             🎉 Total Savings: {formatCurrency(totalDiscountVal)}
                           </span>
                         </div>
                         <div className="d-flex flex-column gap-2">
-                          {appliedList.map((ac) => (
-                            <div key={ac.code} className="d-flex align-items-center justify-content-between bg-white rounded-pill px-3 py-1.5 border border-success shadow-xs">
+                          {(appliedList || []).map((ac) => (
+                            <div key={ac?.code} className="d-flex align-items-center justify-content-between bg-white rounded-pill px-3 py-2 border border-success shadow-xs">
                               <div className="d-flex align-items-center gap-2">
-                                <span className="badge bg-success text-white font-monospace" style={{ fontSize: '11px' }}>
-                                  {ac.code}
+                                <span className="badge bg-success text-white font-monospace px-2.5 py-1" style={{ fontSize: '11px' }}>
+                                  {ac?.code} ✅
                                 </span>
                                 <span className="small fw-semibold text-success">
-                                  Save {formatCurrency(Number(ac.discount || 0))}
+                                  Saved {formatCurrency(Number(ac?.discount || 0))}
                                 </span>
                               </div>
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePromo(ac.code)}
-                                className="btn btn-sm btn-link text-danger fw-bold text-decoration-none py-0 px-2"
-                                style={{ fontSize: '11px' }}
-                              >
-                                Remove
-                              </button>
+                              <div className="d-flex align-items-center gap-2">
+                                <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 rounded-pill fw-bold" style={{ fontSize: '10.5px' }}>
+                                  Applied
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePromo(ac?.code)}
+                                  className="btn btn-sm btn-link text-danger fw-bold text-decoration-none py-0 px-2"
+                                  style={{ fontSize: '11px' }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
                       </div>
                     )}
 
-                    {canApplyMore && (
+                    {!canApplyMore ? (
+                      <form className="d-flex gap-2">
+                        <input
+                          type="text"
+                          disabled
+                          className="form-control rounded-pill text-uppercase py-1.5 ps-3 bg-light text-muted"
+                          value={(appliedList || []).map(a => a?.code).filter(Boolean).join(', ')}
+                        />
+                        <button
+                          type="button"
+                          disabled
+                          className="btn btn-success rounded-pill px-4 fw-bold shadow-sm flex-shrink-0"
+                          style={{ height: '40px' }}
+                        >
+                          Applied
+                        </button>
+                      </form>
+                    ) : (
                       <form onSubmit={handleApplyPromo} className="d-flex gap-2">
                         <input
                           type="text"
                           className="form-control rounded-pill text-uppercase py-1.5 ps-3"
-                          placeholder={appliedList.length === 1 && isFirstTime ? "Enter second coupon (e.g. SAVE10)" : "e.g. FOODIE50"}
+                          placeholder={(appliedList || []).length === 1 && isFirstTime ? "Enter second coupon (e.g. SAVE10)" : "e.g. FOODIE50"}
                           value={promoCode}
                           onChange={(e) => setPromoCode(e.target.value)}
                         />
-                        <button
-                          type="submit"
-                          className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm flex-shrink-0"
-                          style={{ height: '40px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)' }}
-                        >
-                          Apply
-                        </button>
+                        {(appliedList || []).some(a => a?.code && String(a.code).trim().toUpperCase() === promoCode.trim().toUpperCase()) ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="btn btn-success rounded-pill px-4 fw-bold shadow-sm flex-shrink-0"
+                            style={{ height: '40px' }}
+                          >
+                            Applied
+                          </button>
+                        ) : (
+                          <button
+                            type="submit"
+                            className="btn btn-danger rounded-pill px-4 fw-bold shadow-sm flex-shrink-0"
+                            style={{ height: '40px', backgroundColor: 'var(--primary-color, #F20D2D)', borderColor: 'var(--primary-color, #F20D2D)' }}
+                          >
+                            Apply
+                          </button>
+                        )}
                       </form>
                     )}
 
@@ -479,7 +540,9 @@ export const Cart = () => {
 
               {/* Available Coupons Section */}
               <div className="mt-3 pt-3 border-top text-start">
-                <span className="small fw-semibold text-secondary mb-2 d-block">{coupon ? 'More Coupons:' : 'Available Coupons:'}</span>
+                <span className="small fw-semibold text-secondary mb-2 d-block">
+                  {(appliedList || []).length > 0 ? 'More Coupons:' : 'Available Coupons:'}
+                </span>
                 <div className="d-flex flex-column gap-2">
                   {(() => {
                     const describeCoupon = (c) => {
@@ -520,94 +583,81 @@ export const Cart = () => {
                           : '',
                       };
                     };
-                    const toDisplay = showAllCoupons ? availableCoupons : availableCoupons.slice(0, 4);
+
+                    const unappliedCoupons = (availableCoupons || []).filter(c => !appliedCodes.has(String(c?.code || '').trim().toUpperCase()));
+                    const toDisplay = showAllCoupons ? unappliedCoupons : unappliedCoupons.slice(0, 4);
                     
                     return (
                       <>
-                        {availableCoupons.length === 0 && (
-                          <p className="text-secondary small mb-0">No coupons are configured for this restaurant.</p>
+                        {unappliedCoupons.length === 0 && (
+                          <p className="text-secondary small mb-0">
+                            {(appliedList || []).length > 0 ? 'All eligible coupons have been applied.' : 'No coupons are configured for this restaurant.'}
+                          </p>
                         )}
                         {toDisplay.map((c) => {
-                    const info = describeCoupon(c);
-                    const minReq = info.minReq;
-                    const isEligible = info.enabled;
-                    const isApplied = coupon?.code === c.code || (serverCart?.pricing?.coupons || []).some((row) => row.code === c.code);
+                          const info = describeCoupon(c);
+                          const minReq = info.minReq;
+                          const isEligible = info.enabled;
 
-                    return (
-                      <div 
-                        key={c.code} 
-                        className={`d-flex align-items-center justify-content-between p-2 rounded-3 border flex-wrap gap-2 transition-all ${
-                          isApplied 
-                            ? 'border-success bg-success-subtle shadow-xs' 
-                            : isEligible 
-                              ? 'border-dashed border-danger-subtle bg-light-subtle' 
-                              : 'border-light bg-light opacity-75'
-                        }`}
-                      >
-                        <div className="d-flex align-items-center gap-2 flex-wrap">
-                          <span className={`badge border rounded px-2 py-1 fw-bold font-monospace ${
-                            isApplied 
-                              ? 'bg-success text-white border-success' 
-                              : isEligible 
-                                ? 'bg-danger-subtle text-danger border-danger-subtle' 
-                                : 'bg-secondary-subtle text-secondary border-secondary-subtle'
-                          }`} style={{ fontSize: '10px' }}>
-                            {c.code}
-                          </span>
-                          {Boolean(c.isFirstTimeOffer || c.is_first_time_offer) && (
-                            <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill" style={{ fontSize: '9px' }}>
-                              🎁 New User Offer
-                            </span>
-                          )}
-                          <div>
-                            <div className="small fw-semibold text-dark" style={{ fontSize: '11px' }}>
-                              {info.valueLabel} · Min {formatCurrency(minReq)}
-                            </div>
-                            {c.description && <div className="text-secondary" style={{ fontSize: '10px' }}>{c.description}</div>}
-                            {info.expiry && <div className="text-secondary" style={{ fontSize: '10px' }}>{info.expiry}</div>}
-                            {!isEligible && (
-                              <div className="text-danger small" style={{ fontSize: '10px' }}>{info.reason}</div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="d-flex align-items-center gap-1.5 ms-auto">
-                          {isApplied ? (
-                            <div className="d-flex align-items-center gap-1.5">
-                              <span className="badge bg-success text-white small fw-bold px-2.5 py-1 rounded-pill" style={{ fontSize: '11px' }}>
-                                Applied
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemovePromo(c.code)}
-                                className="btn btn-sm btn-link text-danger fw-bold text-decoration-none py-0 px-1"
-                                style={{ fontSize: '11px' }}
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          ) : isEligible ? (
-                            <button 
-                              onClick={() => handleQuickApply(c.code)}
-                              className="btn btn-sm btn-link text-danger fw-bold text-decoration-none py-0 px-2"
-                              style={{ fontSize: '11px' }}
+                          return (
+                            <div 
+                              key={c.code} 
+                              className={`d-flex align-items-center justify-content-between p-2 rounded-3 border flex-wrap gap-2 transition-all ${
+                                isEligible 
+                                  ? 'border-dashed border-danger-subtle bg-light-subtle' 
+                                  : 'border-light bg-light opacity-75'
+                              }`}
                             >
-                              Apply
-                            </button>
-                          ) : (
-                            <button 
-                              disabled
-                              className="btn btn-sm btn-link text-muted fw-normal text-decoration-none py-0 px-2 opacity-50"
-                              style={{ fontSize: '11px', cursor: 'not-allowed' }}
-                              title={`Requires minimum order subtotal of ${formatCurrency(minReq)}`}
-                            >
-                              Apply
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                        {!showAllCoupons && availableCoupons.length > 4 && (
+                              <div className="d-flex align-items-center gap-2 flex-wrap">
+                                <span className={`badge border rounded px-3 py-1.5 fw-bold font-monospace ${
+                                  isEligible 
+                                    ? 'bg-danger-subtle text-danger border-danger-subtle' 
+                                    : 'bg-secondary-subtle text-secondary border-secondary-subtle'
+                                }`} style={{ fontSize: '11px' }}>
+                                  {c.code}
+                                </span>
+                                {Boolean(c.isFirstTimeOffer || c.is_first_time_offer) && (
+                                  <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-0.5" style={{ fontSize: '10px' }}>
+                                    🎁 New User Offer
+                                  </span>
+                                )}
+                                <div>
+                                  <div className="small fw-semibold text-dark" style={{ fontSize: '11px' }}>
+                                    {info.valueLabel} · Min {formatCurrency(minReq)}
+                                  </div>
+                                  {c.description && <div className="text-secondary" style={{ fontSize: '10px' }}>{c.description}</div>}
+                                  {info.expiry && <div className="text-secondary" style={{ fontSize: '10px' }}>{info.expiry}</div>}
+                                  {!isEligible && (
+                                    <div className="text-danger small" style={{ fontSize: '10px' }}>{info.reason}</div>
+                                  )}
+                                </div>
+                              </div>
+                              <div className="d-flex align-items-center gap-1.5 ms-auto">
+                                {isEligible ? (
+                                  <button 
+                                    type="button"
+                                    onClick={() => handleQuickApply(c.code)}
+                                    className="btn btn-sm btn-outline-danger rounded-pill px-3 py-1 fw-bold text-decoration-none"
+                                    style={{ fontSize: '11px', borderColor: '#F20D2D', color: '#F20D2D' }}
+                                  >
+                                    Apply
+                                  </button>
+                                ) : (
+                                  <button 
+                                    type="button"
+                                    disabled
+                                    className="btn btn-sm btn-light rounded-pill px-3 py-1 text-muted fw-semibold text-decoration-none opacity-50"
+                                    style={{ fontSize: '11px', cursor: 'not-allowed' }}
+                                    title={`Requires minimum order subtotal of ${formatCurrency(minReq)}`}
+                                  >
+                                    Apply
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {!showAllCoupons && unappliedCoupons.length > 4 && (
                           <div className="text-center mt-1">
                             <button 
                               type="button"
@@ -619,7 +669,7 @@ export const Cart = () => {
                             </button>
                           </div>
                         )}
-                        {showAllCoupons && availableCoupons.length > 4 && (
+                        {showAllCoupons && unappliedCoupons.length > 4 && (
                           <div className="text-center mt-1">
                             <button 
                               type="button"

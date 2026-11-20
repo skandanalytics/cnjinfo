@@ -115,12 +115,14 @@ export const OrderProvider = ({ children }) => {
       }
     };
     window.addEventListener('foodie_orders_updated', handleOrdersUpdated);
+    window.addEventListener('foodie_branch_selected', handleOrdersUpdated);
     window.addEventListener('foodie_data_sync_refetch', handleOrdersUpdated);
     window.addEventListener('storage', handleStorage);
     const handleLogout = () => setOrders([]);
     window.addEventListener('foodie_logout', handleLogout);
     return () => {
       window.removeEventListener('foodie_orders_updated', handleOrdersUpdated);
+      window.removeEventListener('foodie_branch_selected', handleOrdersUpdated);
       window.removeEventListener('foodie_data_sync_refetch', handleOrdersUpdated);
       window.removeEventListener('storage', handleStorage);
       window.removeEventListener('foodie_logout', handleLogout);

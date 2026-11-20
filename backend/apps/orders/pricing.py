@@ -140,7 +140,7 @@ def price_order(branch, lines, order_type, customer=None, coupon_codes=None, now
     takeaway = money(Decimal(total_item_quantity) * Decimal("10.00")) if order_type == "TAKEAWAY" else ZERO
     taxable = food_after_coupon + takeaway
     gst = money(taxable * branch.gst_rate / 100)
-    if service_tax_enabled and order_type != "TAKEAWAY":
+    if service_tax_enabled and order_type not in ("TAKEAWAY", "SELF_SERVICE"):
         service_rate, service = service_charge_for(food_after_coupon, branch.service_charge_rate)
     else:
         service_rate, service = Decimal("0.00"), Decimal("0.00")

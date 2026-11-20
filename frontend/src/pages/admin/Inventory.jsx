@@ -7,6 +7,7 @@ import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import BranchRequiredState from '../../components/common/BranchRequiredState';
 import { useBranches } from '../../hooks/useBranches';
+import { useBranch } from '../../context/BranchContext';
 import SearchBar from '../../components/common/SearchBar';
 import Modal from '../../components/common/Modal';
 import ConfirmModal from '../../components/common/ConfirmModal';
@@ -23,6 +24,7 @@ import { FiAlertCircle, FiAlertTriangle, FiCheckCircle, FiPackage } from 'react-
 export const Inventory = () => {
   const { user } = useAuth();
   const { hasBranches, loading: branchesLoading } = useBranches();
+  const { workingBranchId } = useBranch();
   const canManageStock = user?.role === 'admin' || user?.role === 'employee' || !user?.role;
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -50,7 +52,7 @@ export const Inventory = () => {
   const [saveLoading, setSaveLoading] = useState(false);
 
   const isFetchingRef = React.useRef(false);
-  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_selected_branch') || '') : '');
+  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_admin_selected_branch') || '') : '');
 
   useEffect(() => {
     const s = getInitialStatus();
@@ -74,8 +76,8 @@ export const Inventory = () => {
     if (showLoading) setLoading(true);
     try {
       const [menuData, stockData] = await Promise.all([
-        menuService.getMenus(true),
-        inventoryService.getInventory(true)
+        menuService.getMenus(workingBranchId),
+        inventoryService.getInventory(true, workingBranchId)
       ]);
       setAllMenus(menuData || []);
       setStockItems(stockData || []);
@@ -90,8 +92,8 @@ export const Inventory = () => {
   const fetchInventorySilently = async () => {
     try {
       const [menuData, stockData] = await Promise.all([
-        menuService.getMenus(true),
-        inventoryService.getInventory(true)
+        menuService.getMenus(workingBranchId),
+        inventoryService.getInventory(true, workingBranchId)
       ]);
       setAllMenus(menuData || []);
       setStockItems(stockData || []);
@@ -118,7 +120,7 @@ export const Inventory = () => {
     };
 
     const handleBranchSync = (e) => {
-      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_selected_branch') ?? '');
+      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_admin_selected_branch') ?? '');
       if (lastBranchRef.current === nextBranch) return;
       lastBranchRef.current = nextBranch;
       fetchInventory(true);

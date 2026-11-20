@@ -2,10 +2,10 @@ import api from './api';
 import { productService, clearStaticProductCache } from './productService';
 
 export const inventoryService = {
-  getInventory: async (forceRefresh = false) => {
+  getInventory: async (forceRefresh = false, branchIdOverride = null) => {
     const { isStaffScreen, listInventory } = await import('./adminApi');
-    if (isStaffScreen()) return listInventory();
-    return productService.getProducts(forceRefresh);
+    if (isStaffScreen()) return listInventory(branchIdOverride);
+    return productService.getProducts(forceRefresh, branchIdOverride);
   },
 
   updateStock: async (id, newStock) => {

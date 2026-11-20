@@ -65,7 +65,7 @@ const getOrderDate = (o) => {
 export const dashboardService = {
   getRevenueDetails: async (period = 'Weekly', ordersArray = null) => {
     let allOrders = [];
-    if (Array.isArray(ordersArray) && ordersArray.length > 0) {
+    if (Array.isArray(ordersArray)) {
       allOrders = ordersArray;
     } else {
       try {
@@ -75,9 +75,7 @@ export const dashboardService = {
       }
     }
 
-    const now = new Date();
-    
-    let revenuePeriod = "Weekly Revenue";
+    let revenuePeriod = "Weekly Revenue Distribution";
     let revenueAmount = 0;
     let comparison = "vs last week";
     let previousPeriodAmount = 0;
@@ -97,37 +95,44 @@ export const dashboardService = {
       return payStatus !== 'FAILED' && orderStatus !== 'CANCELLED' && orderStatus !== 'REJECTED';
     });
 
-    const normalizedPeriod = (period || '').toLowerCase();
+    const norm = String(period || '').trim().toLowerCase();
 
-    // Check if the order set is single-day
-    const distinctDates = Array.from(new Set(successfulOrders.map(o => getOrderDate(o).toDateString())));
-    const isSingleDay = distinctDates.length <= 1;
+    // Determine target mode: hourly, daily, weekly, or monthly
+    let mode = 'weekly';
+    if (norm.includes('hour') || norm === 'today') {
+      mode = 'hourly';
+    } else if (norm.includes('dai') || norm.includes('day')) {
+      mode = 'daily';
+    } else if (norm.includes('month (week)')) {
+      mode = 'weekly';
+    } else if (norm.includes('month')) {
+      mode = 'monthly';
+    } else if (norm.includes('week')) {
+      mode = 'weekly';
+    }
 
-    if (normalizedPeriod.includes('today') || normalizedPeriod.includes('daily') || isSingleDay) {
-      revenuePeriod = isSingleDay && distinctDates.length === 1 && distinctDates[0] !== now.toDateString()
-        ? `${distinctDates[0]} Revenue`
-        : "Today's Revenue";
-
-      const targetDateStr = distinctDates[0] || now.toDateString();
-      const targetOrders = successfulOrders.filter(o => getOrderDate(o).toDateString() === targetDateStr);
-
-      revenueAmount = targetOrders.reduce((sum, o) => sum + getOrderNetRevenue(o), 0);
-
-      // 8 time slots from 8 AM to 10 PM
+    if (mode === 'hourly') {
+      revenuePeriod = "Hourly Revenue Distribution";
       const slots = [
-        { label: '8 AM', minHour: 8, maxHour: 9 },
-        { label: '10 AM', minHour: 10, maxHour: 11 },
-        { label: '12 PM', minHour: 12, maxHour: 13 },
-        { label: '2 PM', minHour: 14, maxHour: 15 },
-        { label: '4 PM', minHour: 16, maxHour: 17 },
-        { label: '6 PM', minHour: 18, maxHour: 19 },
-        { label: '8 PM', minHour: 20, maxHour: 21 },
-        { label: '10 PM', minHour: 22, maxHour: 23 }
+        { label: '8 AM', fullName: '8 AM' },
+        { label: '10 AM', fullName: '10 AM' },
+        { label: '12 PM', fullName: '12 PM' },
+        { label: '2 PM', fullName: '2 PM' },
+        { label: '4 PM', fullName: '4 PM' },
+        { label: '6 PM', fullName: '6 PM' },
+        { label: '8 PM', fullName: '8 PM' },
+        { label: '10 PM', fullName: '10 PM' }
       ];
 
-      revenueData = slots.map(s => ({ label: s.label, value: 0, sales: 0, count: 0 }));
+      revenueData = slots.map(s => ({
+        label: s.label,
+        fullName: s.fullName,
+        value: 0,
+        sales: 0,
+        count: 0
+      }));
 
-      targetOrders.forEach(o => {
+      successfulOrders.forEach(o => {
         const orderDate = getOrderDate(o);
         const hr = orderDate.getHours();
         let slotIdx = Math.floor((hr - 8) / 2);
@@ -139,161 +144,112 @@ export const dashboardService = {
         revenueData[slotIdx].count += 1;
       });
 
-      comparison = "hourly distribution";
-    } else if (normalizedPeriod.includes('week')) {
-      revenuePeriod = "Weekly Revenue";
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-      
-      // Determine date bounds of available orders
-      const orderTimestamps = successfulOrders.map(o => getOrderDate(o).getTime());
-      const minOrderTime = orderTimestamps.length > 0 ? Math.min(...orderTimestamps) : now.getTime();
-      const maxOrderTime = orderTimestamps.length > 0 ? Math.max(...orderTimestamps) : now.getTime();
-      
-      const spanDays = Math.max(1, Math.ceil((maxOrderTime - minOrderTime) / (1000 * 60 * 60 * 24)));
-      const daysCount = Math.min(14, Math.max(7, spanDays));
+      revenueAmount = revenueData.reduce((sum, d) => sum + d.sales, 0);
+      comparison = "vs previous hours";
+    } else if (mode === 'daily') {
+      revenuePeriod = "Daily Revenue Distribution";
+      const days = [
+        { label: 'Mon', fullName: 'Monday', dayIndex: 1 },
+        { label: 'Tue', fullName: 'Tuesday', dayIndex: 2 },
+        { label: 'Wed', fullName: 'Wednesday', dayIndex: 3 },
+        { label: 'Thu', fullName: 'Thursday', dayIndex: 4 },
+        { label: 'Fri', fullName: 'Friday', dayIndex: 5 },
+        { label: 'Sat', fullName: 'Saturday', dayIndex: 6 },
+        { label: 'Sun', fullName: 'Sunday', dayIndex: 0 }
+      ];
 
-      const days = [];
-      const endRef = new Date(maxOrderTime);
-      for (let i = daysCount - 1; i >= 0; i--) {
-        const d = new Date(endRef);
-        d.setDate(endRef.getDate() - i);
-        days.push({
-          label: `${dayNames[d.getDay()]} ${d.getDate()}`,
-          dateStr: d.toDateString(),
-          value: 0,
-          sales: 0,
-          count: 0
-        });
-      }
+      revenueData = days.map(d => ({
+        label: d.label,
+        fullName: d.fullName,
+        dayIndex: d.dayIndex,
+        value: 0,
+        sales: 0,
+        count: 0
+      }));
 
-      revenueAmount = 0;
       successfulOrders.forEach(o => {
-        const oDateStr = getOrderDate(o).toDateString();
-        const curMatch = days.find(d => d.dateStr === oDateStr);
+        const orderDate = getOrderDate(o);
+        const day = orderDate.getDay();
+        const target = revenueData.find(d => d.dayIndex === day);
         const val = getOrderNetRevenue(o);
-        if (curMatch) {
-          curMatch.value += val;
-          curMatch.sales += val;
-          curMatch.count += 1;
+        if (target) {
+          target.value += val;
+          target.sales += val;
+          target.count += 1;
         }
-        revenueAmount += val;
       });
 
-      comparison = "vs selected period";
-      revenueData = days;
-    } else if (normalizedPeriod.includes('quarter')) {
-      revenuePeriod = "Quarterly Revenue";
-      const curQuarter = Math.floor(now.getMonth() / 3);
-      const curYear = now.getFullYear();
-
-      const prevQuarter = curQuarter === 0 ? 3 : curQuarter - 1;
-      const prevQuarterYear = curQuarter === 0 ? curYear - 1 : curYear;
-
-      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const qStartMonth = curQuarter * 3;
-      
-      revenueData = [
-        { label: monthNames[qStartMonth] || 'Month 1', value: 0, sales: 0, count: 0 },
-        { label: monthNames[qStartMonth + 1] || 'Month 2', value: 0, sales: 0, count: 0 },
-        { label: monthNames[qStartMonth + 2] || 'Month 3', value: 0, sales: 0, count: 0 }
+      revenueAmount = revenueData.reduce((sum, d) => sum + d.sales, 0);
+      comparison = "vs previous days";
+    } else if (mode === 'monthly') {
+      revenuePeriod = "Monthly Revenue Distribution";
+      const months = [
+        { label: 'Jan', fullName: 'January', monthIndex: 0 },
+        { label: 'Feb', fullName: 'February', monthIndex: 1 },
+        { label: 'Mar', fullName: 'March', monthIndex: 2 },
+        { label: 'Apr', fullName: 'April', monthIndex: 3 },
+        { label: 'May', fullName: 'May', monthIndex: 4 },
+        { label: 'Jun', fullName: 'June', monthIndex: 5 },
+        { label: 'Jul', fullName: 'July', monthIndex: 6 },
+        { label: 'Aug', fullName: 'August', monthIndex: 7 },
+        { label: 'Sep', fullName: 'September', monthIndex: 8 },
+        { label: 'Oct', fullName: 'October', monthIndex: 9 },
+        { label: 'Nov', fullName: 'November', monthIndex: 10 },
+        { label: 'Dec', fullName: 'December', monthIndex: 11 }
       ];
 
-      const curQuarterOrders = successfulOrders.filter(o => {
-        const d = getOrderDate(o);
-        return Math.floor(d.getMonth() / 3) === curQuarter && d.getFullYear() === curYear;
-      });
+      revenueData = months.map(m => ({
+        label: m.label,
+        fullName: m.fullName,
+        monthIndex: m.monthIndex,
+        value: 0,
+        sales: 0,
+        count: 0
+      }));
 
-      const prevQuarterOrders = successfulOrders.filter(o => {
-        const d = getOrderDate(o);
-        return Math.floor(d.getMonth() / 3) === prevQuarter && d.getFullYear() === prevQuarterYear;
-      });
-
-      revenueAmount = curQuarterOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
-      previousPeriodAmount = prevQuarterOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
-
-      curQuarterOrders.forEach(o => {
-        const m = getOrderDate(o).getMonth();
-        const monthIdx = m % 3;
-        const val = getOrderAmount(o);
-        if (revenueData[monthIdx]) {
-          revenueData[monthIdx].value += val;
-          revenueData[monthIdx].sales += val;
-          revenueData[monthIdx].count += 1;
+      successfulOrders.forEach(o => {
+        const orderDate = getOrderDate(o);
+        const m = orderDate.getMonth();
+        const val = getOrderNetRevenue(o);
+        if (revenueData[m]) {
+          revenueData[m].value += val;
+          revenueData[m].sales += val;
+          revenueData[m].count += 1;
         }
       });
 
-      comparison = "vs last quarter";
-    } else if (normalizedPeriod.includes('year')) {
-      revenuePeriod = "Yearly Revenue";
-      const curYear = now.getFullYear();
-      const prevYear = curYear - 1;
-
-      revenueData = [
-        { label: 'Q1', value: 0, sales: 0, count: 0 },
-        { label: 'Q2', value: 0, sales: 0, count: 0 },
-        { label: 'Q3', value: 0, sales: 0, count: 0 },
-        { label: 'Q4', value: 0, sales: 0, count: 0 }
-      ];
-
-      const curYearOrders = successfulOrders.filter(o => getOrderDate(o).getFullYear() === curYear);
-      const prevYearOrders = successfulOrders.filter(o => getOrderDate(o).getFullYear() === prevYear);
-
-      revenueAmount = curYearOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
-      previousPeriodAmount = prevYearOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
-
-      curYearOrders.forEach(o => {
-        const m = getOrderDate(o).getMonth();
-        const qIdx = Math.floor(m / 3);
-        const val = getOrderAmount(o);
-        if (revenueData[qIdx]) {
-          revenueData[qIdx].value += val;
-          revenueData[qIdx].sales += val;
-          revenueData[qIdx].count += 1;
-        }
-      });
-
-      comparison = "vs last year";
-    } else {
-      // Default: Monthly
-      revenuePeriod = "Monthly Revenue";
-      const curMonth = now.getMonth();
-      const curYear = now.getFullYear();
-
-      const prevMonthDate = new Date(now);
-      prevMonthDate.setMonth(now.getMonth() - 1);
-      const prevMonth = prevMonthDate.getMonth();
-      const prevMonthYear = prevMonthDate.getFullYear();
-
-      const curMonthOrders = successfulOrders.filter(o => {
-        const d = getOrderDate(o);
-        return d.getMonth() === curMonth && d.getFullYear() === curYear;
-      });
-
-      const prevMonthOrders = successfulOrders.filter(o => {
-        const d = getOrderDate(o);
-        return d.getMonth() === prevMonth && d.getFullYear() === prevMonthYear;
-      });
-
-      revenueAmount = curMonthOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
-      previousPeriodAmount = prevMonthOrders.reduce((sum, o) => sum + getOrderAmount(o), 0);
-
+      revenueAmount = revenueData.reduce((sum, d) => sum + d.sales, 0);
       comparison = "vs last month";
-
-      revenueData = [
-        { label: 'Week 1', value: 0, sales: 0, count: 0 },
-        { label: 'Week 2', value: 0, sales: 0, count: 0 },
-        { label: 'Week 3', value: 0, sales: 0, count: 0 },
-        { label: 'Week 4', value: 0, sales: 0, count: 0 }
+    } else {
+      // Default: Weekly
+      revenuePeriod = "Weekly Revenue Distribution";
+      const weeks = [
+        { label: 'Week 1', fullName: 'Week 1' },
+        { label: 'Week 2', fullName: 'Week 2' },
+        { label: 'Week 3', fullName: 'Week 3' },
+        { label: 'Week 4', fullName: 'Week 4' }
       ];
 
-      curMonthOrders.forEach(o => {
-        const date = getOrderDate(o).getDate();
-        const weekIdx = Math.min(3, Math.floor((date - 1) / 7));
-        const val = getOrderAmount(o);
+      revenueData = weeks.map(w => ({
+        label: w.label,
+        fullName: w.fullName,
+        value: 0,
+        sales: 0,
+        count: 0
+      }));
+
+      successfulOrders.forEach(o => {
+        const orderDate = getOrderDate(o);
+        const dayOfMonth = orderDate.getDate();
+        const weekIdx = Math.min(3, Math.floor((dayOfMonth - 1) / 7));
+        const val = getOrderNetRevenue(o);
         revenueData[weekIdx].value += val;
         revenueData[weekIdx].sales += val;
         revenueData[weekIdx].count += 1;
       });
+
+      revenueAmount = revenueData.reduce((sum, d) => sum + d.sales, 0);
+      comparison = "vs last week";
     }
 
     // Exact Rounding

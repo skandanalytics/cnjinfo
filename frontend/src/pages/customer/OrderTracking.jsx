@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import CustomerLayout from '../../components/layout/CustomerLayout';
-import { orderService } from '../../services/orderService';
+import { orderService, getCustomerPhone } from '../../services/orderService';
 import { useAuth } from '../../hooks/useAuth';
 import { useCart } from '../../hooks/useCart';
 import Loader from '../../components/common/Loader';
@@ -22,6 +22,7 @@ export const OrderTracking = () => {
   const { loadOrderIntoCart } = useCart();
 
   const initialOrder = location.state?.order || null;
+  const [resolvedOrderId, setResolvedOrderId] = useState(orderId || initialOrder?.id || null);
   const [order, setOrder] = useState(initialOrder);
   const [loading, setLoading] = useState(!initialOrder);
   const [error, setError] = useState(null);
@@ -94,14 +95,57 @@ export const OrderTracking = () => {
     statusRef.current = order?.status;
   }, [order?.status]);
 
+  // When no explicit orderId param is given, find and track ONLY the single latest active order
+  useEffect(() => {
+    if (orderId && orderId !== 'undefined' && orderId !== 'null') {
+      setResolvedOrderId(orderId);
+      return;
+    }
+    let isMounted = true;
+    const findLatestActiveOrder = async () => {
+      setLoading(true);
+      try {
+        const query = user?.phone || getCustomerPhone() || user?.id;
+        const allOrders = await orderService.getOrders(query, true, true);
+        if (isMounted) {
+          const list = Array.isArray(allOrders) ? allOrders : [];
+          const activeList = list.filter(o => {
+            const st = normalizeStatus(o.status);
+            return st === 'Pending' || st === 'Preparing' || st === 'Ready' || st === 'Serving';
+          });
+          if (activeList.length > 0) {
+            activeList.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+            const latest = activeList[0];
+            setResolvedOrderId(latest.id);
+            setOrder(latest);
+          } else if (list.length > 0) {
+            list.sort((a, b) => Number(b.id || 0) - Number(a.id || 0));
+            setResolvedOrderId(list[0].id);
+            setOrder(list[0]);
+          } else {
+            setOrder(null);
+          }
+        }
+      } catch (e) {
+        console.error('Error finding latest order:', e);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+    findLatestActiveOrder();
+    return () => { isMounted = false; };
+  }, [orderId, user]);
+
   // Real-time polling, event sync, and authoritative backend retrieval
   useEffect(() => {
+    if (!resolvedOrderId || resolvedOrderId === 'undefined' || resolvedOrderId === 'null') return;
+
     const fetchTrackingData = async (isInitial = false) => {
       if (isInitial && !order) setLoading(true);
       setError(null);
 
       try {
-        const raw = await fetchCustomerOrder(orderId);
+        const raw = await fetchCustomerOrder(resolvedOrderId);
         const currentData = raw?.id ? { ...mapOrder(raw), status: raw.status } : null;
         if (currentData) {
           const isTakeaway = currentData.orderType === 'Takeaway' ||
@@ -144,34 +188,32 @@ export const OrderTracking = () => {
       if (isInitial) setLoading(false);
     };
 
-    if (orderId && orderId !== 'undefined' && orderId !== 'null') {
-      fetchTrackingData(!order);
+    fetchTrackingData(!order);
 
-      const interval = setInterval(() => {
-        fetchTrackingData(false);
-      }, 3000);
+    const interval = setInterval(() => {
+      fetchTrackingData(false);
+    }, 3000);
 
-      const handleSync = () => {
-        fetchTrackingData(false);
-      };
+    const handleSync = () => {
+      fetchTrackingData(false);
+    };
 
-      window.addEventListener('foodie_orders_updated', handleSync);
-      window.addEventListener('focus', handleSync);
-      window.addEventListener('online', handleSync);
-      const handleVisibility = () => {
-        if (document.visibilityState === 'visible') fetchTrackingData(false);
-      };
-      document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('foodie_orders_updated', handleSync);
+    window.addEventListener('focus', handleSync);
+    window.addEventListener('online', handleSync);
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') fetchTrackingData(false);
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
 
-      return () => {
-        clearInterval(interval);
-        window.removeEventListener('foodie_orders_updated', handleSync);
-        window.removeEventListener('focus', handleSync);
-        window.removeEventListener('online', handleSync);
-        document.removeEventListener('visibilitychange', handleVisibility);
-      };
-    }
-  }, [orderId]);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('foodie_orders_updated', handleSync);
+      window.removeEventListener('focus', handleSync);
+      window.removeEventListener('online', handleSync);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [resolvedOrderId]);
 
   if (loading && !order) {
     return (
@@ -190,15 +232,32 @@ export const OrderTracking = () => {
         <div className="text-center py-5 mx-auto" style={{ maxWidth: '480px' }}>
           <div 
             className="rounded-circle d-inline-flex align-items-center justify-content-center mb-3"
-            style={{ width: '64px', height: '64px', backgroundColor: '#FEE2E2', color: '#EF4444' }}
+            style={{ width: '64px', height: '64px', backgroundColor: '#F1F5F9', color: '#64748B' }}
           >
-            <FiXCircle size={32} />
+            <FiClock size={32} />
           </div>
-          <h4 className="fw-bold text-dark mb-2">Order Not Found</h4>
+          <h4 className="fw-bold text-dark mb-2">No Active Orders</h4>
           <p className="text-secondary small mb-4">
-            {error || `We couldn't find order #${orderId}. Please check the order number or return to the menu.`}
+            {error || "You don't have any active orders currently in progress. Older orders are accessible via Order History."}
           </p>
-          <BackButton to="/customer/home" />
+          <div className="d-flex justify-content-center gap-3">
+            <button
+              type="button"
+              onClick={() => navigate('/customer/orders')}
+              className="btn btn-outline-danger px-4 rounded-pill fw-bold"
+              style={{ borderColor: '#F20D2D', color: '#F20D2D' }}
+            >
+              View Order History
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate('/customer/home')}
+              className="btn btn-danger px-4 rounded-pill fw-bold"
+              style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D' }}
+            >
+              Browse Menu
+            </button>
+          </div>
         </div>
       </CustomerLayout>
     );
@@ -249,19 +308,50 @@ export const OrderTracking = () => {
   return (
     <CustomerLayout>
       <main className="pt-3 pb-5 mx-auto" style={{ maxWidth: '960px' }}>
-        <div className="d-flex align-items-center gap-3 mb-4">
-          <BackButton to="/customer/home" />
-          <div>
-            <h3 className="fw-bold text-dark mb-1">Track Order</h3>
-            <p className="text-secondary small mb-0">
-              Order <span className="font-monospace fw-bold text-dark">#{formatOrderDisplayNumber(order, orderId)}</span>
-              {(order.time || order.created_at) && ` · Placed on ${order.time || order.created_at}`}
-            </p>
+        <div className="d-flex align-items-center justify-content-between gap-3 mb-4 flex-wrap">
+          <div className="d-flex align-items-center gap-3">
+            <BackButton to="/customer/home" />
+            <div>
+              <h3 className="fw-bold text-dark mb-1">Track Order</h3>
+              <p className="text-secondary small mb-0">
+                {Boolean(order.parent_order_id || order.parent_order || (order.continuation_index > 0)) ? 'Sub Order ' : 'Order '}
+                <span className="font-monospace fw-bold text-dark">#{formatOrderDisplayNumber(order, resolvedOrderId || orderId)}</span>
+                {(order.time || order.created_at) && ` · Placed on ${order.time || order.created_at}`}
+              </p>
+            </div>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate('/customer/orders')}
+            className="btn btn-outline-danger btn-sm rounded-pill px-3.5 py-1.5 fw-bold"
+            style={{ borderColor: '#F20D2D', color: '#F20D2D', fontSize: '13px' }}
+          >
+            View Order History
+          </button>
         </div>
 
         {/* Horizontal Status Timeline Card (Screenshot 10) */}
         <div className="card rounded-4 border border-light-subtle shadow-sm p-4 bg-white mb-4">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3 pb-2 border-bottom">
+            <div className="d-flex align-items-center gap-2">
+              <span className="fw-bold text-dark fs-6">
+                Order #{formatOrderDisplayNumber(order, resolvedOrderId || orderId)}
+              </span>
+              <span className={`badge rounded-pill px-3 py-1 fw-bold ${
+                currentStatus === 'Completed' ? 'bg-success text-white' :
+                currentStatus === 'Cancelled' ? 'bg-danger text-white' :
+                'bg-warning text-dark'
+              }`}>
+                Status: {currentStatus === 'Preparing' ? 'Cooking' : currentStatus}
+              </span>
+            </div>
+            <div className="text-secondary small">
+              <span className="fw-semibold text-dark">Estimated Time: </span>
+              <span className="fw-bold text-danger">
+                {currentStatus === 'Completed' ? 'Fulfilled' : currentStatus === 'Cancelled' ? 'Cancelled' : currentStatus === 'Ready' ? '~2 mins' : '~15 mins'}
+              </span>
+            </div>
+          </div>
           <div className="position-relative py-3">
             {/* Background connecting line */}
             <div 

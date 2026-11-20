@@ -137,11 +137,11 @@ const setStoredCoupons = (coupons) => {
 };
 
 export const couponService = {
-  getCoupons: async () => {
+  getCoupons: async (branchIdOverride = null) => {
     const { isStaffScreen, listCoupons } = await import('./adminApi');
-    if (isStaffScreen()) return listCoupons();
+    if (isStaffScreen()) return listCoupons(branchIdOverride);
     const { resolveAuthoritativeBranch } = await import('./branchResolution');
-    const branchId = await resolveAuthoritativeBranch();
+    const branchId = branchIdOverride || await resolveAuthoritativeBranch();
     if (!branchId) return [];
     let menu;
     try {

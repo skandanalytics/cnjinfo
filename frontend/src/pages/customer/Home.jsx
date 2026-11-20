@@ -152,6 +152,10 @@ export const Home = () => {
       setTable({ tableNumber: 'Takeaway', tableId: 'Takeaway', orderType: 'TAKEAWAY' });
       sessionStorage.setItem('foodie_order_type', 'TAKEAWAY');
       localStorage.setItem('foodie_order_type', 'TAKEAWAY');
+      sessionStorage.removeItem('foodie_selected_table');
+      localStorage.removeItem('foodie_selected_table');
+      sessionStorage.removeItem('foodie_table_number');
+      localStorage.removeItem('foodie_table_number');
     }
   };
 
@@ -756,126 +760,138 @@ export const Home = () => {
 
 
 
-        {/* Active Live Orders List Section (shows right AFTER Flat ₹50 OFF banner) */}
-        {!isEmployee && activeOrders && activeOrders.length > 0 && (
-          <div className="d-flex flex-column gap-3 mb-4">
-            {activeOrders.map((ord) => {
-              const st = String(ord.status || '').toLowerCase().trim();
-              const isCompleted = ['completed', 'delivered', 'done', 'settled'].includes(st) ||
-                ['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(String(ord.backendStatus || '').toUpperCase());
+        {/* Active Live Order Section: Shows ONLY latest active order (Requirement: Bug 7) */}
+        {!isEmployee && activeOrders && activeOrders.length > 0 && (() => {
+          const ord = activeOrders[0];
+          const st = String(ord.status || '').toLowerCase().trim();
+          const isCompleted = ['completed', 'delivered', 'done', 'settled'].includes(st) ||
+            ['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(String(ord.backendStatus || '').toUpperCase());
 
-              let stText = 'Order Placed';
-              let stBg = 'bg-danger text-white';
+          let stText = 'Order Placed';
+          let stBg = 'bg-danger text-white';
 
-              if (['preparing', 'cooking', 'accepted', 'in_kitchen'].includes(st)) {
-                stText = 'Preparing';
-                stBg = 'bg-warning text-dark';
-              } else if (['ready', 'prepared', 'out_for_delivery', 'ready_for_pickup'].includes(st)) {
-                stText = 'Ready for Pickup';
-                stBg = 'bg-info text-dark';
-              } else if (['serving', 'served'].includes(st)) {
-                stText = 'Serving to Table';
-                stBg = 'bg-primary text-white';
-              } else if (isCompleted) {
-                stText = 'Bill Ready · Settlement Pending';
-                stBg = 'bg-info text-dark';
-              }
+          if (['preparing', 'cooking', 'accepted', 'in_kitchen'].includes(st)) {
+            stText = 'Cooking';
+            stBg = 'bg-warning text-dark';
+          } else if (['ready', 'prepared', 'out_for_delivery', 'ready_for_pickup'].includes(st)) {
+            stText = 'Ready for Pickup';
+            stBg = 'bg-info text-dark';
+          } else if (['serving', 'served'].includes(st)) {
+            stText = 'Serving to Table';
+            stBg = 'bg-primary text-white';
+          } else if (isCompleted) {
+            stText = 'Bill Ready · Settlement Pending';
+            stBg = 'bg-info text-dark';
+          }
 
-              const isPaid = String(ord.payment_status || ord.paymentStatus || '').toUpperCase() === 'PAID';
-              const totalItemCount = (ord.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
-              const itemsSummary = formatOrderItemsSummary(ord.items);
-              const isProcessingThisBill = proceedingBillId === ord.id;
+          const isPaid = String(ord.payment_status || ord.paymentStatus || '').toUpperCase() === 'PAID';
+          const totalItemCount = (ord.items || []).reduce((sum, item) => sum + (Number(item.quantity) || 1), 0);
+          const itemsSummary = formatOrderItemsSummary(ord.items);
+          const isProcessingThisBill = proceedingBillId === ord.id;
 
-              return (
-                <div
-                  key={ord.id}
-                  className="card rounded-4 border-0 shadow-sm p-3.5 text-white text-start"
-                  style={{ background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' }}
-                >
-                  <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-                    <div>
-                      <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
-                        <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1" style={{ fontSize: '10px' }}>
-                          Live Order #{ord.display_order_number || ord.display_number || ord.id}
+          return (
+            <div className="d-flex flex-column gap-2 mb-4">
+              <div
+                key={ord.id}
+                className="card rounded-4 border-0 shadow-sm p-3.5 text-white text-start"
+                style={{ background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)' }}
+              >
+                <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                  <div>
+                    <div className="d-flex align-items-center gap-2 mb-1 flex-wrap">
+                      <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-1" style={{ fontSize: '10px' }}>
+                        Live Order #{ord.display_order_number || ord.display_number || ord.id}
+                      </span>
+                      <span className={`badge rounded-pill px-2.5 py-1 fw-bold ${stBg}`} style={{ fontSize: '10px' }}>
+                        {stText}
+                      </span>
+                      {isPaid ? (
+                        <span className="badge rounded-pill px-2 py-0.5 fw-bold bg-success text-white" style={{ fontSize: '10px' }}>PAID</span>
+                      ) : (
+                        <span className="badge rounded-pill px-2 py-0.5 fw-bold bg-warning text-dark" style={{ fontSize: '10px' }}>UNPAID</span>
+                      )}
+                      <span className="small text-white opacity-90 fw-semibold" style={{ fontSize: '12px' }}>
+                        {formatCompactTableLabel(ord.table) || 'Takeaway'}
+                      </span>
+                      {totalItemCount > 0 && (
+                        <span className="small text-white opacity-80" style={{ fontSize: '11px' }}>
+                          • {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}
                         </span>
-                        <span className={`badge rounded-pill px-2.5 py-1 fw-bold ${stBg}`} style={{ fontSize: '10px' }}>
-                          {stText}
-                        </span>
-                        {isPaid ? (
-                          <span className="badge rounded-pill px-2 py-0.5 fw-bold bg-success text-white" style={{ fontSize: '10px' }}>PAID</span>
-                        ) : (
-                          <span className="badge rounded-pill px-2 py-0.5 fw-bold bg-warning text-dark" style={{ fontSize: '10px' }}>UNPAID</span>
-                        )}
-                        <span className="small text-white opacity-90 fw-semibold" style={{ fontSize: '12px' }}>
-                          {formatCompactTableLabel(ord.table) || 'Takeaway'}
-                        </span>
-                        {totalItemCount > 0 && (
-                          <span className="small text-white opacity-80" style={{ fontSize: '11px' }}>
-                            • {totalItemCount} {totalItemCount === 1 ? 'item' : 'items'}
-                          </span>
-                        )}
-                      </div>
-                      <div className="small text-white-50">
-                        {itemsSummary}
-                      </div>
-                      <div className="small text-white-50">
-                        Total: <strong className="text-white">{formatCurrency(ord.total || ord.total_amount)}</strong>
-                      </div>
-                    </div>
-
-                    <div className="d-flex align-items-center gap-2 flex-wrap ms-auto">
-                      <button
-                        type="button"
-                        onClick={() => navigate(`/customer/order-tracking/${ord.id}`, { state: { order: ord } })}
-                        className="btn btn-sm btn-danger rounded-pill px-3 py-1.5 fw-bold shadow-sm"
-                        style={{ fontSize: '12px' }}
-                      >
-                        Track Order →
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => handleViewBill(ord)}
-                        className={`btn btn-sm ${isCompleted ? 'btn-danger' : 'btn-outline-light'} rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 shadow-sm`}
-                        style={{
-                          fontSize: '12px',
-                          ...(isCompleted ? { backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)' } : {})
-                        }}
-                      >
-                        <i className="bi bi-receipt me-1"></i>
-                        <span>View Bill</span>
-                      </button>
-
-                      {!isPaid && (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleContinueOrder(ord)}
-                            className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
-                            style={{ fontSize: '12px' }}
-                          >
-                            <i className="bi bi-plus-circle me-1"></i>
-                            <span>Order Again</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/customer/payment?order=${ord.id}`)}
-                            className="btn btn-sm btn-success rounded-pill px-3.5 py-1.5 fw-bold shadow-sm d-flex align-items-center gap-1.5"
-                            style={{ fontSize: '12px' }}
-                          >
-                            <i className="bi bi-credit-card me-1"></i>
-                            <span>Proceed to Bill</span>
-                          </button>
-                        </>
                       )}
                     </div>
+                    <div className="small text-white-50">
+                      {itemsSummary}
+                    </div>
+                    <div className="small text-white-50">
+                      Total: <strong className="text-white">{formatCurrency(ord.total || ord.total_amount)}</strong>
+                    </div>
+                  </div>
+
+                  <div className="d-flex align-items-center gap-2 flex-wrap ms-auto">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/customer/order-tracking/${ord.id}`, { state: { order: ord } })}
+                      className="btn btn-sm btn-danger rounded-pill px-3 py-1.5 fw-bold shadow-sm"
+                      style={{ fontSize: '12px' }}
+                    >
+                      Track Order →
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleViewBill(ord)}
+                      className={`btn btn-sm ${isCompleted ? 'btn-danger' : 'btn-outline-light'} rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5 shadow-sm`}
+                      style={{
+                        fontSize: '12px',
+                        ...(isCompleted ? { backgroundColor: 'var(--primary-color, #dc3545)', borderColor: 'var(--primary-color, #dc3545)' } : {})
+                      }}
+                    >
+                      <i className="bi bi-receipt me-1"></i>
+                      <span>View Bill</span>
+                    </button>
+
+                    {!isPaid && (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleContinueOrder(ord)}
+                          className="btn btn-sm btn-outline-light rounded-pill px-3 py-1.5 fw-bold d-flex align-items-center gap-1.5"
+                          style={{ fontSize: '12px' }}
+                        >
+                          <i className="bi bi-plus-circle me-1"></i>
+                          <span>Order Again</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/customer/payment?order=${ord.id}`)}
+                          className="btn btn-sm btn-success rounded-pill px-3.5 py-1.5 fw-bold shadow-sm d-flex align-items-center gap-1.5"
+                          style={{ fontSize: '12px' }}
+                        >
+                          <i className="bi bi-credit-card me-1"></i>
+                          <span>Proceed to Bill</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              </div>
+
+              {activeOrders.length > 1 && (
+                <div className="d-flex justify-content-end pe-1">
+                  <button
+                    type="button"
+                    onClick={() => navigate('/customer/orders')}
+                    className="btn btn-link btn-sm text-decoration-none text-muted small p-0 fw-semibold"
+                    style={{ fontSize: '12px' }}
+                  >
+                    View All Orders ({activeOrders.length}) →
+                  </button>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
 
         {/* Sticky Frozen Filter Header Container */}

@@ -136,7 +136,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
         if name:
             if any(ch.isdigit() for ch in name):
                 raise serializers.ValidationError({"name": "Employee name cannot contain numbers."})
-            max_len = 30 if role == Employee.Role.SUPER_ADMIN else 20
+            max_len = 30
             if len(name.strip()) > max_len:
                 raise serializers.ValidationError({"name": f"Name cannot exceed {max_len} characters."})
 

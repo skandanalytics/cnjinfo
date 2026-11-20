@@ -22,7 +22,7 @@ class QuoteLineSerializer(serializers.Serializer):
 
 class QuoteSerializer(serializers.Serializer):
     branch = serializers.IntegerField()
-    order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY"])
+    order_type = serializers.ChoiceField(choices=["DINE_IN", "TAKEAWAY", "SELF_SERVICE"])
     items = QuoteLineSerializer(many=True, allow_empty=False, max_length=100)
     coupon_codes = serializers.ListField(child=serializers.CharField(max_length=50), required=False, default=list,
                                          max_length=5)

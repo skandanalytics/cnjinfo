@@ -293,8 +293,11 @@ class PublicBranchListView(APIView):
         branches = Branch.objects.filter(is_active=True).annotate(
             dish_count=Count("foods", filter=Q(foods__is_active=True))
         ).order_by("-dish_count", "name")
-        rows = [{"id": b.id, "name": b.name, "dish_count": b.dish_count, "is_primary": b.is_primary,
-                 "city": b.city} for b in branches]
+        rows = [{
+            "id": b.id, "name": b.name, "code": b.code, "dish_count": b.dish_count,
+            "is_primary": b.is_primary, "is_active": True, "status": "Active",
+            "city": b.city
+        } for b in branches]
         return Response(rows)
 
 

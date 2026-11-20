@@ -112,12 +112,20 @@ export const calculateBillDetails = ({
   let couponRemaining = 0;
 
   if (coupon) {
-    const minOrder = Number(coupon.minOrderValue || coupon.minimum_order_amount || coupon.min_order_amount || 0);
-    if (subtotalBeforeGst >= minOrder) {
+    if (coupon.appliedList && Array.isArray(coupon.appliedList) && coupon.appliedList.length > 0) {
       isCouponEligible = true;
-      discountAmount = calculateCouponDiscount(coupon, subtotalBeforeGst);
+      discountAmount = coupon.appliedList.reduce((sum, c) => sum + Number(c.discount || 0), 0);
+    } else if (coupon.discount !== undefined && Number(coupon.discount) > 0) {
+      isCouponEligible = true;
+      discountAmount = Number(coupon.discount);
     } else {
-      couponRemaining = Math.max(0, Math.round((minOrder - subtotalBeforeGst) * 100) / 100);
+      const minOrder = Number(coupon.minOrderValue || coupon.minimum_order_amount || coupon.min_order_amount || 0);
+      if (subtotalBeforeGst >= minOrder) {
+        isCouponEligible = true;
+        discountAmount = calculateCouponDiscount(coupon, subtotalBeforeGst);
+      } else {
+        couponRemaining = Math.max(0, Math.round((minOrder - subtotalBeforeGst) * 100) / 100);
+      }
     }
   }
 

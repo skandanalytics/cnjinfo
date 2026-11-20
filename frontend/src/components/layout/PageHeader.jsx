@@ -39,7 +39,7 @@ export const PageHeader = ({
           </button>
         )}
         <div>
-          <h3 className="fw-bold text-dark mb-0">{title}</h3>
+          <h3 className="fw-bold text-dark mb-0 text-nowrap">{title}</h3>
           {subtitle && <p className="text-secondary small mb-0 mt-0.5">{subtitle}</p>}
         </div>
       </div>

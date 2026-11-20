@@ -64,23 +64,24 @@ export const OrderDetailsModal = ({
     }
   }, [notice]);
 
-  if (!currentOrder) return null;
-
-  const isDineIn = currentOrder.orderType !== 'Takeaway' && currentOrder.order_type !== 'TAKEAWAY' && String(currentOrder.table || '').toLowerCase() !== 'takeaway';
-  const isCompleted = ['Completed', 'COMPLETED', 'Delivered', 'DELIVERED', 'Done', 'DONE', 'Settled', 'SETTLED'].includes(currentOrder.status);
-  const isActive = !['Cancelled', 'CANCELLED', 'Completed', 'COMPLETED'].includes(currentOrder.status);
-  const isPaid = String(currentOrder.payment_status || '').toUpperCase() === 'PAID';
-  const isServiceChargeActive = Number(currentOrder.service_charge_amount ?? currentOrder.serviceCharge ?? 0) > 0 || Number(currentOrder.service_charge_rate ?? 0) > 0;
-  const appliedCouponsList = Array.isArray(currentOrder.applied_coupons) && currentOrder.applied_coupons.length > 0
-    ? currentOrder.applied_coupons
-    : (Array.isArray(currentOrder.coupon_codes) && currentOrder.coupon_codes.length > 0
-        ? currentOrder.coupon_codes
-        : String(currentOrder.coupon_code || currentOrder.voucher || currentOrder.voucherCode || currentOrder.coupon || '')
+  const ord = currentOrder || {};
+  const isSelfService = ord.orderType === 'Self Service' || ord.order_type === 'SELF_SERVICE' || String(ord.table || '').toLowerCase() === 'self service';
+  const isTakeaway = !isSelfService && (ord.orderType === 'Takeaway' || ord.order_type === 'TAKEAWAY' || String(ord.table || '').toLowerCase() === 'takeaway');
+  const isDineIn = !isSelfService && !isTakeaway;
+  const isCompleted = ['Completed', 'COMPLETED', 'Delivered', 'DELIVERED', 'Done', 'DONE', 'Settled', 'SETTLED'].includes(ord.status);
+  const isActive = !['Cancelled', 'CANCELLED', 'Completed', 'COMPLETED'].includes(ord.status);
+  const isPaid = String(ord.payment_status || '').toUpperCase() === 'PAID' || String(ord.payment_status || '').toUpperCase() === 'COUNTER_PAID';
+  const isServiceChargeActive = Number(ord.service_charge_amount ?? ord.serviceCharge ?? 0) > 0 || Number(ord.service_charge_rate ?? 0) > 0;
+  const appliedCouponsList = Array.isArray(ord.applied_coupons) && ord.applied_coupons.length > 0
+    ? ord.applied_coupons
+    : (Array.isArray(ord.coupon_codes) && ord.coupon_codes.length > 0
+        ? ord.coupon_codes
+        : String(ord.coupon_code || ord.voucher || ord.voucherCode || ord.coupon || '')
             .split(',')
             .map(s => s.trim())
             .filter(Boolean)
       ).map(c => typeof c === 'object' ? c : { code: c, discount: null });
-  const appliedCouponDiscount = Number(currentOrder.coupon_discount_total || 0);
+  const appliedCouponDiscount = Number(ord.coupon_discount_total || 0);
   const hasAppliedCoupon = appliedCouponDiscount > 0 || appliedCouponsList.length > 0;
 
   const formatPaymentMethod = (order) => {
@@ -305,7 +306,7 @@ export const OrderDetailsModal = ({
       const updated = await getStaffOrder(targetId);
       setCurrentOrder(updated);
       setIsPaymentModalOpen(false);
-      setNotice({ kind: 'success', text: `Payment confirmed successfully (${method === 'CASH' ? 'Cash' : 'Online'})!` });
+      if (onClose) onClose();
       if (onPaymentRecorded) await onPaymentRecorded(updated);
       if (onOrderUpdated) onOrderUpdated(updated);
       window.dispatchEvent(new CustomEvent('foodie_orders_updated'));
@@ -373,6 +374,10 @@ export const OrderDetailsModal = ({
   };
 
   const getActionButtons = () => {
+    // Hide ALL action buttons in sub-order view
+    const isSubOrder = Boolean(currentOrder.isSubOrder || currentOrder.parent_order_id || (currentOrder.continuation_index && Number(currentOrder.continuation_index) > 0));
+    if (isSubOrder) return null;
+
     return (
       <div className="d-flex align-items-center justify-content-between w-100 flex-wrap gap-2">
         <div className="d-flex align-items-center gap-2">
@@ -386,7 +391,7 @@ export const OrderDetailsModal = ({
             style={{ fontSize: '13px', gap: '8px' }}
           >
             <FiEye size={15} />
-            <span>{isCompleted ? 'View E-Bill' : 'Proceed to Bill'}</span>
+            <span>{isCompleted ? 'View E-Bill' : 'View Bill'}</span>
           </button>
 
           {onContinueOrder && isDineIn && isActive && (
@@ -478,6 +483,8 @@ export const OrderDetailsModal = ({
       </div>
     );
   };
+
+  if (!isOpen || !currentOrder) return null;
 
   return (
     <Modal isOpen={isOpen} title={`Order details #${currentOrder.display_order_number || currentOrder.display_number || currentOrder.id}`} onClose={onClose} footerActions={getActionButtons()} size="lg">
@@ -650,7 +657,7 @@ export const OrderDetailsModal = ({
 
           {/* REQ-5 & REQ-33 & REQ-50: Applied coupons and promo coupon input */}
           {!isPaid && !isCompleted && String(currentOrder.status || '').toLowerCase() !== 'cancelled' && (
-            <div className="p-2.5 bg-light rounded-3 mb-3 border">
+            <div className="p-3 my-3 bg-light rounded-3 border">
               {appliedCouponsList.length > 0 && (
                 <div className={`d-flex flex-column gap-2 ${appliedCouponsList.length < 2 ? 'mb-2.5 pb-2 border-bottom' : ''}`}>
                   {appliedCouponsList.map((ac) => {
@@ -791,9 +798,9 @@ export const OrderDetailsModal = ({
                       role="switch"
                       checked={isServiceChargeActive}
                       onChange={(e) => handleToggleServiceCharge(e.target.checked)}
-                      disabled={togglingServiceCharge || loading}
-                      title={isServiceChargeActive ? "Disable service charge for this order" : "Enable service charge for this order"}
-                      style={{ width: '32px', height: '17px', cursor: (togglingServiceCharge || loading) ? 'not-allowed' : 'pointer' }}
+                      disabled={togglingServiceCharge || loading || !isDineIn}
+                      title={!isDineIn ? "Service charge is only available for Dine-In" : (isServiceChargeActive ? "Disable service charge for this order" : "Enable service charge for this order")}
+                      style={{ width: '32px', height: '17px', cursor: (togglingServiceCharge || loading || !isDineIn) ? 'not-allowed' : 'pointer' }}
                     />
                   </div>
                 )}
@@ -829,8 +836,8 @@ export const OrderDetailsModal = ({
         <div className="col-12 col-md-5 border-start border-light-subtle">
           <h6 className="fw-bold text-dark mb-3">Order Details</h6>
           <div className="p-3 border rounded-3 bg-light mb-4 small">
-            <div className="mb-2">Order Type: <strong className="text-danger">{currentOrder.orderType === 'Takeaway' || String(currentOrder.table).toLowerCase() === 'takeaway' ? 'Takeaway' : 'Table Dine-In'}</strong></div>
-            {currentOrder.orderType !== 'Takeaway' && String(currentOrder.table).toLowerCase() !== 'takeaway' && (
+            <div className="mb-2">Order Type: <strong className="text-danger">{isSelfService ? 'Self Service' : (isTakeaway ? 'Takeaway' : 'Table Dine-In')}</strong></div>
+            {isDineIn && (
               <>
                 <div className="mb-2">Table No: <strong>{currentOrder.table}</strong></div>
                 {(currentOrder.diners || currentOrder.number_of_diners) && (
@@ -847,7 +854,9 @@ export const OrderDetailsModal = ({
             <div className="mb-2 d-flex align-items-center gap-1.5 flex-wrap">
               <span>Payment Status: </span>
               {isPaid ? (
-                <span className="badge bg-success-subtle text-success rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>Paid</span>
+                <span className="badge bg-success-subtle text-success rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>
+                  {String(currentOrder.payment_status || '').toUpperCase() === 'COUNTER_PAID' ? 'Counter Paid' : 'Paid'}
+                </span>
               ) : (String(currentOrder.payment_status || '').toUpperCase() === 'PENDING' || String(currentOrder.payment_method || '').toUpperCase() === 'UPI') ? (
                 <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>Pending Verification (UPI)</span>
               ) : (
@@ -856,18 +865,6 @@ export const OrderDetailsModal = ({
             </div>
             <div className="mb-2">Payment Method: <strong>{formatPaymentMethod(currentOrder)}</strong></div>
             <div>Date/Time: <strong>{[currentOrder.date, currentOrder.time].filter(Boolean).join(' ')}</strong></div>
-          </div>
-
-          <h6 className="fw-bold text-dark mb-3">Operation History</h6>
-          <div className="d-flex flex-column gap-3 small border-start ps-3" style={{ maxHeight: '180px', overflowY: 'auto' }}>
-            {currentOrder.history?.map((h, idx) => (
-              <div key={idx} className="position-relative mb-2">
-                <span className="position-absolute bg-danger rounded-circle" style={{ width: '8px', height: '8px', left: '-21px', top: '5px' }}></span>
-                <div className="fw-bold text-dark">{h.action}</div>
-                <div className="text-secondary" style={{ fontSize: '11px' }}>{h.operator} | {h.time}</div>
-                <p className="text-muted mb-0 mt-0.5" style={{ fontSize: '11px' }}>{h.message}</p>
-              </div>
-            ))}
           </div>
         </div>
       </div>

@@ -88,12 +88,12 @@ export const analyticsService = {
     if (staff) {
       try {
         const { listFoods } = await import('./adminApi');
-        staffFoods = await listFoods().catch(() => []);
+        staffFoods = await listFoods(options?.branchId || undefined).catch(() => []);
       } catch (e) {}
     }
     const [allOrdersRaw, allTablesRaw, foodRes, usersRes] = await Promise.all([
       orderService.getAllOrders(true, options).catch(() => []),
-      tableService.getTables().catch(() => []),
+      tableService.getTables(options?.branchId || undefined).catch(() => []),
       staff ? Promise.resolve({ data: staffFoods }) : api.get('/foods/').catch(() => ({ data: [] })),
       staff ? Promise.resolve({ data: [] }) : api.get('/users/users/').catch(() => ({ data: [] }))
     ]);

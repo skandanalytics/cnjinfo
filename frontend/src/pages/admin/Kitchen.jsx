@@ -7,7 +7,7 @@ import { branchService } from '../../services/branchService';
 import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import Button from '../../components/common/Button';
-import { FiUser, FiShoppingBag, FiClock, FiFileText, FiCheck, FiRefreshCw, FiChevronLeft } from 'react-icons/fi';
+import { FiUser, FiShoppingBag, FiCoffee, FiClock, FiFileText, FiCheck, FiRefreshCw, FiChevronLeft } from 'react-icons/fi';
 import EBillModal from '../../components/orders/EBillModal';
 import OrderRejectionModal from '../../components/orders/OrderRejectionModal';
 import Toast from '../../components/common/Toast';
@@ -122,7 +122,7 @@ export const Kitchen = () => {
   };
 
   const isTableReadyForCleaning = (ord) => {
-    if (!ord) return false;
+    if (!ord || isTakeawayOrder(ord) || isSelfServiceOrder(ord)) return false;
     const rawVal = ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? (ord.table?.number || ord.table?.table_number || ord.table?.id) : ord.table);
     const canonNum = tableService.getCanonicalTableNumber(rawVal || '');
     const ordTableId = ord.table_id || ord.tableId || (typeof ord.table === 'object' ? ord.table?.id : null);
@@ -412,13 +412,22 @@ export const Kitchen = () => {
     return `${str}`;
   };
 
+  const isSelfServiceOrder = (ord) => {
+    if (!ord) return false;
+    const type = String(ord.order_type || ord.orderType || '').toUpperCase();
+    if (type === 'SELF_SERVICE') return true;
+    const tbl = String(ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? ord.table?.table_number : ord.table) || '').toLowerCase().trim();
+    return tbl === 'self service';
+  };
+
   const isTakeawayOrder = (ord) => {
     if (!ord) return false;
+    if (isSelfServiceOrder(ord)) return false;
     const type = String(ord.order_type || ord.orderType || '').toUpperCase();
     if (type === 'TAKEAWAY') return true;
     if (type === 'DINE_IN' || type === 'DINING') return false;
     const tbl = String(ord.tableNumber || ord.table_label || (typeof ord.table === 'object' ? ord.table?.table_number : ord.table) || '').toLowerCase().trim();
-    return tbl === 'takeaway' || tbl === '';
+    return tbl === 'takeaway';
   };
 
   const getCustomizationsList = (item) => {
@@ -488,22 +497,28 @@ export const Kitchen = () => {
       try { return JSON.parse(sessionStorage.getItem('foodie_auth_admin') || '{}').user; } catch { return null; }
     })();
     const branchEmployee = staffUser?.role === 'employee' && staffUser?.branchId;
-    if (!branchEmployee && selectedBranch && selectedBranch !== 'ALL') {
+    const primaryBranch = branches.find(b => (b.is_primary || b.isMainBranch) && b.is_active) ||
+                          branches.find(b => b.is_primary || b.isMainBranch) ||
+                          branches.find(b => b.is_active) ||
+                          branches[0];
+    const effectiveBranchId = (!branchEmployee && selectedBranch === 'ALL')
+      ? (primaryBranch?.id ? String(primaryBranch.id) : null)
+      : selectedBranch;
+
+    if (!branchEmployee && effectiveBranchId) {
       const rawBranch = ord.branchId || ord.branch_id || ord.branch || ord.restaurant || ord.restaurant_id || ord.restaurantId;
       const orderBranch = (rawBranch && typeof rawBranch === 'object') ? (rawBranch.id || rawBranch.code || rawBranch.name) : rawBranch;
-      const selectedBranchObj = branches.find(b => String(b.id) === String(selectedBranch));
+      const selectedBranchObj = branches.find(b => String(b.id) === String(effectiveBranchId));
 
-      if (orderBranch != null) {
-        const isMatch =
-          String(orderBranch) === String(selectedBranch) ||
-          (selectedBranchObj && (
-            String(orderBranch) === String(selectedBranchObj.code) ||
-            String(orderBranch).toLowerCase() === String(selectedBranchObj.name || '').toLowerCase()
-          )) ||
-          (selectedBranchObj?.isMainBranch && (orderBranch === 1 || String(orderBranch) === '1'));
+      if (!orderBranch) return false;
+      const isMatch =
+        String(orderBranch) === String(effectiveBranchId) ||
+        (selectedBranchObj && (
+          String(orderBranch) === String(selectedBranchObj.code) ||
+          String(orderBranch).toLowerCase() === String(selectedBranchObj.name || '').toLowerCase()
+        ));
 
-        if (!isMatch) return false;
-      }
+      if (!isMatch) return false;
     }
 
     return true;
@@ -658,6 +673,7 @@ export const Kitchen = () => {
                   ) : (
                     pendingOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
+                      const isSelfService = isSelfServiceOrder(ord);
                       const isTakeaway = isTakeawayOrder(ord);
 
                       return (
@@ -667,19 +683,25 @@ export const Kitchen = () => {
                             <span className="text-muted small" style={{ fontSize: '11px' }}>{ord.time || '2 mins ago'}</span>
                           </div>
 
-                          <div className="mb-2">
+                          <div className="mb-2 d-flex align-items-center justify-content-between flex-wrap gap-1">
                             <span 
                               className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
                               style={{ 
-                                backgroundColor: isTakeaway ? '#FEF3C7' : '#FEE2E2', 
-                                color: isTakeaway ? '#D97706' : '#DC2626',
-                                border: isTakeaway ? '1px solid #FDE68A' : '1px solid #FECACA',
+                                backgroundColor: isSelfService ? '#ECFDF5' : isTakeaway ? '#FEF3C7' : '#FEE2E2', 
+                                color: isSelfService ? '#059669' : isTakeaway ? '#D97706' : '#DC2626',
+                                border: isSelfService ? '1px solid #A7F3D0' : isTakeaway ? '1px solid #FDE68A' : '1px solid #FECACA',
                                 fontSize: '11px' 
                               }}
                             >
-                              {isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
-                              <span>{isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
+                              {isSelfService ? <FiCoffee size={12} /> : isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
+                              <span>{isSelfService ? 'Self Service' : isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
                             </span>
+
+                            {isSelfService && (
+                              <span className="badge rounded-pill fw-semibold px-2 py-0.5" style={{ backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A', fontSize: '10.5px' }}>
+                                Counter Paid
+                              </span>
+                            )}
                           </div>
 
                           {/* Items List */}
@@ -787,6 +809,7 @@ export const Kitchen = () => {
                   ) : (
                     preparingOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
+                      const isSelfService = isSelfServiceOrder(ord);
                       const isTakeaway = isTakeawayOrder(ord);
 
                       return (
@@ -796,19 +819,25 @@ export const Kitchen = () => {
                             <span className="text-muted small" style={{ fontSize: '11px' }}>{ord.time || '5 mins ago'}</span>
                           </div>
 
-                          <div className="mb-2">
+                          <div className="mb-2 d-flex align-items-center justify-content-between flex-wrap gap-1">
                             <span 
                               className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
                               style={{ 
-                                backgroundColor: isTakeaway ? '#FEF3C7' : '#FEE2E2', 
-                                color: isTakeaway ? '#D97706' : '#DC2626',
-                                border: isTakeaway ? '1px solid #FDE68A' : '1px solid #FECACA',
+                                backgroundColor: isSelfService ? '#ECFDF5' : isTakeaway ? '#FEF3C7' : '#FEE2E2', 
+                                color: isSelfService ? '#059669' : isTakeaway ? '#D97706' : '#DC2626',
+                                border: isSelfService ? '1px solid #A7F3D0' : isTakeaway ? '1px solid #FDE68A' : '1px solid #FECACA',
                                 fontSize: '11px' 
                               }}
                             >
-                              {isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
-                              <span>{isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
+                              {isSelfService ? <FiCoffee size={12} /> : isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
+                              <span>{isSelfService ? 'Self Service' : isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
                             </span>
+
+                            {isSelfService && (
+                              <span className="badge rounded-pill fw-semibold px-2 py-0.5" style={{ backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A', fontSize: '10.5px' }}>
+                                Counter Paid
+                              </span>
+                            )}
                           </div>
 
                           <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
@@ -855,21 +884,12 @@ export const Kitchen = () => {
                             </div>
                           )}
 
-                          <div className="d-flex align-items-center justify-content-between gap-2 pt-3 mt-1">
-                            <button
-                              type="button"
-                              onClick={() => setEBillOrder(ord)}
-                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-semibold flex-grow-1 shadow-2xs border text-secondary"
-                              style={{ fontSize: '12px', borderColor: '#CBD5E1' }}
-                            >
-                              View Details
-                            </button>
-
+                          <div className="d-flex align-items-center justify-content-end gap-2 pt-3 mt-1">
                             <button
                               type="button"
                               onClick={() => handleAction(ord.id, isTakeaway ? 'Served' : 'Ready')}
                               disabled={isUpdatingStatus(ord.id, isTakeaway ? 'Served' : 'Ready')}
-                              className="btn btn-sm rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs text-white"
+                              className="btn btn-sm rounded-pill px-3 py-1.5 fw-bold w-100 shadow-2xs text-white"
                               style={{ backgroundColor: '#F59E0B', borderColor: '#F59E0B', fontSize: '12px' }}
                             >
                               Mark Ready
@@ -910,6 +930,7 @@ export const Kitchen = () => {
                   ) : (
                     readyOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
+                      const isSelfService = isSelfServiceOrder(ord);
                       const isTakeaway = isTakeawayOrder(ord);
 
                       return (
@@ -919,19 +940,25 @@ export const Kitchen = () => {
                             <span className="text-muted small" style={{ fontSize: '11px' }}>{ord.time || '2 mins ago'}</span>
                           </div>
 
-                          <div className="mb-2">
+                          <div className="mb-2 d-flex align-items-center justify-content-between flex-wrap gap-1">
                             <span 
                               className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
                               style={{ 
-                                backgroundColor: isTakeaway ? '#FEF3C7' : '#E0F2FE', 
-                                color: isTakeaway ? '#D97706' : '#0284C7',
-                                border: isTakeaway ? '1px solid #FDE68A' : '1px solid #BAE6FD',
+                                backgroundColor: isSelfService ? '#ECFDF5' : isTakeaway ? '#FEF3C7' : '#E0F2FE', 
+                                color: isSelfService ? '#059669' : isTakeaway ? '#D97706' : '#0284C7',
+                                border: isSelfService ? '1px solid #A7F3D0' : isTakeaway ? '1px solid #FDE68A' : '1px solid #BAE6FD',
                                 fontSize: '11px' 
                               }}
                             >
-                              {isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
-                              <span>{isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
+                              {isSelfService ? <FiCoffee size={12} /> : isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
+                              <span>{isSelfService ? 'Self Service' : isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
                             </span>
+
+                            {isSelfService && (
+                              <span className="badge rounded-pill fw-semibold px-2 py-0.5" style={{ backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A', fontSize: '10.5px' }}>
+                                Counter Paid
+                              </span>
+                            )}
                           </div>
 
                           <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
@@ -978,24 +1005,15 @@ export const Kitchen = () => {
                             </div>
                           )}
 
-                          <div className="d-flex align-items-center justify-content-between gap-2 pt-3 mt-1">
+                          <div className="d-flex align-items-center justify-content-end gap-2 pt-3 mt-1">
                             <button
                               type="button"
-                              onClick={() => setEBillOrder(ord)}
-                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-semibold flex-grow-1 shadow-2xs border text-secondary"
-                              style={{ fontSize: '12px', borderColor: '#CBD5E1' }}
-                            >
-                              View Details
-                            </button>
-
-                            <button
-                              type="button"
-                              onClick={() => handleAction(ord.id, 'Served')}
-                              disabled={isUpdatingStatus(ord.id, 'Served')}
-                              className="btn btn-sm rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs text-white"
+                              onClick={() => handleAction(ord.id, isSelfService ? 'Completed' : 'Served')}
+                              disabled={isUpdatingStatus(ord.id, isSelfService ? 'Completed' : 'Served')}
+                              className="btn btn-sm rounded-pill px-3 py-1.5 fw-bold w-100 shadow-2xs text-white"
                               style={{ backgroundColor: '#0284C7', borderColor: '#0284C7', fontSize: '12px' }}
                             >
-                              Mark Serving
+                              {isSelfService ? 'Mark Completed' : 'Mark Serving'}
                             </button>
                           </div>
                         </div>
@@ -1033,6 +1051,7 @@ export const Kitchen = () => {
                   ) : (
                     completedOrders.map((ord) => {
                       const itemsList = getTicketItems(ord);
+                      const isSelfService = isSelfServiceOrder(ord);
                       const isTakeaway = isTakeawayOrder(ord);
 
                       return (
@@ -1044,19 +1063,25 @@ export const Kitchen = () => {
                             </span>
                           </div>
 
-                          <div className="mb-2">
+                          <div className="mb-2 d-flex align-items-center justify-content-between flex-wrap gap-1">
                             <span 
                               className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5"
                               style={{ 
-                                backgroundColor: isTakeaway ? '#FEF3C7' : '#DCFCE7', 
-                                color: isTakeaway ? '#D97706' : '#16A34A',
-                                border: isTakeaway ? '1px solid #FDE68A' : '1px solid #BBF7D0',
+                                backgroundColor: isSelfService ? '#ECFDF5' : isTakeaway ? '#FEF3C7' : '#DCFCE7', 
+                                color: isSelfService ? '#059669' : isTakeaway ? '#D97706' : '#16A34A',
+                                border: isSelfService ? '1px solid #A7F3D0' : isTakeaway ? '1px solid #FDE68A' : '1px solid #BBF7D0',
                                 fontSize: '11px' 
                               }}
                             >
-                              {isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
-                              <span>{isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
+                              {isSelfService ? <FiCoffee size={12} /> : isTakeaway ? <FiShoppingBag size={12} /> : <FiUser size={12} />}
+                              <span>{isSelfService ? 'Self Service' : isTakeaway ? 'Takeaway' : `Dine-in · Table ${formatTableBadge(ord.table)}`}</span>
                             </span>
+
+                            {isSelfService && (
+                              <span className="badge rounded-pill fw-semibold px-2 py-0.5" style={{ backgroundColor: 'rgba(22, 163, 74, 0.12)', color: '#16A34A', fontSize: '10.5px' }}>
+                                Counter Paid
+                              </span>
+                            )}
                           </div>
 
                           <div className="d-flex flex-column gap-1 py-2 border-top border-bottom" style={{ borderColor: '#F1F5F9' }}>
@@ -1103,59 +1128,16 @@ export const Kitchen = () => {
                             </span>
                           </div>
 
-                          <div className="d-flex align-items-center justify-content-between gap-2 pt-2 mt-2 border-top" style={{ borderColor: '#F1F5F9' }}>
+                          <div className="d-flex align-items-center justify-content-end gap-2 pt-2 mt-2 border-top" style={{ borderColor: '#F1F5F9' }}>
                             <button
                               type="button"
                               onClick={() => setEBillOrder(ord)}
-                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-bold flex-grow-1 shadow-2xs"
+                              className="btn btn-sm bg-white rounded-pill px-3 py-1.5 fw-bold w-100 shadow-2xs"
                               style={{ border: '1px solid #16A34A', color: '#16A34A', fontSize: '12px' }}
                             >
                               <FiFileText size={13} className="me-1" />
                               View Bill
                             </button>
-
-                            {!isTakeaway && (() => {
-                              const isCleared = isTableCleared(ord);
-                              const isReadyForClean = isTableReadyForCleaning(ord);
-                              const isDisabled = clearingTableId === ord.id || isCleared || !isReadyForClean;
-                              const buttonTitle = isCleared
-                                ? "Table is already cleaned and available"
-                                : (!isReadyForClean
-                                  ? "Table cannot be cleaned until all orders for this table are Served"
-                                  : "Clear & mark table available");
-
-                              return (
-                                <button
-                                  type="button"
-                                  onClick={() => handleCleanTable(ord)}
-                                  disabled={isDisabled}
-                                  className={`btn btn-sm rounded-pill px-3 py-1.5 fw-bold d-inline-flex align-items-center justify-content-center gap-1.5 flex-grow-1 shadow-2xs transition-all ${
-                                    isCleared
-                                      ? 'bg-light border text-muted opacity-75'
-                                      : (!isReadyForClean
-                                        ? 'btn-secondary text-white opacity-60'
-                                        : 'btn-success text-white')
-                                  }`}
-                                  style={{
-                                    backgroundColor: isCleared ? '#F1F5F9' : (!isReadyForClean ? '#94A3B8' : '#16A34A'),
-                                    borderColor: isCleared ? '#CBD5E1' : (!isReadyForClean ? '#94A3B8' : '#16A34A'),
-                                    color: isCleared ? '#64748B' : '#FFFFFF',
-                                    fontSize: '12px',
-                                    cursor: isDisabled ? 'not-allowed' : 'pointer'
-                                  }}
-                                  title={buttonTitle}
-                                >
-                                  <FiCheck size={13} />
-                                  <span>
-                                    {clearingTableId === ord.id
-                                      ? 'Clearing...'
-                                      : isCleared
-                                      ? 'Table Cleared'
-                                      : 'Table Cleaned'}
-                                  </span>
-                                </button>
-                              );
-                            })()}
                           </div>
                         </div>
                       );

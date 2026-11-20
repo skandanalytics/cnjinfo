@@ -50,7 +50,8 @@ class InvoiceDownloadView(APIView):
         if order is None:
             return Response({"detail": "Not found."}, status=404)
         is_takeaway = (order.order_type == Order.Type.TAKEAWAY)
-        if order.status != Order.Status.COMPLETED and not (is_takeaway and order.status == Order.Status.SERVED):
+        is_self_service = (order.order_type in (Order.Type.SELF_SERVICE, "SELF_SERVICE", getattr(Order.Type, "SELF_SERVICE", "SELF_SERVICE")))
+        if order.status != Order.Status.COMPLETED and not (is_takeaway and order.status == Order.Status.SERVED) and not is_self_service:
             return Response(
                 {"detail": "The invoice is available after the order is completed.", "code": "invoice_not_ready"},
                 status=409,

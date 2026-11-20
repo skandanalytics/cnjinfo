@@ -97,10 +97,10 @@ export const CustomerLayout = ({ children }) => {
     <div className="d-flex flex-column min-vh-100 bg-light">
       {/* Table Context Overlay Banner */}
       {(() => {
-        const savedType = getOrderType();
-        const isTakeaway = savedType === 'TAKEAWAY';
+        const savedType = getOrderType() || (tableContext?.orderType ? String(tableContext.orderType).toUpperCase() : null);
+        const isTakeaway = savedType === 'TAKEAWAY' || tableContext?.tableNumber === 'Takeaway' || tableContext?.orderType === 'TAKEAWAY';
 
-        if (!savedType) return null;
+        if (!savedType && !tableContext?.tableNumber) return null;
 
         if (isTakeaway) {
           return (
@@ -109,7 +109,7 @@ export const CustomerLayout = ({ children }) => {
               style={{ zIndex: 1010 }}
             >
               <span>🛍️</span>
-              <span>Ordering for: <strong>Takeaway (Pack & Go)</strong></span>
+              <span>Ordering for Takeaway</span>
             </div>
           );
         }
@@ -143,7 +143,7 @@ export const CustomerLayout = ({ children }) => {
             style={{ zIndex: 1010 }}
           >
             <span className="spinner-grow spinner-grow-sm" role="status" aria-hidden="true"></span>
-            <span>Ordering for: <strong>{compactTable || 'Dine-In'}</strong></span>
+            <span>Ordering for: <strong>{compactTable ? (compactTable.startsWith('T') ? compactTable : `Table ${compactTable}`) : 'Dine-In'}</strong></span>
           </div>
         );
       })()}

@@ -20,6 +20,12 @@ export function setStaffSession(access, refresh) {
   localStorage.setItem(ACCESS, access);
   if (refresh) localStorage.setItem(REFRESH, refresh);
   localStorage.setItem('foodie_token_admin', access);
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('foodie_branches_updated'));
+      window.dispatchEvent(new CustomEvent('foodie_auth_changed'));
+    } catch (e) {}
+  }
 }
 
 export function clearStaffSession() {
@@ -33,7 +39,11 @@ let refreshPromise = null;
 
 export async function refreshStaffSession() {
   const refresh = sessionStorage.getItem(REFRESH) || localStorage.getItem(REFRESH);
-  if (!refresh) throw new Error('No refresh token');
+  if (!refresh) {
+    const err = new Error('No refresh token');
+    err.isAuthError = true;
+    throw err;
+  }
   if (!refreshPromise) {
     refreshPromise = fetch(getApiUrl('/auth/refresh/'), {
       method: 'POST',
@@ -41,8 +51,13 @@ export async function refreshStaffSession() {
       body: JSON.stringify({ refresh }),
     }).then(async (res) => {
       const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.detail || 'Session expired');
-      setStaffSession(data.access, data.refresh);
+      if (!res.ok) {
+        const err = new Error(data.detail || 'Session expired');
+        err.status = res.status;
+        err.isAuthError = res.status === 401 || res.status === 403;
+        throw err;
+      }
+      setStaffSession(data.access, data.refresh || refresh);
       return data.access;
     }).finally(() => {
       refreshPromise = null;
@@ -88,8 +103,10 @@ export async function staffFetch(path, options = {}) {
       const next = await refreshStaffSession();
       headers.Authorization = `Bearer ${next}`;
       res = await fetch(getApiUrl(path), { method: options.method || 'GET', headers, body, _retried: true });
-    } catch {
-      goToLogin();
+    } catch (refreshErr) {
+      if (refreshErr.isAuthError || refreshErr.status === 401 || refreshErr.status === 403) {
+        goToLogin();
+      }
       const err = new Error('Session invalid or unauthorized on this backend server. Please log in again.');
       err.status = res.status;
       throw err;

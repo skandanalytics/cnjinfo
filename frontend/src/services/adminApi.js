@@ -74,11 +74,16 @@ export function cleanBranchParam(val) {
   return null;
 }
 
-export function getSelectedAdminBranch() {
+export function getSelectedAdminBranch(options = {}) {
   try {
     const rawUser = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
     const u = rawUser ? JSON.parse(rawUser)?.user : null;
-    const isSuperAdmin = u?.backendRole === 'SUPER_ADMIN' || u?.is_superuser || (u?.role === 'admin' && !u?.branchId);
+    const isSuperAdmin = Boolean(
+      u?.backendRole === 'SUPER_ADMIN' ||
+      u?.is_superuser === true ||
+      u?.employeeCode?.toUpperCase() === 'ADMIN' ||
+      (u?.role === 'admin' && (!u?.branchId || u?.branchId === 'null' || u?.branchId === 'undefined'))
+    );
     if (!isSuperAdmin) {
       return u?.branchId ? cleanBranchParam(u.branchId) : null;
     }
@@ -87,28 +92,26 @@ export function getSelectedAdminBranch() {
     if (!cleanedStored) {
       if (stored !== 'ALL') {
         localStorage.removeItem('foodie_admin_selected_branch');
+        return null;
       }
-      return null;
-    }
-    try {
-      const rawCached = localStorage.getItem('foodie_cached_branches');
-      if (rawCached) {
-        const branches = JSON.parse(rawCached);
-        if (Array.isArray(branches) && branches.length > 0) {
-          const exists = branches.some((b) => String(b.id) === String(cleanedStored));
-          if (!exists) {
-            const primary = branches.find((b) => b.is_primary && b.is_active) || branches.find((b) => b.is_active) || branches[0];
-            const fallback = primary ? cleanBranchParam(primary.id) : null;
-            if (fallback) {
-              localStorage.setItem('foodie_admin_selected_branch', fallback);
-            } else {
-              localStorage.removeItem('foodie_admin_selected_branch');
-            }
-            return fallback;
+      if (options?.allowAll) {
+        return null;
+      }
+      try {
+        const rawCached = localStorage.getItem('foodie_cached_branches');
+        if (rawCached) {
+          const branches = JSON.parse(rawCached);
+          if (Array.isArray(branches) && branches.length > 0) {
+            const primary = branches.find((b) => (b.is_primary || b.isMainBranch) && (b.status === 'Active' || b.is_active !== false)) ||
+                            branches.find((b) => b.is_primary || b.isMainBranch) ||
+                            branches.find((b) => b.status === 'Active' || b.is_active !== false) ||
+                            branches[0];
+            return primary ? cleanBranchParam(primary.id) : null;
           }
         }
-      }
-    } catch {}
+      } catch {}
+      return null;
+    }
     return cleanedStored;
   } catch {
     return null;
@@ -123,7 +126,12 @@ export async function currentBranchId() {
     try {
       const u = JSON.parse(raw)?.user;
       sessionBranchId = u?.branchId || null;
-      isSuperAdmin = u?.backendRole === 'SUPER_ADMIN' || u?.is_superuser || (u?.role === 'admin' && !u?.branchId);
+      isSuperAdmin = Boolean(
+        u?.backendRole === 'SUPER_ADMIN' ||
+        u?.is_superuser === true ||
+        u?.employeeCode?.toUpperCase() === 'ADMIN' ||
+        (u?.role === 'admin' && (!u?.branchId || u?.branchId === 'null' || u?.branchId === 'undefined'))
+      );
     } catch {
       /* ignore */
     }
@@ -137,14 +145,20 @@ export async function currentBranchId() {
   }
   if (isSuperAdmin) {
     const selectedBranch = localStorage.getItem('foodie_admin_selected_branch');
-    if (selectedBranch && selectedBranch !== 'ALL' && branches.some((b) => String(b.id) === String(selectedBranch))) {
-      return Number(selectedBranch);
+    if (selectedBranch && selectedBranch !== 'ALL') {
+      const match = branches.find((b) => String(b.id) === String(selectedBranch));
+      if (match) return match.id;
+      const num = parseInt(selectedBranch, 10);
+      if (!Number.isNaN(num) && num > 0) return num;
     }
   }
   if (branchMemo && branches.some((b) => String(b.id) === String(branchMemo))) {
     return branchMemo;
   }
-  const primary = branches.find((b) => b.is_primary && b.is_active) || branches.find((b) => b.is_primary);
+  const primary = branches.find((b) => (b.is_primary || b.isMainBranch) && (b.is_active !== false && b.status !== 'Inactive')) ||
+                  branches.find((b) => b.is_primary || b.isMainBranch) ||
+                  branches.find((b) => b.is_active !== false && b.status !== 'Inactive') ||
+                  branches[0];
   if (!primary) throw new Error('Mark one branch as the primary branch in Manage Branches first.');
   branchMemo = primary.id;
   return primary.id;
@@ -244,10 +258,11 @@ export async function staffLogout() {
 }
 
 function mapBranch(b) {
-  let branchStatus = b.is_active ? 'Active' : 'Inactive';
+  const isActive = b.is_active !== false && b.status !== 'Inactive';
+  let branchStatus = isActive ? 'Active' : 'Inactive';
   try {
     const savedStatusMap = JSON.parse(localStorage.getItem('foodie_branch_statuses') || '{}');
-    if (savedStatusMap[String(b.id)]) {
+    if (savedStatusMap[String(b.id)] && (savedStatusMap[String(b.id)] === 'Active' || savedStatusMap[String(b.id)] === 'Inactive')) {
       branchStatus = savedStatusMap[String(b.id)];
     }
   } catch (e) {}
@@ -270,6 +285,8 @@ function mapBranch(b) {
     tablesCount: effectiveTablesCount,
     liveTables: b.tables_count ?? effectiveTablesCount,
     status: branchStatus,
+    is_active: branchStatus === 'Active',
+    is_primary: Boolean(b.is_primary),
     isMainBranch: Boolean(b.is_primary),
     image: b.cover_image_url || '',
     gst_rate: b.gst_rate,
@@ -310,12 +327,18 @@ export async function saveBranch(form, existingId) {
       localStorage.setItem('foodie_branch_statuses', JSON.stringify(savedStatusMap));
     } catch (e) {}
   }
+  try {
+    window.dispatchEvent(new CustomEvent('foodie_branches_updated'));
+  } catch (e) {}
   return mapBranch(data);
 }
 
 export async function removeBranch(id) {
   const data = await staffJson(`/branches/${id}/`, { method: 'DELETE' });
   branchMemo = null;
+  try {
+    window.dispatchEvent(new CustomEvent('foodie_branches_updated'));
+  } catch (e) {}
   return data;
 }
 
@@ -348,7 +371,10 @@ export async function listTableViews() {
   return listOf(await staffJson('/table-views/'));
 }
 
-export async function listTables(branchId = null) {
+export async function listTables(branchId = null, options = {}) {
+  if (branchId === 'ALL' || options?.allowAll) {
+    return listOf(await staffJson('/tables/')).map(mapTable);
+  }
   let targetBranch = cleanBranchParam(branchId);
   if (!targetBranch) {
     targetBranch = getSelectedAdminBranch();
@@ -544,8 +570,10 @@ function mapFood(f, stockByFood) {
   };
 }
 
-async function stockMap() {
-  const rows = listOf(await staffJson('/inventory/'));
+async function stockMap(branchId = null) {
+  const clean = cleanBranchParam(branchId);
+  const query = clean ? `?branch=${encodeURIComponent(clean)}` : '';
+  const rows = listOf(await staffJson(`/inventory/${query}`));
   return new Map(rows.map((row) => [row.food, row]));
 }
 
@@ -557,7 +585,7 @@ export async function listFoods(branchId = null) {
   const query = targetBranch ? ('&branch=' + encodeURIComponent(targetBranch)) : '';
   const [foods, stocks] = await Promise.all([
     staffJson('/foods/?is_active=true' + query),
-    stockMap(),
+    stockMap(targetBranch),
   ]);
   return listOf(foods).map((food) => mapFood(food, stocks));
 }
@@ -1049,7 +1077,10 @@ export function mapOrder(o) {
     ? Number(override.round_off)
     : Number(o.round_off || 0);
 
-  const displayNo = o.display_order_number || o.display_number || (o.parent_order_id && Number(o.continuation_index) > 0 ? `${o.parent_order_id}.${o.continuation_index}` : String(o.id));
+  let displayNo = o.display_order_number || o.display_number || (o.parent_order_id && Number(o.continuation_index) > 0 ? `${o.parent_order_id}-${o.continuation_index}` : String(o.id));
+  if (typeof displayNo === 'string' && displayNo.includes('.') && (o.parent_order_id || Number(o.continuation_index) > 0)) {
+    displayNo = displayNo.replace('.', '-');
+  }
 
   const normalizeOrderItem = (item) => {
     if (!item) return item;
@@ -1149,8 +1180,9 @@ export function mapOrder(o) {
     service_charge_rate: finalServiceRate,
     service_charge_amount: finalServiceAmount,
     serviceCharge: finalServiceAmount,
-    branchId: o.branch_id,
-    branch_id: o.branch_id,
+    branchId: o.branch_id ?? o.branchId ?? (typeof o.branch === 'object' ? o.branch?.id : o.branch) ?? null,
+    branch_id: o.branch_id ?? o.branchId ?? (typeof o.branch === 'object' ? o.branch?.id : o.branch) ?? null,
+    branch: o.branch_id ?? o.branchId ?? (typeof o.branch === 'object' ? o.branch?.id : o.branch) ?? null,
     branchName: o.branch_name || '',
     branchAddress: o.branch_address || '',
     branchPhone: o.branch_phone || '',
@@ -1179,15 +1211,18 @@ export async function listOrdersForUi(options = {}) {
   let loggedInUser = null;
   try {
     const raw = sessionStorage.getItem('foodie_auth_admin') || localStorage.getItem('foodie_auth_admin');
-    if (raw) loggedInUser = JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      loggedInUser = parsed?.user || parsed;
+    }
   } catch {}
   const isEmployee = loggedInUser?.role === 'employee' || ['STAFF', 'CHEF', 'CASHIER'].includes(loggedInUser?.backendRole || loggedInUser?.role);
   if (isEmployee) {
     isMine = true;
   }
   let targetBranch = cleanBranchParam(options?.branchId);
-  if (!targetBranch && !isEmployee) {
-    targetBranch = getSelectedAdminBranch();
+  if (!targetBranch && !isEmployee && options?.branchId === undefined) {
+    targetBranch = getSelectedAdminBranch({ allowAll: true });
   }
   const params = [];
   if (isMine) params.push('mine=1');

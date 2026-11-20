@@ -43,19 +43,25 @@ export const Button = ({
   return (
     <button
       type={type}
-      className={`${getVariantClass()} ${getSizeClass()} ${className}`}
+      className={`position-relative ${getVariantClass()} ${getSizeClass()} ${className}`}
       disabled={disabled || loading}
       onClick={onClick}
+      style={{
+        ...props.style,
+      }}
       {...props}
     >
-      {loading ? (
-        <>
-          <span className="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
-          Please wait...
-        </>
-      ) : (
-        children
+      {loading && (
+        <span
+          className="position-absolute top-50 start-50 translate-middle d-inline-flex align-items-center justify-content-center"
+          aria-hidden="true"
+        >
+          <span className="spinner-border spinner-border-sm" role="status" />
+        </span>
       )}
+      <span className={loading ? 'invisible' : ''}>
+        {children}
+      </span>
     </button>
   );
 };

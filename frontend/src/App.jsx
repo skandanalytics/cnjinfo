@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { AuthProvider } from './context/AuthContext';
+import { BranchProvider } from './context/BranchContext';
 import { CartProvider } from './context/CartContext';
 import { OrderProvider } from './context/OrderContext';
 import { AppProvider } from './context/AppContext';
@@ -20,13 +21,15 @@ function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <CartProvider>
-          <OrderProvider>
-            <AppProvider>
-              <AppRoutes />
-            </AppProvider>
-          </OrderProvider>
-        </CartProvider>
+        <BranchProvider>
+          <CartProvider>
+            <OrderProvider>
+              <AppProvider>
+                <AppRoutes />
+              </AppProvider>
+            </OrderProvider>
+          </CartProvider>
+        </BranchProvider>
       </AuthProvider>
     </ErrorBoundary>
   );

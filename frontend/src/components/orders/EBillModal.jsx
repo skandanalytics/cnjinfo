@@ -36,6 +36,29 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
   const [completingOrder, setCompletingOrder] = useState(false);
   const [finalizedSuccess, setFinalizedSuccess] = useState(false);
   const [previewData, setPreviewData] = useState(null);
+  const autoPrintedRef = React.useRef(false);
+
+  const printInvoice = () => {
+    const source = document.getElementById('foodie-invoice-sheet');
+    if (!source) return;
+    const existing = document.getElementById('foodie-print-root');
+    if (existing) existing.remove();
+    const root = document.createElement('div');
+    root.id = 'foodie-print-root';
+    root.appendChild(source.cloneNode(true));
+    document.body.appendChild(root);
+    document.body.classList.add('foodie-printing');
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      document.body.classList.remove('foodie-printing');
+      root.remove();
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
+    window.print();
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -72,27 +95,45 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
     setFinalizedSuccess(false);
   }, [order?.id, isOpen]);
 
-  if (!order) return null;
+  useEffect(() => {
+    if (isOpen && order && (order.autoPrint || previewData?.autoPrint) && !autoPrintedRef.current) {
+      autoPrintedRef.current = true;
+      const timer = setTimeout(() => {
+        printInvoice();
+      }, 400);
+      return () => clearTimeout(timer);
+    }
+    if (!isOpen) {
+      autoPrintedRef.current = false;
+    }
+  }, [isOpen, order?.id, order?.autoPrint, previewData?.autoPrint]);
 
-  const statusText = String(order.backendStatus || order.status || '');
+  const baseOrder = order || {};
+  const statusText = String(baseOrder.backendStatus || baseOrder.status || '');
+  const isSelfService = baseOrder.order_type === 'SELF_SERVICE'
+    || baseOrder.orderType === 'Self Service'
+    || String(baseOrder.table || '').toLowerCase() === 'self service'
+    || String(baseOrder.table_label || '').toLowerCase() === 'self service';
   const isCompleted = ['COMPLETED', 'DELIVERED', 'DONE', 'SETTLED'].includes(statusText.toUpperCase());
-  const isFinalized = isCompleted || finalizedSuccess;
+  const isFinalized = isCompleted || finalizedSuccess || isSelfService;
   const isConfirmedPaid = Boolean(
-    order.is_paid ||
-    order.isPaid ||
-    String(order.payment_status || order.paymentStatus || '').toUpperCase() === 'PAID' ||
-    String(order.status || '').toUpperCase() === 'SETTLED'
+    isSelfService ||
+    baseOrder.is_paid ||
+    baseOrder.isPaid ||
+    String(baseOrder.payment_status || baseOrder.paymentStatus || '').toUpperCase() === 'PAID' ||
+    String(baseOrder.payment_status || baseOrder.paymentStatus || '').toUpperCase() === 'COUNTER_PAID' ||
+    String(baseOrder.status || '').toUpperCase() === 'SETTLED'
   );
-  const paymentCode = isConfirmedPaid ? 'PAID' : String(order.payment_status || order.paymentStatus || 'UNPAID').toUpperCase();
-  const paymentLabel = PAYMENT_STATUS_LABEL[paymentCode] || (paymentCode === 'PAID' ? 'Paid' : 'Unpaid');
-  const methodName = order.paymentMethodName || (
-    order.payment_method && !['UNPAID', 'PAID', 'PENDING', 'FAILED', 'REFUNDED', 'SUCCESS'].includes(String(order.payment_method).toUpperCase())
-      ? order.payment_method
+  const paymentCode = isConfirmedPaid ? 'PAID' : String(baseOrder.payment_status || baseOrder.paymentStatus || 'UNPAID').toUpperCase();
+  const paymentLabel = isSelfService ? 'Counter Paid' : (PAYMENT_STATUS_LABEL[paymentCode] || (paymentCode === 'PAID' ? 'Paid' : 'Unpaid'));
+  const methodName = isSelfService ? 'Counter' : (baseOrder.paymentMethodName || (
+    baseOrder.payment_method && !['UNPAID', 'PAID', 'PENDING', 'FAILED', 'REFUNDED', 'SUCCESS'].includes(String(baseOrder.payment_method).toUpperCase())
+      ? baseOrder.payment_method
       : ''
-  );
+  ));
 
   const handleDownloadPDF = async () => {
-    if (!isCompleted) return;
+    if (!isFinalized || !order) return;
     setDownloadingPdf(true);
     try {
       const { downloadInvoice, isStaffScreen } = await import('../../services/adminApi');
@@ -109,40 +150,42 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
   };
 
   const activeSource = previewData ? {
-    ...order,
+    ...baseOrder,
     ...previewData,
-    items: previewData.items || order.items,
-    combined_items: previewData.items || order.combined_items,
-    subtotal: previewData.items_subtotal || order.subtotal || order.items_subtotal,
-    dish_discount_total: previewData.dish_discount_total || order.dish_discount_total,
-    coupon_discount_total: previewData.coupon_discount_total || order.coupon_discount_total,
-    customization_total: previewData.customization_total || order.customization_total,
-    takeaway_charge: previewData.takeaway_charge || order.takeaway_charge,
-    gst_amount: previewData.gst_amount || order.gst_amount,
-    service_charge_amount: previewData.service_charge_amount || order.service_charge_amount,
-    round_off: previewData.round_off || order.round_off,
-    total: previewData.total_amount || order.total || order.total_amount,
-    total_amount: previewData.total_amount || order.total_amount || order.total,
-    has_continuations: previewData.has_continuations ?? order.has_continuations,
-    display_order_number: previewData.display_order_number || order.display_order_number || order.orderNumber,
-  } : order;
+    items: previewData.items || baseOrder.items || [],
+    combined_items: previewData.items || baseOrder.combined_items || [],
+    subtotal: previewData.items_subtotal || baseOrder.subtotal || baseOrder.items_subtotal || 0,
+    dish_discount_total: previewData.dish_discount_total || baseOrder.dish_discount_total || 0,
+    coupon_discount_total: previewData.coupon_discount_total || baseOrder.coupon_discount_total || 0,
+    customization_total: previewData.customization_total || baseOrder.customization_total || 0,
+    takeaway_charge: previewData.takeaway_charge || baseOrder.takeaway_charge || 0,
+    gst_amount: previewData.gst_amount || baseOrder.gst_amount || 0,
+    service_charge_amount: previewData.service_charge_amount || baseOrder.service_charge_amount || 0,
+    round_off: previewData.round_off || baseOrder.round_off || 0,
+    total: previewData.total_amount || baseOrder.total || baseOrder.total_amount || 0,
+    total_amount: previewData.total_amount || baseOrder.total_amount || baseOrder.total || 0,
+    has_continuations: previewData.has_continuations ?? baseOrder.has_continuations,
+    display_order_number: previewData.display_order_number || baseOrder.display_order_number || baseOrder.orderNumber,
+  } : baseOrder;
 
-  const isTakeaway = activeSource.order_type === 'TAKEAWAY'
+  const isTakeaway = !isSelfService && (
+    activeSource.order_type === 'TAKEAWAY'
     || activeSource.orderType === 'Takeaway'
     || String(activeSource.table || '').toLowerCase() === 'takeaway'
-    || String(activeSource.table_label || '').toLowerCase() === 'takeaway';
+    || String(activeSource.table_label || '').toLowerCase() === 'takeaway'
+  );
 
   // Resolve dining table display prioritizing activeSource/previewData then order
-  const displayTable = isTakeaway ? null : (
+  const displayTable = (isTakeaway || isSelfService) ? null : (
     (typeof activeSource.table === 'object' && activeSource.table !== null ? (activeSource.table.label || activeSource.table.table_number || activeSource.table.number) : null)
     || activeSource.table_label
     || activeSource.table_number
-    || (typeof order.table === 'object' && order.table !== null ? (order.table.label || order.table.table_number || order.table.number) : null)
-    || order.table_label
-    || order.table_number
+    || (typeof baseOrder.table === 'object' && baseOrder.table !== null ? (baseOrder.table.label || baseOrder.table.table_number || baseOrder.table.number) : null)
+    || baseOrder.table_label
+    || baseOrder.table_number
     || activeSource.table
-    || order.tableNumber
-    || order.table
+    || baseOrder.tableNumber
+    || baseOrder.table
     || null
   );
   const subtotal = Number(activeSource.subtotal ?? activeSource.items_subtotal ?? 0);
@@ -205,27 +248,7 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
     }
   };
 
-  const printInvoice = () => {
-    const source = document.getElementById('foodie-invoice-sheet');
-    if (!source) return;
-    const existing = document.getElementById('foodie-print-root');
-    if (existing) existing.remove();
-    const root = document.createElement('div');
-    root.id = 'foodie-print-root';
-    root.appendChild(source.cloneNode(true));
-    document.body.appendChild(root);
-    document.body.classList.add('foodie-printing');
-    let cleaned = false;
-    const cleanup = () => {
-      if (cleaned) return;
-      cleaned = true;
-      document.body.classList.remove('foodie-printing');
-      root.remove();
-      window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
-    window.print();
-  };
+  if (!isOpen || !order) return null;
 
   return (
     <Modal
@@ -285,14 +308,14 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
           </div>
         </div>
 
-        {(customerName || customerPhone || (!isTakeaway && displayTable)) && (
+        {(customerName || customerPhone || isTakeaway || isSelfService || displayTable) && (
           <div className="p-2.5 rounded-3 bg-light-subtle border mb-3 small d-flex flex-wrap align-items-center justify-content-between gap-2">
             <div>
               {customerName && <span className="fw-semibold text-dark me-3">Customer: {customerName}</span>}
               {customerPhone && <span className="text-secondary">Mobile: +91 {customerPhone}</span>}
             </div>
             <div>
-              <span className="fw-bold text-dark">{isTakeaway ? 'Takeaway' : `Dining Table: ${displayTable || '—'}`}</span>
+              <span className="fw-bold text-dark">{isSelfService ? 'Order Type: Self Service' : isTakeaway ? 'Order Type: Takeaway' : `Dining Table: ${displayTable || '—'}`}</span>
             </div>
           </div>
         )}
@@ -371,17 +394,17 @@ export const EBillModal = ({ isOpen, order, onClose, onProceedToBill }) => {
             <span
               className="fw-bold"
               style={{
-                color: isConfirmedPaid ? '#16A34A' : '#DC2626',
+                color: (isConfirmedPaid || isSelfService) ? '#16A34A' : '#DC2626',
                 fontSize: '13px'
               }}
             >
-              {isConfirmedPaid ? 'Paid' : 'Unpaid / pending'}
+              {isSelfService ? 'Counter Paid' : isConfirmedPaid ? 'Paid' : 'Unpaid / pending'}
             </span>
           </div>
-          {methodName ? (
+          {(methodName || isSelfService) ? (
             <div className="text-end">
               <span className="text-secondary small me-1">Payment method:</span>
-              <strong className="text-dark small">{methodName}</strong>
+              <strong className="text-dark small">{isSelfService ? 'Counter' : methodName}</strong>
             </div>
           ) : null}
         </div>

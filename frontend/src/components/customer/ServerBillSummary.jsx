@@ -27,6 +27,13 @@ export const ServerBillSummary = ({ cart, children }) => {
           {Number(pricing.dish_discount_total) > 0 && (
             <Row label="Menu Discounts" value={`-${formatCurrency(Number(pricing.dish_discount_total))}`} className="text-success" />
           )}
+          {((pricing.coupons || []).length > 0) ? (
+            pricing.coupons.map((c) => (
+              <Row key={c.code} label={`Coupon Discount (${c.code})`} value={`-${formatCurrency(Number(c.discount))}`} className="text-success" />
+            ))
+          ) : (Number(pricing.coupon_discount_total || 0) > 0 && (
+            <Row label="Coupon Discount" value={`-${formatCurrency(Number(pricing.coupon_discount_total))}`} className="text-success" />
+          ))}
           {isTakeaway && takeawayCharge > 0 && (
             <Row label="Packing Charge (Takeaway)" value={`+${formatCurrency(takeawayCharge)}`} className="text-dark" />
           )}
@@ -40,9 +47,6 @@ export const ServerBillSummary = ({ cart, children }) => {
           {pricing.taxable_amount != null && (
             <Row label="Taxable Amount" value={formatCurrency(Number(pricing.taxable_amount))} className="text-dark" />
           )}
-          {(pricing.coupons || []).map((c) => (
-            <Row key={c.code} label={`Coupon Discount (${c.code})`} value={`-${formatCurrency(Number(c.discount))}`} className="text-success" />
-          ))}
           <Row label={`GST (${Number(pricing.gst_rate) || 0}%)`} value={formatCurrency(Number(pricing.gst_amount || 0))} className="text-dark" />
           {Number(pricing.round_off || 0) !== 0 && (
             <Row label="Round Off" value={formatCurrency(Number(pricing.round_off || 0))} className="text-dark" />

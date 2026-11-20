@@ -130,11 +130,11 @@ export const OrderTypeModal = ({ isOpen, onSelectType, dineInAvailable = true })
               </div>
             ) : (
               <div>
-                {/* Responsive grid of selectable table buttons (no dropdown) */}
-                <div className="row row-cols-3 row-cols-sm-4 g-2 pt-1">
+                {/* Responsive grid of compact numeric table cards */}
+                <div className="row row-cols-4 g-2 pt-1">
                   {allTables.map(t => {
-                    const num = t.table_number || t.number || `T${t.id}`;
-                    const cleanNum = String(num).startsWith('T') ? String(num) : `T${num}`;
+                    const rawNum = String(t.table_number || t.number || t.id || '');
+                    const cleanNum = rawNum.replace(/\D/g, '') || rawNum;
                     const isAvail = t.available === true || t.status === 'AVAILABLE' || t.status === 'Available' || t.is_available === true;
                     const isSelected = selectedTable && String(selectedTable.id) === String(t.id);
 
@@ -144,43 +144,38 @@ export const OrderTypeModal = ({ isOpen, onSelectType, dineInAvailable = true })
                           type="button"
                           disabled={!isAvail}
                           onClick={() => isAvail && setSelectedTable(t)}
-                          className={`btn w-100 p-2 rounded-3 text-center transition-all d-flex flex-column align-items-center justify-content-center ${
+                          className={`btn w-100 p-0 rounded-3 text-center transition-all d-flex align-items-center justify-content-center ${
                             isSelected
                               ? 'btn-danger text-white shadow-sm'
                               : isAvail
                               ? 'btn-outline-secondary bg-white text-dark'
-                              : 'btn-light text-muted opacity-50'
+                              : 'btn-light text-muted opacity-40'
                           }`}
                           style={{
+                            height: '52px',
                             border: isSelected ? '2px solid #F20D2D' : isAvail ? '1.5px solid #CBD5E1' : '1px dashed #CBD5E1',
+                            backgroundColor: isSelected ? '#F20D2D' : isAvail ? '#FFFFFF' : '#F1F5F9',
                             cursor: isAvail ? 'pointer' : 'not-allowed',
-                            minHeight: '62px'
+                            fontSize: '17px',
+                            fontWeight: isSelected ? '700' : '600',
                           }}
-                          title={isAvail ? `Select Table ${cleanNum} (${t.capacity || 4} Seats)` : `Table ${cleanNum} is currently Occupied`}
+                          title={isAvail ? `Table ${cleanNum} (${t.capacity || 4} Seats)` : `Table ${cleanNum} (Occupied)`}
                         >
-                          <span className="fw-bold" style={{ fontSize: '14px', lineHeight: 1.1 }}>
-                            {cleanNum}
-                          </span>
-                          <span 
-                            className="mt-1 badge rounded-pill px-1.5 py-0.5" 
-                            style={{ 
-                              fontSize: '9.5px',
-                              backgroundColor: isSelected ? 'rgba(255,255,255,0.25)' : isAvail ? '#DCFCE7' : '#FEE2E2',
-                              color: isSelected ? '#FFFFFF' : isAvail ? '#166534' : '#991B1B'
-                            }}
-                          >
-                            {isAvail ? `${t.capacity || 4} Seats` : 'Occupied'}
-                          </span>
+                          <span>{cleanNum}</span>
                         </button>
                       </div>
                     );
                   })}
                 </div>
                 {selectedTable && (
-                  <div className="mt-2.5 small text-secondary d-flex align-items-center gap-1.5">
-                    <span className="text-dark fw-bold">Selected:</span>
-                    <span>Table {String(selectedTable.table_number || selectedTable.id).startsWith('T') ? String(selectedTable.table_number || selectedTable.id) : `T${selectedTable.table_number || selectedTable.id}`}</span>
-                    <span className="text-muted">({selectedTable.location || 'Indoor'}, {selectedTable.capacity || 4} Seats)</span>
+                  <div className="mt-2.5 small text-secondary d-flex align-items-center justify-content-between">
+                    <div>
+                      <span className="text-dark fw-bold">Selected: </span>
+                      <span className="fw-semibold text-danger">
+                        Table {String(selectedTable.table_number || selectedTable.id).replace(/\D/g, '') || selectedTable.table_number}
+                      </span>
+                      <span className="text-muted ms-1">({selectedTable.location || 'Indoor'}, {selectedTable.capacity || 4} Seats)</span>
+                    </div>
                   </div>
                 )}
               </div>

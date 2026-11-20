@@ -11,11 +11,13 @@ import Loader from '../../components/common/Loader';
 import { analyticsService } from '../../services/analyticsService';
 import { dashboardService } from '../../services/dashboardService';
 import { restaurantService } from '../../services/restaurantService';
+import { useBranch } from '../../context/BranchContext';
 import { FiTrendingUp, FiShoppingBag, FiLayers, FiAlertCircle, FiCalendar } from 'react-icons/fi';
 import formatCurrency from '../../utils/formatCurrency';
 
 export const Dashboard = () => {
   const navigate = useNavigate();
+  const { selectedBranch, setSelectedBranch, isSuperAdmin } = useBranch();
   const [summary, setSummary] = useState(null);
   const [revenue, setRevenue] = useState([]);
   const [activities, setActivities] = useState([]);
@@ -26,11 +28,16 @@ export const Dashboard = () => {
   const todayStrIso = useMemo(() => new Date().toISOString().split('T')[0], []);
   const [openingDateIso, setOpeningDateIso] = useState(null);
 
+  const [branches, setBranches] = useState([]);
+  const [selectedBranchId, setSelectedBranchId] = useState(selectedBranch || 'ALL');
+
   useEffect(() => {
     let isMounted = true;
-    restaurantService.getRestaurants().then((branches) => {
-      if (!isMounted || !Array.isArray(branches) || branches.length === 0) return;
-      const sortedByCreated = [...branches].sort((a, b) => {
+    restaurantService.getRestaurants().then((branchList) => {
+      if (!isMounted || !Array.isArray(branchList)) return;
+      setBranches(branchList);
+      if (branchList.length === 0) return;
+      const sortedByCreated = [...branchList].sort((a, b) => {
         const da = new Date(a.created_at || a.createdAt || Date.now());
         const db = new Date(b.created_at || b.createdAt || Date.now());
         return da - db;
@@ -54,7 +61,7 @@ export const Dashboard = () => {
   const [toDate, setToDate] = useState(todayStrIso);
 
   const [revenueDetails, setRevenueDetails] = useState({
-    revenuePeriod: "Weekly Revenue",
+    revenuePeriod: "Weekly Revenue Distribution",
     revenueAmount: 0,
     comparison: "vs last week",
     percentageChange: "+0.0%",
@@ -78,19 +85,29 @@ export const Dashboard = () => {
     activeDatesRef.current = { fromDate, toDate };
   }, [fromDate, toDate]);
 
-  const fetchAnalytics = useCallback(async (isInitial = true, rangeOpts = null) => {
+  const activeBranchRef = React.useRef(selectedBranchId);
+  useEffect(() => {
+    activeBranchRef.current = selectedBranchId;
+  }, [selectedBranchId]);
+
+  const fetchAnalytics = useCallback(async (isInitial = true, filterOpts = null) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     if (isInitial) setLoading(true);
     try {
-      const activeRange = rangeOpts || activeDatesRef.current;
+      const activeRange = filterOpts || activeDatesRef.current;
+      const targetBranch = filterOpts?.branchId !== undefined
+        ? filterOpts.branchId
+        : (activeBranchRef.current === 'ALL' ? null : activeBranchRef.current);
+
       const bundle = await analyticsService.getDashboardBundle({
         fromDate: activeRange?.fromDate,
         toDate: activeRange?.toDate,
+        branchId: targetBranch,
       });
       cachedOrdersRef.current = bundle.allOrders || null;
       let details = {
-        revenuePeriod: "Weekly Revenue",
+        revenuePeriod: "Weekly Revenue Distribution",
         revenueAmount: 0,
         comparison: "vs last week",
         percentageChange: "+0.0%",
@@ -135,6 +152,10 @@ export const Dashboard = () => {
   }, []);
 
   useEffect(() => {
+    setSelectedBranchId(selectedBranch || 'ALL');
+  }, [selectedBranch]);
+
+  useEffect(() => {
     fetchAnalytics(true);
 
     const scheduleSync = () => {
@@ -145,10 +166,15 @@ export const Dashboard = () => {
     };
 
     const handleBranchSync = (e) => {
-      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_selected_branch') ?? '');
+      const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_admin_selected_branch') ?? 'ALL');
       if (lastBranchRef.current === nextBranch) return;
       lastBranchRef.current = nextBranch;
-      fetchAnalytics(true);
+      setSelectedBranchId(nextBranch);
+      fetchAnalytics(true, {
+        fromDate: activeDatesRef.current.fromDate,
+        toDate: activeDatesRef.current.toDate,
+        branchId: nextBranch === 'ALL' ? null : nextBranch,
+      });
     };
     window.addEventListener('foodie_branch_selected', handleBranchSync);
     window.addEventListener('foodie_orders_updated', scheduleSync);
@@ -193,7 +219,7 @@ export const Dashboard = () => {
       nextTo = val;
       setToDate(val);
     }
-    fetchAnalytics(true, { fromDate: val, toDate: nextTo });
+    fetchAnalytics(false, { fromDate: val, toDate: nextTo });
   };
 
   const handleToDateChange = (val) => {
@@ -203,13 +229,13 @@ export const Dashboard = () => {
       nextFrom = val;
       setFromDate(val);
     }
-    fetchAnalytics(true, { fromDate: nextFrom, toDate: val });
+    fetchAnalytics(false, { fromDate: nextFrom, toDate: val });
   };
 
   const handleResetDates = () => {
     setFromDate(todayStrIso);
     setToDate(todayStrIso);
-    fetchAnalytics(true, { fromDate: todayStrIso, toDate: todayStrIso });
+    fetchAnalytics(false, { fromDate: todayStrIso, toDate: todayStrIso });
   };
 
   if (loading) {
@@ -230,11 +256,10 @@ export const Dashboard = () => {
         actions={
           <div className="d-flex align-items-center gap-2 flex-wrap">
             <div 
-              className="d-flex align-items-center gap-1.5 px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
+              className="d-flex align-items-center px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
               style={{ height: '38px', backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
             >
-              <FiCalendar className="text-danger flex-shrink-0" size={15} />
-              <span className="text-secondary small fw-medium me-1">From:</span>
+              <span className="text-secondary small fw-medium me-2">From:</span>
               <input
                 type="date"
                 value={fromDate}
@@ -248,11 +273,10 @@ export const Dashboard = () => {
             </div>
 
             <div 
-              className="d-flex align-items-center gap-1.5 px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
+              className="d-flex align-items-center px-3 py-1.5 rounded-pill border shadow-xs bg-white text-dark small fw-semibold"
               style={{ height: '38px', backgroundColor: 'var(--surface-color)', borderColor: 'var(--border-color)', color: 'var(--text-primary)' }}
             >
-              <FiCalendar className="text-danger flex-shrink-0" size={15} />
-              <span className="text-secondary small fw-medium me-1">To:</span>
+              <span className="text-secondary small fw-medium me-2">To:</span>
               <input
                 type="date"
                 value={toDate}
@@ -288,7 +312,6 @@ export const Dashboard = () => {
             value={formatCurrency(summary?.totalRevenue ?? revenueDetails?.revenueAmount ?? 0)}
             icon={FiTrendingUp}
             color="success"
-            pillText={`${revenueDetails?.percentageChange || '+0.0%'} from last week`}
             onClick={() => navigate('/admin/orders')}
           />
         </div>
@@ -298,7 +321,6 @@ export const Dashboard = () => {
             value={summary?.pendingOrders ?? 0}
             icon={FiAlertCircle}
             color="danger"
-            pillText={`+${summary?.pendingOrders ?? 0} new`}
             onClick={() => navigate('/admin/orders?status=Pending')}
           />
         </div>
@@ -308,7 +330,6 @@ export const Dashboard = () => {
             value={summary?.activeOrders ?? 0}
             icon={FiShoppingBag}
             color="warning"
-            pillText={`${summary?.activeOrders ?? 0} in kitchen`}
             onClick={() => navigate('/admin/orders?status=Preparing')}
           />
         </div>

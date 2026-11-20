@@ -6,6 +6,7 @@ import EmptyState from '../../components/common/EmptyState';
 import BranchRequiredState from '../../components/common/BranchRequiredState';
 import SearchBar from '../../components/common/SearchBar';
 import { useBranches } from '../../hooks/useBranches';
+import { useBranch } from '../../context/BranchContext';
 import api from '../../services/api';
 import extractApiErrorMessage from '../../utils/errorUtils';
 import { useAuth } from '../../hooks/useAuth';
@@ -51,8 +52,15 @@ export const Users = () => {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const [branches, setBranches] = useState([]);
-  const [selectedBranch, setSelectedBranch] = useState('ALL');
+  const { selectedBranch: globalBranch, setSelectedBranch: setGlobalBranch } = useBranch();
+  const [selectedBranch, setSelectedBranch] = useState(globalBranch || 'ALL');
   const actorBranchId = currentUser?.branchId || null;
+
+  useEffect(() => {
+    if (globalBranch) {
+      setSelectedBranch(globalBranch);
+    }
+  }, [globalBranch]);
 
   const emptyForm = () => ({
     name: '',
@@ -347,14 +355,17 @@ export const Users = () => {
                 style={{ width: '280px', height: '38px' }}
               />
 
-              {branches && branches.length > 0 && (
+              {!actorBranchId && branches && branches.length > 0 && (
                 <select
                   id="employee-branch-filter"
                   aria-label="Filter staff by branch"
                   className="form-select form-select-sm rounded-pill fw-semibold border-light-subtle shadow-xs bg-light text-dark"
                   style={{ width: 'auto', minWidth: '180px', height: '38px', paddingLeft: '16px', paddingRight: '28px', fontSize: '13px', cursor: 'pointer' }}
                   value={selectedBranch}
-                  onChange={(e) => setSelectedBranch(e.target.value)}
+                  onChange={(e) => {
+                    setSelectedBranch(e.target.value);
+                    setGlobalBranch(e.target.value);
+                  }}
                 >
                   <option value="ALL">All Branches</option>
                   {branches.map((b) => (
@@ -670,7 +681,7 @@ export const Users = () => {
                       <input
                         type="text"
                         required
-                        maxLength={formData.role === 'SUPER_ADMIN' ? 30 : 20}
+                        maxLength={30}
                         className="form-control rounded-3"
                         placeholder="e.g. Rahul Sharma"
                         value={formData.name}
@@ -813,9 +824,13 @@ export const Users = () => {
                         disabled={Boolean(actorBranchId)}
                         onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
                       >
-                        <option value="">Choose a branch</option>
-                        {['ADMIN', 'SUPER_ADMIN'].includes(formData.role) && !actorBranchId && (
-                          <option value="ALL">All branches (owner-level administrator)</option>
+                        {!editingUser && (
+                          <>
+                            <option value="">Choose a branch</option>
+                            {['ADMIN', 'SUPER_ADMIN'].includes(formData.role) && !actorBranchId && (
+                              <option value="ALL">All branches (owner-level administrator)</option>
+                            )}
+                          </>
                         )}
                         {branches.filter((b) => b.status === 'Active' || String(b.id) === String(formData.branch)).map((b) => (
                           <option key={b.id} value={b.id}>{b.name}{b.isMainBranch ? ' (primary)' : ''}</option>

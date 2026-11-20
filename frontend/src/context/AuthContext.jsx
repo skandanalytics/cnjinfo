@@ -105,11 +105,13 @@ export const AuthProvider = ({ children }) => {
           }
           setLoading(false);
         })
-        .catch(() => {
+        .catch((err) => {
           if (!active) return;
-          clearStaffSession();
-          sessionStorage.removeItem('foodie_staff_ordering');
-          setAuthState({ user: null, isAuthenticated: false });
+          if (err?.status === 401 || err?.status === 403) {
+            clearStaffSession();
+            sessionStorage.removeItem('foodie_staff_ordering');
+            setAuthState({ user: null, isAuthenticated: false });
+          }
           setLoading(false);
         });
     });

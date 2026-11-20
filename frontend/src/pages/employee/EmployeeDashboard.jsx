@@ -295,12 +295,15 @@ export const EmployeeDashboard = () => {
               <div className="d-flex flex-column gap-3">
                 {activeOrders.map((ord) => {
                   const action = getNextStatusAction(ord.status);
+                  const isSubOrder = Boolean(ord.parent_order_id || (typeof ord.parent_order === 'object' ? ord.parent_order?.id : ord.parent_order) || (ord.continuation_index > 0));
                   return (
                     <div key={ord.id} className="p-3.5 rounded-3 bg-light border border-light-subtle shadow-xs">
                       <div className="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-2">
                         <div>
                           <div className="d-flex align-items-center gap-2 mb-1">
-                            <span className="fw-bold text-dark font-monospace fs-6">#{formatOrderDisplayNumber(ord, ord.orderNumber || ord.id)}</span>
+                            <span className="fw-bold text-dark font-monospace fs-6">
+                              {isSubOrder ? `Sub Order #${formatOrderDisplayNumber(ord, ord.orderNumber || ord.id)}` : `Order #${formatOrderDisplayNumber(ord, ord.orderNumber || ord.id)}`}
+                            </span>
                             <span className="badge bg-danger text-white fw-bold rounded-pill px-2.5 py-0.5" style={{ fontSize: '10.5px' }}>
                               Table {ord.table || 'Takeaway'}
                             </span>
@@ -337,56 +340,58 @@ export const EmployeeDashboard = () => {
                         <span className="text-muted small" style={{ fontSize: '11px' }}>
                           Payment: <strong className="text-dark">{ord.payment_status || 'UNPAID'}</strong>
                         </span>
-                        <div className="d-flex align-items-center gap-2 ms-auto">
-                          {action && (
+                        {!isSubOrder && (
+                          <div className="d-flex align-items-center gap-2 ms-auto">
+                            {action && (
+                              <Button
+                                size="sm"
+                                variant={action.variant}
+                                disabled={isUpdatingStatus(ord.id, action.nextStatus)}
+                                loading={isUpdatingStatus(ord.id, action.nextStatus)}
+                                onClick={() => handleOrderAction(ord.id, action.nextStatus)}
+                                className="py-1 px-3 fw-bold rounded-pill shadow-xs"
+                                style={{ fontSize: '11.5px' }}
+                              >
+                                {action.label}
+                              </Button>
+                            )}
+                            {String(ord.payment_status || '').toUpperCase() === 'PAID' ? (
+                              <span className="badge bg-success rounded-pill px-2 py-1">Paid</span>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isUpdatingStatus(ord.id, 'paid')}
+                                loading={isUpdatingStatus(ord.id, 'paid')}
+                                onClick={() => handleCounterPay(ord)}
+                                className="py-1 px-2.5 fw-bold rounded-pill"
+                                style={{ fontSize: '11.5px' }}
+                              >
+                                {(String(ord.payment_status || '').toUpperCase() === 'PENDING' || String(ord.payment_method || '').toUpperCase() === 'UPI')
+                                  ? 'Confirm Payment (UPI)'
+                                  : 'Mark as Paid'}
+                              </Button>
+                            )}
                             <Button
                               size="sm"
-                              variant={action.variant}
-                              disabled={isUpdatingStatus(ord.id, action.nextStatus)}
-                              loading={isUpdatingStatus(ord.id, action.nextStatus)}
-                              onClick={() => handleOrderAction(ord.id, action.nextStatus)}
-                              className="py-1 px-3 fw-bold rounded-pill shadow-xs"
-                              style={{ fontSize: '11.5px' }}
-                            >
-                              {action.label}
-                            </Button>
-                          )}
-                          {String(ord.payment_status || '').toUpperCase() === 'PAID' ? (
-                            <span className="badge bg-success rounded-pill px-2 py-1">Paid</span>
-                          ) : (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isUpdatingStatus(ord.id, 'paid')}
-                              loading={isUpdatingStatus(ord.id, 'paid')}
-                              onClick={() => handleCounterPay(ord)}
+                              variant="outline-danger"
+                              onClick={() => setEBillOrder(ord)}
                               className="py-1 px-2.5 fw-bold rounded-pill"
                               style={{ fontSize: '11.5px' }}
                             >
-                              {(String(ord.payment_status || '').toUpperCase() === 'PENDING' || String(ord.payment_method || '').toUpperCase() === 'UPI')
-                                ? 'Confirm Payment (UPI)'
-                                : 'Mark as Paid'}
+                              E-Bill
                             </Button>
-                          )}
-                          <Button
-                            size="sm"
-                            variant="outline-danger"
-                            onClick={() => setEBillOrder(ord)}
-                            className="py-1 px-2.5 fw-bold rounded-pill"
-                            style={{ fontSize: '11.5px' }}
-                          >
-                            E-Bill
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline-secondary"
-                            onClick={() => navigate('/employee/orders')}
-                            className="py-1 px-2.5 fw-bold rounded-pill"
-                            style={{ fontSize: '11.5px' }}
-                          >
-                            Details
-                          </Button>
-                        </div>
+                            <Button
+                              size="sm"
+                              variant="outline-secondary"
+                              onClick={() => navigate('/employee/orders')}
+                              className="py-1 px-2.5 fw-bold rounded-pill"
+                              style={{ fontSize: '11.5px' }}
+                            >
+                              Details
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -485,10 +490,10 @@ export const EmployeeDashboard = () => {
             try {
               const { proceedToBill } = await import('../../services/adminApi');
               await proceedToBill(targetId);
+              setEBillOrder(null);
               await fetchOrders(false);
               window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: { orderId: targetId, status: 'Completed' } }));
               window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: { orderId: targetId } }));
-              setEBillOrder(prev => prev ? { ...prev, status: 'Completed', backendStatus: 'COMPLETED' } : null);
               window.alert(`Order #${targetOrder.orderNumber || targetOrder.display_order_number || targetId} marked as Completed.`);
             } catch (err) {
               console.error('Failed to complete order on Proceed to Bill:', err);

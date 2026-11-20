@@ -232,7 +232,10 @@ def serialize_order(order):
         "voucherCode": applied_coupon_code,
         "branch_id": order.branch_id,
         "branch_name": order.branch_name,
-        "order_type": order.order_type, "status": order.status, "payment_status": order.payment_status,
+        "order_type": order.order_type, "status": order.status,
+        "payment_status": "COUNTER_PAID" if order.order_type == "SELF_SERVICE" else order.payment_status,
+        "payment_status_label": "Counter Paid" if order.order_type == "SELF_SERVICE" else ("Paid" if order.payment_status == Order.PaymentStatus.PAID else "Unpaid"),
+        "payment_method": "COUNTER" if order.order_type == "SELF_SERVICE" else (getattr(order, "payment_method", "") or "CASH"),
         "refund_status": getattr(order, "refund_status", "NOT_APPLICABLE"),
         "refunded_amount": str(getattr(order, "refunded_amount", Decimal("0.00"))),
         "parent_order_display_number": (order.parent_order.display_number if order.parent_order_id and getattr(order, "parent_order", None) else None),
@@ -259,25 +262,37 @@ def serialize_order(order):
 
 
 def _owns_order(order, user):
+    if not user or not getattr(user, 'is_authenticated', False):
+        return True
     return order.customer_id == user.id or order.placed_by_id == user.id
 
 
 @transaction.atomic
-def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True, parent_order_id=None, customer_phone="", customer_name=""):
+def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_enabled=True, parent_order_id=None, customer_phone="", customer_name="", guest_token=None):
     from apps.accounts.permissions import get_active_employee
     from apps.accounts.scoping import can_access_branch
 
-    assisted = user.user_type != User.UserType.CUSTOMER
+    is_authenticated = bool(user and getattr(user, 'is_authenticated', False))
+    assisted = is_authenticated and getattr(user, 'user_type', None) != User.UserType.CUSTOMER
     if assisted and (get_active_employee(user) is None or not can_access_branch(user, branch.id)):
         raise OrderError("You cannot place an order for this branch.", "not_staff", 403)
     if idempotency_key:
         existing = Order.objects.filter(idempotency_key=idempotency_key).first()
         if existing:
-            if not _owns_order(existing, user):
+            if is_authenticated and not _owns_order(existing, user):
                 raise OrderError("This checkout key was already used.", "idempotency_conflict", 409)
             return existing, False
-    cart = Cart.objects.select_for_update().filter(
-        user=user, branch=branch, status=Cart.Status.ACTIVE).first()
+
+    if is_authenticated:
+        cart = Cart.objects.select_for_update().filter(
+            user=user, branch=branch, status=Cart.Status.ACTIVE).first()
+    elif guest_token:
+        from apps.carts.services import hash_token
+        cart = Cart.objects.select_for_update().filter(
+            guest_token=hash_token(guest_token), branch=branch, status=Cart.Status.ACTIVE).first()
+    else:
+        cart = None
+
     if cart is None or not cart.items.exists():
         raise OrderError("Your cart is empty.", "cart_empty")
 
@@ -310,12 +325,12 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
                         cart.table = parent_order.table
                         cart.save(update_fields=['table'])
 
-    if cart.order_type == Order.Type.TAKEAWAY:
+    if cart.order_type in (Order.Type.TAKEAWAY, "SELF_SERVICE", getattr(Order.Type, "SELF_SERVICE", "SELF_SERVICE")):
         if parent_order:
             raise OrderError("Continuation orders must be Dine-In.", "invalid_order_type", 400)
         from apps.carts.services import _branch_has_orderable_food
         if not _branch_has_orderable_food(branch):
-            raise OrderError("Takeaway ordering is unavailable because no dishes are currently available.",
+            raise OrderError("Ordering is unavailable because no dishes are currently available.",
                              "no_dishes", 409)
     elif cart.order_type == Order.Type.DINE_IN:
         if cart.table_id is None and parent_order and parent_order.table_id:
@@ -383,11 +398,11 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
         branch=branch, branch_name=branch.name,
         customer=order_customer, customer_phone=order_customer_phone,
         table=cart.table or (parent_order.table if parent_order else None),
-        table_label=(f"{cart.table.table_number}" if cart.table_id else (parent_order.table_label if parent_order else "")),
+        table_label=(f"{cart.table.table_number}" if cart.table_id else ("Self Service" if cart.order_type == "SELF_SERVICE" else (parent_order.table_label if parent_order else "Takeaway"))),
         order_type=cart.order_type,
         parent_order=parent_order,
         continuation_index=continuation_idx,
-        display_order_number=f"{parent_order.id}.{continuation_idx}" if parent_order else "",
+        display_order_number=f"{parent_order.display_number}-{continuation_idx}" if parent_order else "",
         source=Order.Source.EMPLOYEE if assisted else Order.Source.CUSTOMER,
         placed_by=user if assisted else None, placed_by_name=(user.name or user.phone) if assisted else "",
         status=Order.Status.PENDING,
@@ -415,7 +430,11 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
     order.order_number = f"FD{order.id:06d}"
     update_fields = ["order_number"]
     if not parent_order:
-        order.display_order_number = str(order.id)
+        last_root = Order.objects.filter(parent_order__isnull=True).exclude(pk=order.pk).order_by("-id").first()
+        if last_root and last_root.display_order_number and str(last_root.display_order_number).isdigit():
+            order.display_order_number = str(int(last_root.display_order_number) + 1)
+        else:
+            order.display_order_number = str(order.id)
         update_fields.append("display_order_number")
     order.save(update_fields=update_fields)
     for line in priced["items"]:
@@ -433,7 +452,8 @@ def create_from_cart(user, branch, idempotency_key, payment_method, service_tax_
         redeem(order, priced["_applied_coupons"])
     except CouponError as exc:
         raise OrderError(str(exc), "coupon_invalid", 409)
-    OrderStatusHistory.objects.create(order=order, from_status="", to_status=Order.Status.PENDING, changed_by=user,
+    OrderStatusHistory.objects.create(order=order, from_status="", to_status=Order.Status.PENDING,
+                                      changed_by=user if is_authenticated else None,
                                       note="Order placed")
     if order.table_id:
         claimed = DiningTable.objects.select_for_update().get(pk=order.table_id)
@@ -541,6 +561,17 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
             else:
                 raise OrderError("Table is occupied.", "table_occupied", 409)
         branch = table.branch
+    elif order_type in (Order.Type.SELF_SERVICE, "SELF_SERVICE", getattr(Order.Type, "SELF_SERVICE", "SELF_SERVICE")):
+        order_type = "SELF_SERVICE"
+        if parent_order:
+            raise OrderError("Continuation orders must be Dine-In.", "invalid_order_type", 400)
+        resolved_branch_id = branch_id or (emp.branch_id if emp else None)
+        if not resolved_branch_id:
+            first_b = Branch.objects.filter(is_active=True).first()
+            resolved_branch_id = first_b.id if first_b else None
+        branch = Branch.objects.filter(pk=resolved_branch_id, is_active=True).first()
+        if branch is None or not can_access_branch(staff_user, branch.id):
+            raise OrderError("Branch not found or unauthorized.", "not_found", 404)
     else:
         order_type = Order.Type.TAKEAWAY
         if parent_order:
@@ -638,16 +669,16 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
         customer=customer or (parent_order.customer if parent_order else None),
         customer_phone=customer_phone or (customer.phone if customer else "") or (parent_order.customer_phone if parent_order else "") or "",
         table=table,
-        table_label=table.table_number if table else "Takeaway",
+        table_label=table.table_number if table else ("Self Service" if order_type == "SELF_SERVICE" else "Takeaway"),
         order_type=order_type,
         parent_order=parent_order,
         continuation_index=continuation_idx,
-        display_order_number=f"{parent_order.id}.{continuation_idx}" if parent_order else "",
+        display_order_number=f"{parent_order.display_number}-{continuation_idx}" if parent_order else "",
         source=Order.Source.EMPLOYEE,
         placed_by=staff_user,
         placed_by_name=staff_user.name or staff_user.phone,
         status=Order.Status.PENDING,
-        payment_status=Order.PaymentStatus.PAID if mark_paid else Order.PaymentStatus.UNPAID,
+        payment_status=Order.PaymentStatus.PAID if (mark_paid or order_type == "SELF_SERVICE") else Order.PaymentStatus.UNPAID,
         idempotency_key=idempotency_key or None,
         **_money_fields(priced),
     )
@@ -664,7 +695,11 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
     order.order_number = f"FD{order.id:06d}"
     update_fields = ["order_number"]
     if not parent_order:
-        order.display_order_number = str(order.id)
+        last_root = Order.objects.filter(parent_order__isnull=True).exclude(pk=order.pk).order_by("-id").first()
+        if last_root and last_root.display_order_number and str(last_root.display_order_number).isdigit():
+            order.display_order_number = str(int(last_root.display_order_number) + 1)
+        else:
+            order.display_order_number = str(order.id)
         update_fields.append("display_order_number")
     order.save(update_fields=update_fields)
     _write_items(order, priced)
@@ -677,15 +712,17 @@ def create_assisted(staff_user, table_id, item_rows, idempotency_key, branch_id=
             redeem(order, priced["_applied_coupons"])
         except CouponError as exc:
             raise OrderError(str(exc), "coupon_invalid", 409)
-    if mark_paid:
-        resolved_method = Payment.Method.CASH
+    if mark_paid or order_type == "SELF_SERVICE":
+        resolved_method = Payment.Method.COUNTER if (order_type == "SELF_SERVICE" or str(payment_method or "").strip().upper() == "COUNTER") else Payment.Method.CASH
         clean_method = str(payment_method or "").strip().upper()
         if clean_method in ("RAZORPAY_UPI", "UPI"):
             resolved_method = Payment.Method.RAZORPAY_UPI
         elif clean_method in ("RAZORPAY_CARD", "CARD"):
             resolved_method = Payment.Method.RAZORPAY_CARD
-        elif clean_method in ("CASH", "COUNTER"):
+        elif clean_method == "CASH":
             resolved_method = Payment.Method.CASH
+        elif clean_method == "COUNTER" or order_type == "SELF_SERVICE":
+            resolved_method = Payment.Method.COUNTER
         elif hasattr(Payment.Method, clean_method):
             resolved_method = clean_method
 

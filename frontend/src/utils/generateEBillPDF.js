@@ -30,7 +30,8 @@ const printHtmlInvoice = (order, backendId, payment, customer) => {
     const displayOrderNum = String(order?.display_order_number || order?.display_number || backendId || order?.id || order?.backendNumericId || 'N/A');
     const items = combineBillItems(Array.isArray(order.items) ? order.items : []);
     const subtotal = parseFloat(order.subtotal || 0) || items.reduce((s, i) => s + (parseFloat(i.price || 0) * (parseInt(i.quantity) || 1)), 0);
-    const isTakeaway = order.orderType === 'Takeaway' || order.table === 'Takeaway' || order.packingCharge > 0 || order.packing_charge > 0;
+    const isSelfService = order.orderType === 'Self Service' || order.order_type === 'SELF_SERVICE' || String(order.table || '').toLowerCase() === 'self service';
+    const isTakeaway = !isSelfService && (order.orderType === 'Takeaway' || order.table === 'Takeaway' || order.packingCharge > 0 || order.packing_charge > 0);
     const totalQty = items.reduce((s, i) => s + (parseInt(i.quantity) || 1), 0) || 1;
     const packingCharge = parseFloat(order.packingCharge || order.packing_charge || (isTakeaway ? totalQty * 10 : 0));
     const discount = parseFloat(order.discount || 0);
@@ -45,24 +46,25 @@ const printHtmlInvoice = (order, backendId, payment, customer) => {
     const total = parseFloat(order.total || order.total_amount || 0) || Math.max(0, taxableAmount + tax + deliveryFee);
     const dateStr = order.date ? `${order.date} ${order.time || ''}` : new Date(order.placedAt || Date.now()).toLocaleString('en-IN');
 
-    const rawPm = (payment?.payment_method || order.paymentMethod || order.payment_method || 'COD').toUpperCase();
+    const rawPm = (payment?.payment_method || order.paymentMethod || order.payment_method || (isSelfService ? 'COUNTER' : 'COD')).toUpperCase();
     let pmDisplay = 'Cash (COD)';
-    if (rawPm.includes('UPI')) pmDisplay = 'UPI Mobile';
+    if (isSelfService) pmDisplay = 'Counter';
+    else if (rawPm.includes('UPI')) pmDisplay = 'UPI Mobile';
     else if (rawPm.includes('CARD') || rawPm.includes('CREDIT') || rawPm.includes('DEBIT')) pmDisplay = 'Credit / Debit Card';
     else if (rawPm.includes('CASH') || rawPm.includes('COD')) pmDisplay = 'Cash (COD)';
 
     const rawPayStatus = String(payment?.payment_status || payment?.status || order.paymentStatus || order.payment_status || '').toUpperCase();
     const orderStatus = String(order.status || '').toUpperCase();
-    const isFailed = rawPayStatus.includes('FAIL') ||
+    const isFailed = !isSelfService && (rawPayStatus.includes('FAIL') ||
       rawPayStatus.includes('CANCEL') ||
       rawPayStatus.includes('REJECT') ||
       rawPayStatus === 'UNPAID' ||
       rawPayStatus === 'DECLINED' ||
       orderStatus === 'CANCELLED' ||
-      orderStatus === 'REJECTED';
+      orderStatus === 'REJECTED');
 
-    const payStatusDisplay = isFailed ? 'FAILED' : 'COMPLETED';
-    const payStatusColor = isFailed ? '#dc2626' : '#166534';
+    const payStatusDisplay = isSelfService ? 'COUNTER PAID' : isFailed ? 'FAILED' : 'COMPLETED';
+    const payStatusColor = (isSelfService || !isFailed) ? '#166534' : '#dc2626';
 
     const printWindow = window.open('', '_blank', 'width=800,height=900');
     if (!printWindow) {
@@ -142,7 +144,7 @@ const printHtmlInvoice = (order, backendId, payment, customer) => {
             <div class="meta-box">
               <div><strong>Order:</strong> ${displayOrderNum}</div>
               <div><strong>Date:</strong> ${dateStr}</div>
-              <div><strong>Table/Type:</strong> ${order.table || 'Takeaway'}</div>
+              <div><strong>Table/Type:</strong> ${isSelfService ? 'Self Service' : (order.table || (isTakeaway ? 'Takeaway' : 'Dine-In'))}</div>
               <div><strong>Order Status:</strong> ${order.status || 'Completed'}</div>
               ${maskedPhone ? `<div><strong>Mobile:</strong> ${maskedPhone}</div>` : ''}
             </div>
@@ -352,6 +354,8 @@ export const generateEBillPDF = async (orderOrId) => {
     }
 
     const { order, backendId, payment, customer } = backendData;
+    const isSelfService = order.orderType === 'Self Service' || order.order_type === 'SELF_SERVICE' || String(order.table || '').toLowerCase() === 'self service';
+    const isTakeaway = !isSelfService && (order.orderType === 'Takeaway' || order.order_type === 'TAKEAWAY' || order.table === 'Takeaway' || order.packingCharge > 0 || order.packing_charge > 0);
 
     const JsPDFClass = await getJsPDF();
     if (!JsPDFClass) {
@@ -467,9 +471,9 @@ export const generateEBillPDF = async (orderOrId) => {
     doc.text("Dining Table / Type:", box1X, box1Y);
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...darkSlate);
-    const tableNo = order.table || 'Takeaway';
-    const orderTypeStr = order.orderType || (tableNo === 'Takeaway' ? 'Takeaway' : 'Dine-In');
-    doc.text(`${tableNo} (${orderTypeStr})`, box1X + 30, box1Y);
+    const tableNo = isSelfService ? 'Self Service' : (order.table || (isTakeaway ? 'Takeaway' : 'Dine-In'));
+    const orderTypeStr = isSelfService ? 'Self Service' : (order.orderType || (tableNo === 'Takeaway' ? 'Takeaway' : 'Dine-In'));
+    doc.text(isSelfService ? 'Self Service' : `${tableNo} (${orderTypeStr})`, box1X + 30, box1Y);
     box1Y += 5.2;
 
     doc.setFont("helvetica", "normal");
@@ -515,6 +519,14 @@ export const generateEBillPDF = async (orderOrId) => {
     doc.setFont("helvetica", "bold");
     doc.setTextColor(...darkSlate);
     doc.text(`INV-${displayOrderNum}`, box2X + 27, box2Y);
+    box2Y += 5.2;
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(...textGray);
+    doc.text("Payment:", box2X, box2Y);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(...(isSelfService ? [22, 101, 52] : darkSlate));
+    doc.text(isSelfService ? "Counter Paid" : "Paid", box2X + 27, box2Y);
     box2Y += 5.2;
 
     y += boxHeight + 8;
@@ -613,7 +625,6 @@ export const generateEBillPDF = async (orderOrId) => {
     const itemDiscounts = parseFloat(order.itemDiscounts || 0);
     const discount = parseFloat(order.discount || 0);
     const voucherCode = order.voucher || order.voucherCode || order.coupon || null;
-    const isTakeaway = order.orderType === 'Takeaway' || order.table === 'Takeaway' || order.packingCharge > 0 || order.packing_charge > 0;
     const totalQty = items.reduce((s, i) => s + (parseInt(i.quantity) || 1), 0) || 1;
     const packingCharge = parseFloat(order.packingCharge || order.packing_charge || (isTakeaway ? totalQty * 10 : 0));
     
@@ -701,8 +712,8 @@ export const generateEBillPDF = async (orderOrId) => {
     doc.text(formatPdfCurrency(tax), valX, sumY, { align: "right" });
     sumY += 5;
 
-    // Service Charge (2%) (Zero / Not applicable for Takeaway)
-    if (!isTakeaway && serviceCharge > 0 && !isServiceChargeRemoved) {
+    // Service Charge (2%) (Zero / Not applicable for Takeaway or Self Service)
+    if (!isTakeaway && !isSelfService && serviceCharge > 0 && !isServiceChargeRemoved) {
       doc.setFont("helvetica", "normal");
       doc.setTextColor(...textGray);
       doc.text("Service Charge (2%):", labelX, sumY);

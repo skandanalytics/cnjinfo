@@ -149,11 +149,7 @@ export const MenuEditor = () => {
         const filtered = prev.filter(m => normalizeCategoryName(getFrontendCategoryName(m.name)) !== norm);
         return [...filtered, created];
       });
-      setSelectedCategories(prev => {
-        // If the category is already selected, keep existing list
-        if (prev.includes(created.name)) return prev;
-        return [...prev, created.name];
-      });
+      setSelectedCategories([created.name]);
     }
     await fetchDetails();
   };
@@ -379,12 +375,11 @@ export const MenuEditor = () => {
         c => normalizeCategoryName(c) === catNorm || String(c) === String(cat.id)
       );
 
+      // A dish can belong to ONE category only; clicking selected category resets to all
       if (isAlreadySelected) {
-        return prev.filter(
-          c => normalizeCategoryName(c) !== catNorm && String(c) !== String(cat.id)
-        );
+        return [];
       } else {
-        return [...prev, catKey];
+        return [catKey];
       }
     });
   };
@@ -751,7 +746,7 @@ export const MenuEditor = () => {
       {isAdmin && isAddOpen && (
         <AddDishModal
           isOpen={isAddOpen}
-          defaultCategory={comboMode ? 'Combo Offer' : (isAllSelected ? '' : currentCategoryName)}
+          defaultCategory={comboMode ? 'Combo Offer' : (selectedCategoryObjs.length === 1 ? selectedCategoryObjs[0].name : '')}
           onClose={() => setIsAddOpen(false)}
           onAdd={handleAddDish}
         />

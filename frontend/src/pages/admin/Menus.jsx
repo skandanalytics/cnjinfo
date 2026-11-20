@@ -11,6 +11,7 @@ import Loader from '../../components/common/Loader';
 import EmptyState from '../../components/common/EmptyState';
 import BranchRequiredState from '../../components/common/BranchRequiredState';
 import { useBranches } from '../../hooks/useBranches';
+import { useBranch } from '../../context/BranchContext';
 import { menuService } from '../../services/menuService';
 import { productService } from '../../services/productService';
 import { useAuth } from '../../hooks/useAuth';
@@ -21,6 +22,7 @@ export const Menus = () => {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const { hasBranches, loading: branchesLoading } = useBranches();
+  const { workingBranchId } = useBranch();
 
   const [menus, setMenus] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +37,7 @@ export const Menus = () => {
   const fetchMenus = async (showLoading = true) => {
     if (showLoading) setLoading(true);
     try {
-      const data = await menuService.getMenus();
+      const data = await menuService.getMenus(workingBranchId);
       setMenus(data);
     } catch (e) {
       console.error(e);
@@ -45,7 +47,7 @@ export const Menus = () => {
 
   const fetchMenusSilently = async () => {
     try {
-      const data = await menuService.getMenus();
+      const data = await menuService.getMenus(workingBranchId);
       setMenus(data);
     } catch (e) {
       console.error(e);
@@ -54,6 +56,14 @@ export const Menus = () => {
 
   useEffect(() => {
     fetchMenus();
+    const handleSync = () => fetchMenus(false);
+    const handleBranchSync = () => fetchMenus(true);
+    window.addEventListener('foodie_branch_selected', handleBranchSync);
+    window.addEventListener('foodie_categories_updated', handleSync);
+    return () => {
+      window.removeEventListener('foodie_branch_selected', handleBranchSync);
+      window.removeEventListener('foodie_categories_updated', handleSync);
+    };
   }, []);
 
   const handleAddMenu = async (menuData) => {

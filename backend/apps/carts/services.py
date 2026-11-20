@@ -222,8 +222,8 @@ def remove_coupon(cart, code=None):
             cart.coupons.remove(target)
     else:
         cart.coupons.clear()
-        cart.skip_auto_coupons = True
-        cart.save(update_fields=["skip_auto_coupons", "updated_at"])
+    cart.skip_auto_coupons = True
+    cart.save(update_fields=["skip_auto_coupons", "updated_at"])
 
 
 def _line_info(item, image):

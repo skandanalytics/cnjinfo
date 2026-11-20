@@ -102,7 +102,7 @@ export const AddDishModal = ({
           unique.push({ value: 'Combo Offer', label: 'Combo Offer' });
           seen.add('Combo Offer');
         }
-        if (defaultCategory && !seen.has(defaultCategory)) {
+        if (defaultCategory && !defaultCategory.includes('Categories Selected') && !seen.has(defaultCategory)) {
           unique.push({ value: defaultCategory, label: defaultCategory });
           seen.add(defaultCategory);
         }
@@ -122,8 +122,10 @@ export const AddDishModal = ({
     };
     if (isOpen) {
       loadCategories();
-      if (defaultCategory) {
+      if (defaultCategory && !defaultCategory.includes('Categories Selected')) {
         setCategory(defaultCategory);
+      } else {
+        setCategory('');
       }
     }
     return () => { cancelled = true; };

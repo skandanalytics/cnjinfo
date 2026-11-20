@@ -14,8 +14,11 @@ export const OrderCard = ({
 }) => {
   const itemsSummary = (order.items || []).map((i) => `${i.name} x${i.quantity}`).join(', ');
 
-  const isTakeaway = String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('TAKEAWAY') || 
-    String(order.table || '').toLowerCase() === 'takeaway';
+  const isSelfService = String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('SELF_SERVICE') || 
+    String(order.orderType || order.order_type || '').toLowerCase().includes('self service') ||
+    String(order.table || '').toLowerCase() === 'self service';
+  const isTakeaway = !isSelfService && (String(order.orderType || order.order_type || order.source || '').toUpperCase().includes('TAKEAWAY') || 
+    String(order.table || '').toLowerCase() === 'takeaway');
   
   const rawTable = order.table ? String(order.table).replace(/^(table\s*|t-?)/i, '').trim() : '';
   const displayTable = rawTable ? `T${rawTable.padStart(2, '0')}` : (order.table || '');
@@ -50,7 +53,13 @@ export const OrderCard = ({
 
       <div className="row align-items-center">
         <div className="col-12 col-md-8 mb-3 mb-md-0">
-          {isTakeaway ? (
+          {isSelfService ? (
+            <div className="text-secondary small fw-semibold d-flex align-items-center gap-1.5">
+              <span className="badge bg-success-subtle text-success fw-bold px-2 py-0.5" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
+                SELF SERVICE
+              </span>
+            </div>
+          ) : isTakeaway ? (
             <div className="text-secondary small fw-semibold d-flex align-items-center gap-1.5">
               <FiShoppingBag className="text-danger" size={15} />
               <span className="badge bg-danger-subtle text-danger fw-bold px-2 py-0.5" style={{ fontSize: '11px', letterSpacing: '0.5px' }}>
@@ -73,11 +82,13 @@ export const OrderCard = ({
             {itemsSummary}
           </div>
           <div className="text-muted small mt-1 d-flex align-items-center gap-1.5 flex-wrap">
-            <span>Source: <strong>{isTakeaway ? 'Takeaway' : (order.source || 'Dine-In')}</strong></span>
+            <span>Source: <strong>{isSelfService ? 'Self Service' : isTakeaway ? 'Takeaway' : (order.source || 'Dine-In')}</strong></span>
             <span>|</span>
             <span>Payment: </span>
-            {String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' ? (
-              <span className="badge bg-success-subtle text-success rounded-pill px-2 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>Paid</span>
+            {isSelfService || String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'COUNTER_PAID' ? (
+              <span className="fw-semibold ms-1" style={{ color: '#16A34A', fontSize: '12.5px' }}>Counter Paid</span>
+            ) : String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' || order.is_paid || order.isPaid ? (
+              <span className="fw-semibold ms-1" style={{ color: '#16A34A', fontSize: '12.5px' }}>Paid</span>
             ) : (String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PENDING' || String(order.payment_method || '').toUpperCase() === 'UPI') ? (
               <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>Pending Verification (UPI)</span>
             ) : (
@@ -132,7 +143,8 @@ export const OrderCard = ({
             {suborders.map((sub, idx) => {
               const isLast = idx === suborders.length - 1;
               const subDisplayNo = formatOrderDisplayNumber(sub, sub.id);
-              const isSubPaid = String(sub.paymentStatus || sub.payment_status || '').toUpperCase() === 'PAID';
+              const isSubCounterPaid = isSelfService || String(sub.paymentStatus || sub.payment_status || '').toUpperCase() === 'COUNTER_PAID';
+              const isSubPaid = isSubCounterPaid || String(sub.paymentStatus || sub.payment_status || '').toUpperCase() === 'PAID' || sub.is_paid || sub.isPaid;
               const subItemsCount = sub.items_count !== undefined ? sub.items_count : (sub.items ? sub.items.length : null);
               const subTime = sub.time || (sub.created_at ? new Date(sub.created_at).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true }) : '');
 
@@ -163,8 +175,10 @@ export const OrderCard = ({
                       {formatCurrency(sub.total ?? sub.total_amount ?? 0)}
                     </span>
                     <Badge status={sub.status} />
-                    {isSubPaid ? (
-                      <span className="badge bg-success-subtle text-success rounded-pill px-2 py-0.5" style={{ fontSize: '10px' }}>Paid</span>
+                    {isSubCounterPaid ? (
+                      <span className="fw-semibold ms-1" style={{ color: '#16A34A', fontSize: '11px' }}>Counter Paid</span>
+                    ) : isSubPaid ? (
+                      <span className="fw-semibold ms-1" style={{ color: '#16A34A', fontSize: '11px' }}>Paid</span>
                     ) : (
                       <span className="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-0.5" style={{ fontSize: '10px' }}>Unpaid</span>
                     )}
