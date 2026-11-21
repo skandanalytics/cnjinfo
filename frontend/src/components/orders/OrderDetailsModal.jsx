@@ -64,7 +64,16 @@ export const OrderDetailsModal = ({
     }
   }, [notice]);
 
-  const ord = currentOrder || {};
+  const ord = currentOrder || order || {};
+
+  const isSub = Boolean(
+    ord.parent_order_id ||
+    ord.parentOrderId ||
+    (typeof ord.parent_order === 'object' && ord.parent_order?.id) ||
+    ord.parent_order ||
+    (ord.continuation_index && Number(ord.continuation_index) > 0) ||
+    (String(ord.display_order_number || ord.orderNumber || '').includes('.') && /^\d+\.\d+/.test(String(ord.display_order_number || ord.orderNumber || '')))
+  );
   const isSelfService = ord.orderType === 'Self Service' || ord.order_type === 'SELF_SERVICE' || String(ord.table || '').toLowerCase() === 'self service';
   const isTakeaway = !isSelfService && (ord.orderType === 'Takeaway' || ord.order_type === 'TAKEAWAY' || String(ord.table || '').toLowerCase() === 'takeaway');
   const isDineIn = !isSelfService && !isTakeaway;
@@ -208,9 +217,17 @@ export const OrderDetailsModal = ({
     }
   };
 
+  const loadedCouponOrderIdRef = useRef(null);
   useEffect(() => {
+    if (!isOpen) {
+      loadedCouponOrderIdRef.current = null;
+      return;
+    }
     if (isOpen && currentOrder && !isPaid && !isCompleted && String(currentOrder.status || '').toLowerCase() !== 'cancelled') {
-      loadEligibleCoupons();
+      if (loadedCouponOrderIdRef.current !== targetOrderId) {
+        loadedCouponOrderIdRef.current = targetOrderId;
+        loadEligibleCoupons();
+      }
     }
   }, [isOpen, targetOrderId, isPaid, isCompleted, currentOrder?.status]);
 
@@ -789,7 +806,7 @@ export const OrderDetailsModal = ({
                 <span className="text-secondary">
                   Service charge{currentOrder.service_charge_rate != null && currentOrder.service_charge_rate !== '' ? ` (${currentOrder.service_charge_rate}%)` : ''}
                 </span>
-                {isAdmin && (
+                {isAdmin && !isPaid && (
                   <div className="form-check form-switch m-0 d-inline-flex align-items-center" style={{ minHeight: 'auto' }}>
                     <input
                       id="order-service-charge-toggle"
@@ -854,13 +871,20 @@ export const OrderDetailsModal = ({
             <div className="mb-2 d-flex align-items-center gap-1.5 flex-wrap">
               <span>Payment Status: </span>
               {isPaid ? (
-                <span className="badge bg-success-subtle text-success rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>
+                <span className="badge bg-success-subtle text-success border border-success-subtle rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16A34A', display: 'inline-block' }} />
                   {String(currentOrder.payment_status || '').toUpperCase() === 'COUNTER_PAID' ? 'Counter Paid' : 'Paid'}
                 </span>
               ) : (String(currentOrder.payment_status || '').toUpperCase() === 'PENDING' || String(currentOrder.payment_method || '').toUpperCase() === 'UPI') ? (
-                <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>Pending Verification (UPI)</span>
+                <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D97706', display: 'inline-block' }} />
+                  Pending Verification (UPI)
+                </span>
               ) : (
-                <span className="badge bg-secondary-subtle text-secondary rounded-pill px-2.5 py-0.5 fw-bold" style={{ fontSize: '11px' }}>Unpaid</span>
+                <span className="badge bg-danger-subtle text-danger border border-danger-subtle rounded-pill px-2.5 py-1 fw-bold d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px' }}>
+                  <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626', display: 'inline-block' }} />
+                  Unpaid
+                </span>
               )}
             </div>
             <div className="mb-2">Payment Method: <strong>{formatPaymentMethod(currentOrder)}</strong></div>

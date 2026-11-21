@@ -16,7 +16,7 @@ import {
   startRazorpayStandardCheckout,
   verifyRazorpayPayment
 } from '../../services/customerCheckout';
-import { TAKEAWAY, getOrderType, normalizeOrderType } from '../../utils/orderContext';
+import { TAKEAWAY, getOrderType, normalizeOrderType, setOrderType } from '../../utils/orderContext';
 import formatCurrency from '../../utils/formatCurrency';
 import api from '../../services/api';
 
@@ -78,10 +78,17 @@ export const Payment = () => {
   const [error, setError] = useState('');
   const submitted = useRef(false);
 
-  const fallbackOrderType = normalizeOrderType(location.state?.orderType) || getOrderType();
+  const fallbackOrderType = normalizeOrderType(location.state?.orderType) || getOrderType() || 'TAKEAWAY';
   const effectiveOrderType = existingOrder
     ? normalizeOrderType(existingOrder.order_type || existingOrder.orderType)
     : fallbackOrderType;
+
+  // Persist order type immediately so page refresh retains checkout context
+  useEffect(() => {
+    if (effectiveOrderType) {
+      setOrderType(effectiveOrderType);
+    }
+  }, [effectiveOrderType]);
 
   useEffect(() => {
     let active = true;
@@ -120,10 +127,6 @@ export const Payment = () => {
         }
       } else {
         // Mode B: Standard cart checkout
-        if (!fallbackOrderType) {
-          navigate('/customer/checkout', { replace: true });
-          return;
-        }
         try {
           await applyOrderContext(fallbackOrderType);
           const data = await validateCheckout();

@@ -57,14 +57,6 @@ export const isDishInCategory = (dish, cat) => {
     return true;
   }
 
-  // 3. Match vegan, veg, non-veg food types to category
-  const dishType = (dish.foodType || dish.type || '').toLowerCase().replace(/[\s-_]/g, '');
-  const catClean = catNorm.replace(/[\s-_]/g, '');
-
-  if (catClean === 'vegan' && dishType === 'vegan') return true;
-  if ((catClean === 'veg' || catClean === 'vegetarian') && (dishType === 'veg' || dishType === 'vegetarian')) return true;
-  if ((catClean === 'nonveg' || catClean === 'nonvegetarian') && (dishType === 'nonveg' || dishType === 'nonvegetarian')) return true;
-
   return false;
 };
 

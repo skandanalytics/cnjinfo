@@ -571,7 +571,7 @@ export const OrderTracking = () => {
                       className="btn btn-danger w-100 py-2.5 fw-bold rounded-pill shadow-xs d-flex align-items-center justify-content-center gap-2 text-white"
                       style={{ backgroundColor: '#F20D2D', borderColor: '#F20D2D', fontSize: '13px' }}
                     >
-                      <span>Proceed to Bill</span>
+                      <span>View Bill</span>
                     </button>
 
                     <button

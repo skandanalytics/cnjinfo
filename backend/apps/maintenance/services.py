@@ -457,23 +457,29 @@ def reset_application_data(user, password, confirmation, token):
                 label = model_key(model)
                 if label == "accounts.Employee":
                     # Clear branch association from protected employees so Branch can be safely deleted
+                    primary_emp = get_active_employee(user)
+                    primary_emp_id = primary_emp.id if primary_emp else None
+
                     Employee.objects.filter(
-                        Q(role=Employee.Role.SUPER_ADMIN) | Q(employee_code__iexact="SKAND") | Q(user__is_superuser=True)
+                        Q(pk=primary_emp_id) |
+                        Q(role=Employee.Role.SUPER_ADMIN, employee_code__iexact="ADMIN") |
+                        Q(employee_code__iexact="SKAND")
                     ).filter(branch__isnull=False).update(branch=None)
 
-                    # Delete only non-protected staff
+                    # Delete only non-primary staff (managers, admins, employees)
                     to_delete = Employee.objects.exclude(
-                        Q(role=Employee.Role.SUPER_ADMIN) | Q(employee_code__iexact="SKAND") | Q(user__is_superuser=True)
+                        Q(pk=primary_emp_id) |
+                        Q(role=Employee.Role.SUPER_ADMIN, employee_code__iexact="ADMIN") |
+                        Q(employee_code__iexact="SKAND")
                     )
                     count, _ = to_delete.delete()
                     removed[label] = count
                 elif label == "accounts.User":
-                    # Delete non-protected users (customers and non-admin staff)
+                    # Delete non-primary users (customers, staff, secondary admins)
                     to_delete = User.objects.exclude(
-                        Q(is_superuser=True) |
-                        Q(employee__role=Employee.Role.SUPER_ADMIN) |
-                        Q(employee__employee_code__iexact="SKAND") |
-                        Q(pk=user.pk)
+                        Q(pk=user.pk) |
+                        Q(employee__role=Employee.Role.SUPER_ADMIN, employee__employee_code__iexact="ADMIN") |
+                        Q(employee__employee_code__iexact="SKAND")
                     )
                     count, _ = to_delete.delete()
                     removed[label] = count

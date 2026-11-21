@@ -37,6 +37,7 @@ export const DishCard = ({
     dish.is_orderable === false ||
     dish.status === 'Out of Stock' ||
     dish.status === 'OUT_OF_STOCK' ||
+    dish.stock_status === 'OUT_OF_STOCK' ||
     (dish.stock !== undefined && dish.stock !== null && dish.stock !== '' && Number.isFinite(Number(dish.stock)) && Number(dish.stock) <= 0);
 
   const isOutOfStock = isConfirmedOutOfStock;

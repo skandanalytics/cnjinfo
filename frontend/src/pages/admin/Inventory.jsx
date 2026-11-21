@@ -491,7 +491,7 @@ export const Inventory = () => {
                           </span>
                         </td>
                         <td className="pe-4">
-                          <Badge status={isOutOfStockItem(item) ? 'Out of Stock' : isLowStockItem(item) ? 'Low Stock' : 'In Stock'} style={{ fontSize: '10px' }} />
+                          <Badge status={isOutOfStockItem(item) ? 'Out of Stock' : isLowStockItem(item) ? 'Low Stock' : 'In Stock'} className="px-3 py-1.5" style={{ fontSize: '11.5px', gap: '8px' }} />
                         </td>
                         {canManageStock && (
                           <td className="text-end ps-3">

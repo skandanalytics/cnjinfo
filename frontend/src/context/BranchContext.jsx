@@ -20,9 +20,9 @@ export function BranchProvider({ children }) {
     if (!user) return false;
     return Boolean(
       user?.backendRole === 'SUPER_ADMIN' ||
+      user?.role === 'SUPER_ADMIN' ||
       user?.is_superuser === true ||
-      user?.employeeCode?.toUpperCase() === 'ADMIN' ||
-      (user?.role === 'admin' && (!user?.branchId || user?.branchId === 'null' || user?.branchId === 'undefined'))
+      (user?.employeeCode?.toUpperCase() === 'ADMIN' && (!user?.branchId || user?.branchId === 'null' || user?.branchId === 'undefined'))
     );
   }, [user]);
 
@@ -37,6 +37,10 @@ export function BranchProvider({ children }) {
   }, [branches]);
 
   const setBranch = useCallback((nextBranchId) => {
+    if (!isSuperAdmin && user?.branchId) {
+      // Non-superadmin is locked to their assigned branch
+      return;
+    }
     const val = String(nextBranchId || 'ALL');
     setSelectedBranchState(val);
     try {
@@ -57,13 +61,28 @@ export function BranchProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (!isSuperAdmin && user?.branchId) {
+      const userBranch = String(user.branchId);
+      if (selectedBranch !== userBranch) {
+        setSelectedBranchState(userBranch);
+        try {
+          localStorage.setItem('foodie_admin_selected_branch', userBranch);
+          sessionStorage.setItem('foodie_admin_selected_branch', userBranch);
+        } catch (e) {}
+      }
+    }
+  }, [isSuperAdmin, user?.branchId, selectedBranch]);
+
+  useEffect(() => {
     const handleSync = (e) => {
+      if (!isSuperAdmin && user?.branchId) return;
       const nextId = e?.detail?.branchId;
       if (nextId !== undefined && nextId !== null && String(nextId) !== String(selectedBranch)) {
         setSelectedBranchState(String(nextId));
       }
     };
     const handleStorage = (e) => {
+      if (!isSuperAdmin && user?.branchId) return;
       if (e.key === 'foodie_admin_selected_branch') {
         const val = e.newValue || 'ALL';
         setSelectedBranchState(val);
@@ -75,44 +94,68 @@ export function BranchProvider({ children }) {
       window.removeEventListener('foodie_branch_selected', handleSync);
       window.removeEventListener('storage', handleStorage);
     };
-  }, [selectedBranch]);
+  }, [selectedBranch, isSuperAdmin, user?.branchId]);
+
+  // Validate selected branch against loaded branches to prevent stale branch references
+  useEffect(() => {
+    if (isSuperAdmin && !branchesLoading) {
+      if (branches.length === 0) {
+        if (selectedBranch !== 'ALL') {
+          setSelectedBranchState('ALL');
+          try {
+            localStorage.setItem('foodie_admin_selected_branch', 'ALL');
+            sessionStorage.setItem('foodie_admin_selected_branch', 'ALL');
+          } catch (e) {}
+        }
+      } else if (selectedBranch !== 'ALL') {
+        const branchExists = branches.some(b => String(b.id) === String(selectedBranch));
+        if (!branchExists) {
+          setSelectedBranchState('ALL');
+          try {
+            localStorage.setItem('foodie_admin_selected_branch', 'ALL');
+            sessionStorage.setItem('foodie_admin_selected_branch', 'ALL');
+          } catch (e) {}
+        }
+      }
+    }
+  }, [isSuperAdmin, branchesLoading, branches, selectedBranch]);
 
   // Determine working branch ID for given mode (aggregation vs operational)
   const getWorkingBranchId = useCallback((isAggregation = false) => {
     if (!isSuperAdmin && user?.branchId) {
       return String(user.branchId);
     }
-    if (selectedBranch !== 'ALL' && selectedBranch) {
-      return String(selectedBranch);
-    }
-    if (isAggregation) {
+    if (selectedBranch === 'ALL') {
       return 'ALL';
     }
-    return primaryBranch ? String(primaryBranch.id) : '';
-  }, [isSuperAdmin, user?.branchId, selectedBranch, primaryBranch]);
+    if (selectedBranch) {
+      return String(selectedBranch);
+    }
+    return 'ALL';
+  }, [isSuperAdmin, user?.branchId, selectedBranch]);
 
   // Determine human-readable working branch name
   const getWorkingBranchName = useCallback((isAggregation = false) => {
-    if (!isSuperAdmin) {
+    if (!isSuperAdmin && user?.branchId) {
       const assignedObj = branches.find(b => String(b.id) === String(user?.branchId));
       return user?.branchName || assignedObj?.name || 'Assigned Branch';
     }
-    if (selectedBranch !== 'ALL' && selectedBranch) {
+    if (selectedBranch === 'ALL') {
+      return 'All Branches';
+    }
+    if (selectedBranch) {
       const match = branches.find(b => String(b.id) === String(selectedBranch));
       return match ? match.name : `Branch #${selectedBranch}`;
     }
-    if (isAggregation) {
-      return 'All Branches';
-    }
-    return primaryBranch?.name || 'Headquarters';
+    return primaryBranch?.name || 'All Branches';
   }, [isSuperAdmin, user?.branchName, user?.branchId, selectedBranch, branches, primaryBranch]);
 
   const workingBranchId = useMemo(() => {
-    return getWorkingBranchId(false);
+    return getWorkingBranchId(true);
   }, [getWorkingBranchId]);
 
   const workingBranchName = useMemo(() => {
-    return getWorkingBranchName(false);
+    return getWorkingBranchName(true);
   }, [getWorkingBranchName]);
 
   const value = useMemo(() => ({

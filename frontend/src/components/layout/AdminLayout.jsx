@@ -69,15 +69,19 @@ export const AdminLayout = ({ children, fullHeight = false, contentClassName = "
     return () => window.removeEventListener('focus', handleFocus);
   }, []);
 
-  // Filter notifications by selected branch for Super Admin
+  // Filter notifications by branch context
   const branchFilteredNotifications = React.useMemo(() => {
     if (!notifications) return [];
-    if (!selectedBranch || selectedBranch === 'ALL') return notifications;
+    const effectiveBranch = isSuperAdmin ? selectedBranch : (user?.branchId || selectedBranch);
+    if (!effectiveBranch || effectiveBranch === 'ALL') {
+      return isSuperAdmin ? notifications : [];
+    }
     return notifications.filter((n) => {
-      if (!n.branchId) return true;
-      return String(n.branchId) === String(selectedBranch);
+      const nBranch = n.branchId || n.branch_id;
+      if (!nBranch) return isSuperAdmin;
+      return String(nBranch) === String(effectiveBranch);
     });
-  }, [notifications, selectedBranch]);
+  }, [notifications, selectedBranch, isSuperAdmin, user?.branchId]);
 
   const unreadCount = branchFilteredNotifications.filter(n => !n.read).length;
 

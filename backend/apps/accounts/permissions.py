@@ -84,6 +84,16 @@ class IsAdminLevel(BasePermission):
         return bool(emp and emp.role in ADMIN_ROLES)
 
 
+class IsSuperAdmin(BasePermission):
+    """Super Admin only (system owner - sees and manages all branches)."""
+
+    def has_permission(self, request, view):
+        if getattr(request.user, "is_superuser", False):
+            return True
+        emp = get_active_employee(request.user)
+        return bool(emp and emp.role == Employee.Role.SUPER_ADMIN)
+
+
 class IsOwnerLevel(BasePermission):
     """Admin-level staff with no branch restriction (can create and deactivate branches)."""
 

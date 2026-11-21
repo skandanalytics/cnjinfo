@@ -39,6 +39,13 @@ export const isFirstTimeCustomer = async (user = null) => {
       return true;
     };
 
+    // Helper: check if Welcome100 was previously used
+    const hasUsedWelcomeCoupon = (ord) => {
+      if (!ord) return false;
+      const code = String(ord.coupon_code || ord.coupon || ord.voucher || '').toUpperCase();
+      return code.includes('WELCOME100');
+    };
+
     // 1. Query backend user orders via orderService
     const targetId = userId || userPhone || userEmail;
     if (targetId) {
@@ -46,8 +53,10 @@ export const isFirstTimeCustomer = async (user = null) => {
         const { orderService } = await import('./orderService');
         if (orderService && typeof orderService.getOrders === 'function') {
           const userOrders = await orderService.getOrders(targetId, false, true).catch(() => []);
-          if (Array.isArray(userOrders) && userOrders.some(isRetainedPaidPurchase)) {
-            return false;
+          if (Array.isArray(userOrders) && userOrders.length > 0) {
+            if (userOrders.some(isRetainedPaidPurchase) || userOrders.some(hasUsedWelcomeCoupon)) {
+              return false;
+            }
           }
         }
       } catch (e) {}
@@ -58,8 +67,10 @@ export const isFirstTimeCustomer = async (user = null) => {
       try {
         const res = await api.get('/orders/', { bypassCache: true }).catch(() => null);
         const rawOrders = res?.data?.data || (Array.isArray(res?.data) ? res.data : (res?.data?.results || []));
-        if (Array.isArray(rawOrders) && rawOrders.some(isRetainedPaidPurchase)) {
-          return false;
+        if (Array.isArray(rawOrders) && rawOrders.length > 0) {
+          if (rawOrders.some(isRetainedPaidPurchase) || rawOrders.some(hasUsedWelcomeCoupon)) {
+            return false;
+          }
         }
       } catch (e) {}
     }
@@ -136,50 +147,75 @@ const setStoredCoupons = (coupons) => {
   }
 };
 
+let couponCache = null;
+let couponCacheBranch = null;
+let couponCacheTime = 0;
+let couponInFlight = null;
+
 export const couponService = {
-  getCoupons: async (branchIdOverride = null) => {
+  getCoupons: async (branchIdOverride = null, forceRefresh = false) => {
     const { isStaffScreen, listCoupons } = await import('./adminApi');
     if (isStaffScreen()) return listCoupons(branchIdOverride);
     const { resolveAuthoritativeBranch } = await import('./branchResolution');
     const branchId = branchIdOverride || await resolveAuthoritativeBranch();
     if (!branchId) return [];
-    let menu;
-    try {
-      menu = await api.get(`/public/branches/${branchId}/menu/`);
-    } catch (err) {
-      if (err?.response?.status === 404) {
-        sessionStorage.removeItem('foodie_public_branch');
-        localStorage.removeItem('foodie_public_branch');
-      }
-      return [];
+
+    const now = Date.now();
+    if (!forceRefresh && couponCache && couponCacheBranch === String(branchId) && (now - couponCacheTime < 3000)) {
+      return couponCache;
     }
-    const offers = Array.isArray(menu.data?.offers) ? menu.data.offers : [];
-    return offers
-      .filter((c) => c.is_active !== false && c.status !== 'Inactive')
-      .map((c) => {
-        const isPct = c.discount_type === 'PERCENT';
-        const discVal = parseFloat(c.discount_value || 0);
-        const minVal = parseFloat(c.min_order_value || 0);
-        const maxVal = c.max_discount != null ? parseFloat(c.max_discount) : null;
-        return {
-          id: c.code,
-          code: c.code,
-          discount: discVal,
-          discount_value: discVal,
-          type: isPct ? 'percentage' : 'fixed',
-          discount_type: isPct ? 'PERCENTAGE' : 'FIXED',
-          minOrderValue: minVal,
-          minimum_order_amount: minVal,
-          maxDiscount: maxVal,
-          status: c.is_active === false ? 'Inactive' : 'Active',
-          is_active: c.is_active !== false,
-          description: c.description || (isPct ? `${discVal}% off` : `Flat ₹${discVal} off`),
-          autoApply: Boolean(c.auto_apply),
-          isFirstTimeOffer: Boolean(c.is_first_time_offer),
-          valid_from: c.valid_from,
-          valid_until: c.valid_to,
-        };
-      });
+
+    if (couponInFlight && couponCacheBranch === String(branchId)) {
+      return couponInFlight;
+    }
+
+    couponInFlight = (async () => {
+      let menu;
+      try {
+        menu = await api.get(`/public/branches/${branchId}/menu/`);
+      } catch (err) {
+        if (err?.response?.status === 404) {
+          sessionStorage.removeItem('foodie_public_branch');
+          localStorage.removeItem('foodie_public_branch');
+        }
+        return [];
+      } finally {
+        couponInFlight = null;
+      }
+      const offers = Array.isArray(menu.data?.offers) ? menu.data.offers : [];
+      const list = offers
+        .filter((c) => c.is_active !== false && c.status !== 'Inactive')
+        .map((c) => {
+          const isPct = c.discount_type === 'PERCENT';
+          const discVal = parseFloat(c.discount_value || 0);
+          const minVal = parseFloat(c.min_order_value || 0);
+          const maxVal = c.max_discount != null ? parseFloat(c.max_discount) : null;
+          return {
+            id: c.code,
+            code: c.code,
+            discount: discVal,
+            discount_value: discVal,
+            type: isPct ? 'percentage' : 'fixed',
+            discount_type: isPct ? 'PERCENTAGE' : 'FIXED',
+            minOrderValue: minVal,
+            minimum_order_amount: minVal,
+            maxDiscount: maxVal,
+            status: c.is_active === false ? 'Inactive' : 'Active',
+            is_active: c.is_active !== false,
+            description: c.description || (isPct ? `${discVal}% off` : `Flat ₹${discVal} off`),
+            autoApply: Boolean(c.auto_apply),
+            isFirstTimeOffer: Boolean(c.is_first_time_offer),
+            valid_from: c.valid_from,
+            valid_until: c.valid_to,
+          };
+        });
+      couponCache = list;
+      couponCacheBranch = String(branchId);
+      couponCacheTime = Date.now();
+      return list;
+    })();
+
+    return couponInFlight;
   },
 
   createCoupon: async (couponData) => {

@@ -100,7 +100,7 @@ export const TrackOrderModal = ({
             borderColor: 'var(--primary-color, #F20D2D)' 
           }}
         >
-          {rawStatus === 'COMPLETED' ? 'View E-Bill' : 'Proceed to Bill'}
+          {rawStatus === 'COMPLETED' ? 'View E-Bill' : 'View Bill'}
         </button>
       </div>
     </div>

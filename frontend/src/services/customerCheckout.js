@@ -410,7 +410,7 @@ export async function startRazorpayStandardCheckout({
       modal: {
         ondismiss: () => finish(lastFailure
           ? { status: 'FAILED', message: lastFailure }
-          : { status: 'CANCELLED', message: 'Payment was cancelled. Your order is saved; you can pay again.' }),
+          : { status: 'CANCELLED', message: orderId ? 'Payment was cancelled. Your order is saved; you can pay again.' : 'Payment was cancelled. Your cart items are preserved; you can try again.' }),
       },
     };
 
@@ -492,7 +492,7 @@ export async function payOrderOnline(order, method, customer) {
       modal: {
         ondismiss: () => finish(lastFailure
           ? { status: 'FAILED', message: lastFailure }
-          : { status: 'CANCELLED', message: 'Payment was cancelled. Your order is saved; you can pay again.' }),
+          : { status: 'CANCELLED', message: orderId ? 'Payment was cancelled. Your order is saved; you can pay again.' : 'Payment was cancelled. Your cart items are preserved; you can try again.' }),
       },
     });
     checkout.on('payment.failed', (resp) => {

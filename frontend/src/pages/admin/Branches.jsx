@@ -67,7 +67,12 @@ export const Branches = () => {
   }, []);
 
   const navigate = useNavigate();
-  const isSuperAdmin = user?.backendRole === 'SUPER_ADMIN' || user?.is_superuser || (user?.role === 'admin' && !user?.branchId);
+  const isSuperAdmin = Boolean(
+    user?.backendRole === 'SUPER_ADMIN' ||
+    user?.role === 'SUPER_ADMIN' ||
+    user?.is_superuser === true ||
+    (user?.employeeCode?.toUpperCase() === 'ADMIN' && (!user?.branchId || user?.branchId === 'null' || user?.branchId === 'undefined'))
+  );
 
   const handleSelectBranch = (branch) => {
     if (!isSuperAdmin) return;
@@ -667,7 +672,7 @@ export const Branches = () => {
           showBackButton
           backUrl="/admin/dashboard"
           actions={
-            isAdmin && (
+            isSuperAdmin && (
               <Button onClick={handleOpenAdd} variant="primary" className="d-flex align-items-center gap-2">
                 <FiPlus /> Add Branch
               </Button>
@@ -724,7 +729,7 @@ export const Branches = () => {
               </>
             )}
 
-            {isAdmin && (
+            {isSuperAdmin && (
               <Button 
                 onClick={handleOpenAdd} 
                 variant="primary" 
@@ -928,19 +933,21 @@ export const Branches = () => {
                             <FiEdit2 size={14} />
                           </button>
 
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openDelete(branch);
-                            }}
-                            className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs transition-all"
-                            style={{ width: '32px', height: '32px' }}
-                            title={`Delete branch ${branch.name}`}
-                            aria-label={`Delete branch ${branch.name}`}
-                          >
-                            <FiTrash2 size={14} />
-                          </button>
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDelete(branch);
+                              }}
+                              className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs transition-all"
+                              style={{ width: '32px', height: '32px' }}
+                              title={`Delete branch ${branch.name}`}
+                              aria-label={`Delete branch ${branch.name}`}
+                            >
+                              <FiTrash2 size={14} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     )}

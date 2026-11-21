@@ -16,8 +16,8 @@ def make_branch(code, **kw):
     return Branch.objects.create(name=f"Branch {code}", code=code, address="addr", **kw)
 
 
-def make_staff(phone, role, branch, code=None, password=PW):
-    user = User.objects.create_user(phone=phone, password=password, name=f"Staff {phone}", user_type="EMPLOYEE")
+def make_staff(phone, role, branch, code=None, password=PW, is_superuser=False):
+    user = User.objects.create_user(phone=phone, password=password, name=f"Staff {phone}", user_type="EMPLOYEE", is_superuser=is_superuser)
     return Employee.objects.create(user=user, branch=branch, role=role, employee_code=code or f"E{user.id:04d}")
 
 
@@ -54,7 +54,7 @@ class StaffTestCase(TestCase):
         cache.clear()
         self.a = make_branch("A")
         self.b = make_branch("B")
-        make_staff("+919500000001", "ADMIN", None, code="OWN001")
+        make_staff("+919500000001", "SUPER_ADMIN", None, code="OWN001", is_superuser=True)
         make_staff("+919500000002", "ADMIN", self.a, code="ADA001")
         make_staff("+919500000003", "CHEF", self.a, code="CHA001")
         make_staff("+919500000004", "ADMIN", self.b, code="ADB001")

@@ -869,7 +869,7 @@ export const Home = () => {
                           style={{ fontSize: '12px' }}
                         >
                           <i className="bi bi-credit-card me-1"></i>
-                          <span>Proceed to Bill</span>
+                          <span>View Bill</span>
                         </button>
                       </>
                     )}

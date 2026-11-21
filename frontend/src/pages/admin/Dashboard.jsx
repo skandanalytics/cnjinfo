@@ -74,7 +74,7 @@ export const Dashboard = () => {
   const selectedPeriodRef = React.useRef(selectedPeriod);
   const syncDebounceTimerRef = React.useRef(null);
   const isFetchingRef = React.useRef(false);
-  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_selected_branch') || '') : '');
+  const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_admin_selected_branch') || 'ALL') : 'ALL');
   const activeDatesRef = React.useRef({ fromDate: todayStrIso, toDate: todayStrIso });
 
   useEffect(() => {
@@ -152,8 +152,17 @@ export const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-    setSelectedBranchId(selectedBranch || 'ALL');
-  }, [selectedBranch]);
+    const nextBranch = selectedBranch || 'ALL';
+    setSelectedBranchId(nextBranch);
+    if (lastBranchRef.current !== nextBranch) {
+      lastBranchRef.current = nextBranch;
+      fetchAnalytics(false, {
+        fromDate: activeDatesRef.current.fromDate,
+        toDate: activeDatesRef.current.toDate,
+        branchId: nextBranch === 'ALL' ? null : nextBranch,
+      });
+    }
+  }, [selectedBranch, fetchAnalytics]);
 
   useEffect(() => {
     fetchAnalytics(true);
@@ -181,6 +190,7 @@ export const Dashboard = () => {
     window.addEventListener('foodie_tables_updated', scheduleSync);
     window.addEventListener('foodie_inventory_updated', scheduleSync);
     window.addEventListener('foodie_products_updated', scheduleSync);
+    window.addEventListener('foodie_data_sync_refetch', scheduleSync);
     window.addEventListener('storage', scheduleSync);
 
     return () => {
@@ -190,6 +200,7 @@ export const Dashboard = () => {
       window.removeEventListener('foodie_tables_updated', scheduleSync);
       window.removeEventListener('foodie_inventory_updated', scheduleSync);
       window.removeEventListener('foodie_products_updated', scheduleSync);
+      window.removeEventListener('foodie_data_sync_refetch', scheduleSync);
       window.removeEventListener('storage', scheduleSync);
     };
   }, [fetchAnalytics]);

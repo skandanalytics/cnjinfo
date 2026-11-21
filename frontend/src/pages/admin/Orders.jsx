@@ -135,7 +135,8 @@ export const Orders = () => {
   };
 
   useEffect(() => {
-    fetchOrders(false);
+    // Note: OrderContext automatically loads staff orders when mounting on /admin/orders.
+    // fetchOrders(false) here was redundant and triggered duplicate /orders/ API calls on navigation.
     restaurantService.getRestaurants()
       .then(res => {
         const raw = res?.data || (Array.isArray(res) ? res : (res?.results || []));
@@ -298,25 +299,25 @@ export const Orders = () => {
           handleCleanTable(order);
         }}
         disabled={isCleaning}
-        className="btn btn-sm rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5 shadow-xs border"
+        className="btn btn-sm rounded-pill fw-semibold px-3 py-1.5 d-inline-flex align-items-center gap-2 shadow-xs border"
         style={{
-          backgroundColor: '#FEF3C7',
-          color: '#B45309',
-          borderColor: '#FCD34D',
-          fontSize: '11px',
+          backgroundColor: '#FEE2E2',
+          color: '#DC2626',
+          borderColor: '#FECACA',
+          fontSize: '11.5px',
           cursor: isCleaning ? 'wait' : 'pointer',
           transition: 'all 0.15s ease'
         }}
         onMouseEnter={(e) => {
           if (!isCleaning) {
-            e.currentTarget.style.backgroundColor = '#FDE68A';
-            e.currentTarget.style.borderColor = '#F59E0B';
+            e.currentTarget.style.backgroundColor = '#FCDADA';
+            e.currentTarget.style.borderColor = '#F87171';
           }
         }}
         onMouseLeave={(e) => {
           if (!isCleaning) {
-            e.currentTarget.style.backgroundColor = '#FEF3C7';
-            e.currentTarget.style.borderColor = '#FCD34D';
+            e.currentTarget.style.backgroundColor = '#FEE2E2';
+            e.currentTarget.style.borderColor = '#FECACA';
           }
         }}
         title="Click to mark table as Cleaned"
@@ -324,10 +325,10 @@ export const Orders = () => {
       >
         <span
           style={{
-            width: '6px',
-            height: '6px',
+            width: '7px',
+            height: '7px',
             borderRadius: '50%',
-            backgroundColor: '#D97706',
+            backgroundColor: '#DC2626',
             display: 'inline-block'
           }}
         />
@@ -1021,20 +1022,24 @@ export const Orders = () => {
                         <td className="py-3">
                           <div className="d-flex flex-column align-items-start gap-1">
                             {isCounterPaid ? (
-                              <span className="fw-semibold" style={{ color: '#16A34A', fontSize: '13px' }}>
+                              <span className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px', backgroundColor: '#DCFCE7', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
                                 Counter Paid
                               </span>
                             ) : isPaid ? (
-                              <span className="fw-semibold" style={{ color: '#16A34A', fontSize: '13px' }}>
+                              <span className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px', backgroundColor: '#DCFCE7', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
                                 Paid
                               </span>
                             ) : (String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PENDING' || String(order.payment_method || '').toUpperCase() === 'UPI') ? (
-                              <span className="badge rounded-pill fw-semibold px-2.5 py-1" style={{ fontSize: '11px', backgroundColor: 'rgba(234, 179, 8, 0.15)', color: '#B45309', border: '1px solid rgba(234, 179, 8, 0.3)' }}>
-                                ● Pending Verification
+                              <span className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px', backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FCD34D' }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D97706' }} />
+                                Pending Verification
                               </span>
                             ) : (
-                              <span className="badge rounded-pill fw-semibold px-2.5 py-1 mt-0.5" style={{ fontSize: '11px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
-                                ● Unpaid
+                              <span className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5 mt-0.5" style={{ fontSize: '11px', backgroundColor: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA' }}>
+                                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }} />
+                                Unpaid
                               </span>
                             )}
                             {(order.paymentMethodName || order.payment_method) && !isCounterPaid && (
@@ -1147,16 +1152,19 @@ export const Orders = () => {
                             <td className="py-2.5">
                               <div className="d-flex flex-column align-items-start gap-0.5">
                                 {subIsCounterPaid ? (
-                                  <span className="fw-semibold" style={{ color: '#16A34A', fontSize: '12px' }}>
+                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1" style={{ fontSize: '10.5px', backgroundColor: '#DCFCE7', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
                                     Counter Paid
                                   </span>
                                 ) : subIsPaid ? (
-                                  <span className="fw-semibold" style={{ color: '#16A34A', fontSize: '12px' }}>
+                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1" style={{ fontSize: '10.5px', backgroundColor: '#DCFCE7', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
                                     Paid
                                   </span>
                                 ) : (
-                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5 mt-0.5" style={{ fontSize: '10.5px', backgroundColor: 'rgba(239, 68, 68, 0.12)', color: '#DC2626' }}>
-                                    ● Unpaid
+                                  <span className="badge rounded-pill fw-semibold px-2 py-0.5 d-inline-flex align-items-center gap-1 mt-0.5" style={{ fontSize: '10.5px', backgroundColor: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA' }}>
+                                    <span style={{ width: '5px', height: '5px', borderRadius: '50%', backgroundColor: '#DC2626' }} />
+                                    Unpaid
                                   </span>
                                 )}
                                 {(sub.payment_method || sub.paymentMethodName || order.payment_method) && (
@@ -1186,16 +1194,6 @@ export const Orders = () => {
                                   aria-label="View Suborder Details"
                                 >
                                   <FiEye size={12} />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setEBillOrder({ ...subAdj, serialNumber: subDisplayNo, display_order_number: subDisplayNo })}
-                                  className="btn btn-sm btn-outline-danger rounded-circle p-0 d-inline-flex align-items-center justify-content-center shadow-xs"
-                                  style={{ width: '28px', height: '28px' }}
-                                  title="View E-Bill"
-                                  aria-label="View E-Bill"
-                                >
-                                  <FiFileText size={12} />
                                 </button>
                               </div>
                             </td>

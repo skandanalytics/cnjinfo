@@ -407,7 +407,6 @@ export const MenuEditor = () => {
     <AdminLayout>
       <PageHeader
         title="Menu Management"
-        subtitle="Manage your dishes, categories and offers."
         showBackButton
         backUrl="/admin/dashboard"
         actions={
@@ -422,138 +421,131 @@ export const MenuEditor = () => {
                 <FiPlus /> Add Category
               </Button>
 
-              <Button
-                onClick={() => {
-                  if (hasCategories) {
+              {hasCategories && (
+                <Button
+                  onClick={() => {
                     setIsAddOpen(true);
                     setComboMode(false);
-                  }
-                }}
-                disabled={!hasCategories}
-                variant="primary"
-                className={`d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold ${!hasCategories ? 'opacity-50' : ''}`}
-                style={{
-                  backgroundColor: !hasCategories ? '#94A3B8' : 'var(--primary-color, #C8102E)',
-                  borderColor: !hasCategories ? '#94A3B8' : 'var(--primary-color, #C8102E)',
-                  color: '#FFFFFF',
-                  cursor: !hasCategories ? 'not-allowed' : 'pointer'
-                }}
-                title={!hasCategories ? 'Please add a category first' : 'Add Dish'}
-              >
-                <FiPlus /> Add Dish
-              </Button>
+                  }}
+                  variant="primary"
+                  className="d-flex align-items-center gap-2 py-2 px-3 shadow-sm rounded-pill fw-bold"
+                  style={{
+                    backgroundColor: 'var(--primary-color, #C8102E)',
+                    borderColor: 'var(--primary-color, #C8102E)',
+                    color: '#FFFFFF',
+                    cursor: 'pointer'
+                  }}
+                  title="Add Dish"
+                >
+                  <FiPlus /> Add Dish
+                </Button>
+              )}
             </div>
           )
         }
       />
 
-      {/* Unified Filter Bar Matching Reference Panel 5 */}
-      <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white">
-        <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
-          {/* Search Box */}
-          <div className="flex-grow-1" style={{ minWidth: '240px', maxWidth: '420px' }}>
-            <div className="position-relative">
-              <FiSearch className="position-absolute top-50 start-0 translate-middle-y ms-3 text-secondary" />
-              <input
-                type="text"
-                disabled={!hasCategories}
-                className="form-control rounded-pill ps-5 bg-light border-light-subtle shadow-xs"
-                style={{ height: '42px', fontSize: '13px', cursor: !hasCategories ? 'not-allowed' : 'text' }}
-                placeholder={!hasCategories ? "Add a category first to manage dishes" : "Search dishes (e.g. idli, pizza, burger...)"}
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-              />
-              {search && (
+      {/* Unified Filter Bar: Hidden when no categories exist */}
+      {hasCategories && (
+        <div className="card rounded-4 border-0 shadow-sm p-3 mb-4 bg-white">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-3">
+            {/* Search Box */}
+            <div className="flex-grow-1" style={{ minWidth: '240px', maxWidth: '420px' }}>
+              <div className="position-relative">
+                <FiSearch className="position-absolute top-50 start-0 translate-middle-y ms-3 text-secondary" />
+                <input
+                  type="text"
+                  className="form-control rounded-pill ps-5 bg-light border-light-subtle shadow-xs"
+                  style={{ height: '42px', fontSize: '13px' }}
+                  placeholder="Search dishes (e.g. idli, pizza, burger...)"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    className="btn btn-sm position-absolute top-50 end-0 translate-middle-y me-2 text-secondary p-0"
+                    onClick={() => setSearch('')}
+                  >
+                    <FiX />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              {/* Food Type Buttons (Icon Only, Checkbox Toggle) */}
+              <div className="d-inline-flex align-items-center gap-1.5 p-1 bg-light rounded-pill border border-light-subtle">
                 <button
                   type="button"
-                  className="btn btn-sm position-absolute top-50 end-0 translate-middle-y me-2 text-secondary p-0"
-                  onClick={() => setSearch('')}
+                  onClick={() => setSelectedFoodTypes([])}
+                  className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                    selectedFoodTypes.length === 0 ? 'btn-danger text-white shadow-xs' : 'btn-light text-secondary'
+                  }`}
+                  style={{ width: '32px', height: '32px' }}
+                  title="All Food Types"
+                  aria-label="All Food Types"
                 >
-                  <FiX />
+                  <FiGrid size={15} />
                 </button>
-              )}
+
+                <button
+                  type="button"
+                  onClick={() => handleFoodTypeToggle('veg')}
+                  className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                    selectedFoodTypes.includes('veg') ? 'btn-success text-white shadow-xs' : 'btn-light'
+                  }`}
+                  style={{ width: '32px', height: '32px' }}
+                  title="Vegetarian"
+                  aria-label="Vegetarian"
+                >
+                  <span className="veg-badge" style={{ width: '15px', height: '15px' }}></span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleFoodTypeToggle('non-veg')}
+                  className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                    selectedFoodTypes.includes('non-veg') ? 'btn-danger text-white shadow-xs' : 'btn-light'
+                  }`}
+                  style={{ width: '32px', height: '32px' }}
+                  title="Non-Vegetarian"
+                  aria-label="Non-Vegetarian"
+                >
+                  <span className="non-veg-badge" style={{ width: '15px', height: '15px' }}></span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleFoodTypeToggle('vegan')}
+                  className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
+                    selectedFoodTypes.includes('vegan') ? 'btn-success text-white shadow-xs' : 'btn-light'
+                  }`}
+                  style={{ width: '32px', height: '32px' }}
+                  title="Vegan"
+                  aria-label="Vegan"
+                >
+                  <span className="vegan-badge" style={{ width: '15px', height: '15px' }}></span>
+                </button>
+              </div>
+
+              {/* Status Dropdown */}
+              <select
+                aria-label="Filter dishes by stock status"
+                className="form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs"
+                style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: 'pointer' }}
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+              >
+                <option value="all">All Status</option>
+                <option value="in_stock">In Stock</option>
+                <option value="low_stock">Low Stock</option>
+                <option value="out_of_stock">Out of Stock</option>
+              </select>
             </div>
-          </div>
-
-          <div className="d-flex align-items-center gap-2 flex-wrap">
-            {/* Food Type Buttons (Icon Only, Checkbox Toggle) */}
-            <div className={`d-inline-flex align-items-center gap-1.5 p-1 bg-light rounded-pill border border-light-subtle ${!hasCategories ? 'opacity-50' : ''}`} style={{ pointerEvents: !hasCategories ? 'none' : 'auto' }}>
-              <button
-                type="button"
-                disabled={!hasCategories}
-                onClick={() => setSelectedFoodTypes([])}
-                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
-                  selectedFoodTypes.length === 0 ? 'btn-danger text-white shadow-xs' : 'btn-light text-secondary'
-                }`}
-                style={{ width: '32px', height: '32px' }}
-                title="All Food Types"
-                aria-label="All Food Types"
-              >
-                <FiGrid size={15} />
-              </button>
-
-              <button
-                type="button"
-                disabled={!hasCategories}
-                onClick={() => handleFoodTypeToggle('veg')}
-                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
-                  selectedFoodTypes.includes('veg') ? 'btn-success text-white shadow-xs' : 'btn-light'
-                }`}
-                style={{ width: '32px', height: '32px' }}
-                title="Vegetarian"
-                aria-label="Vegetarian"
-              >
-                <span className="veg-badge" style={{ width: '15px', height: '15px' }}></span>
-              </button>
-
-              <button
-                type="button"
-                disabled={!hasCategories}
-                onClick={() => handleFoodTypeToggle('non-veg')}
-                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
-                  selectedFoodTypes.includes('non-veg') ? 'btn-danger text-white shadow-xs' : 'btn-light'
-                }`}
-                style={{ width: '32px', height: '32px' }}
-                title="Non-Vegetarian"
-                aria-label="Non-Vegetarian"
-              >
-                <span className="non-veg-badge" style={{ width: '15px', height: '15px' }}></span>
-              </button>
-
-              <button
-                type="button"
-                disabled={!hasCategories}
-                onClick={() => handleFoodTypeToggle('vegan')}
-                className={`btn btn-sm rounded-circle p-0 d-inline-flex align-items-center justify-content-center transition-all ${
-                  selectedFoodTypes.includes('vegan') ? 'btn-success text-white shadow-xs' : 'btn-light'
-                }`}
-                style={{ width: '32px', height: '32px' }}
-                title="Vegan"
-                aria-label="Vegan"
-              >
-                <span className="vegan-badge" style={{ width: '15px', height: '15px' }}></span>
-              </button>
-            </div>
-
-            {/* Status Dropdown */}
-            <select
-              disabled={!hasCategories}
-              aria-label="Filter dishes by stock status"
-              className={`form-select rounded-pill bg-light border-light-subtle fw-semibold shadow-xs ${!hasCategories ? 'opacity-50' : ''}`}
-              style={{ width: 'auto', minWidth: '130px', height: '42px', fontSize: '13px', cursor: !hasCategories ? 'not-allowed' : 'pointer' }}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-            >
-              <option value="all">All Status</option>
-              <option value="in_stock">In Stock</option>
-              <option value="low_stock">Low Stock</option>
-              <option value="out_of_stock">Out of Stock</option>
-            </select>
-
-{/* + Add Menu button removed as per requirements */}
           </div>
         </div>
-      </div>
+      )}
 
       {/* Categories Selector Bar: Only Text, Highlighted When Active */}
       {hasCategories && (

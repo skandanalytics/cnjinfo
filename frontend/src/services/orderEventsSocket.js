@@ -2,19 +2,33 @@ import { notifyOrderCreated } from './notificationService';
 import { getStaffAccess, refreshStaffSession } from './staffClient';
 import { getWsUrl } from '../config/apiConfig';
 
-const MAX_DELAY_MS = 30000;
-const MAX_NETWORK_RETRIES = 8;
+const MAX_DELAY_MS = 25000;
 const AUTH_CLOSE_CODES = new Set([4401, 4403]);
+const HEARTBEAT_INTERVAL_MS = 25000;
+const HEARTBEAT_TIMEOUT_MS = 60000;
 
 let socket = null;
 let subscribers = new Set();
 let reconnectTimer = null;
+let heartbeatTimer = null;
+let lastPong = Date.now();
 let delayMs = 2000;
 let stopped = false;
 let opened = false;
 let refreshAttempted = false;
 let networkRetries = 0;
 let logoutBound = false;
+let onlineBound = false;
+
+let syncRefetchDebounceTimer = null;
+function dispatchDebouncedSyncRefetch() {
+  if (typeof window === 'undefined') return;
+  if (syncRefetchDebounceTimer) clearTimeout(syncRefetchDebounceTimer);
+  syncRefetchDebounceTimer = setTimeout(() => {
+    syncRefetchDebounceTimer = null;
+    window.dispatchEvent(new CustomEvent('foodie_data_sync_refetch'));
+  }, 300);
+}
 
 function notify(type, payload) {
   subscribers.forEach((listener) => {
@@ -64,6 +78,10 @@ function clearSocket() {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
   if (!socket) return;
   socket.onopen = null;
   socket.onmessage = null;
@@ -82,12 +100,13 @@ function dispatchLivePayload(data) {
   if (data.order_id || data.resource === 'order') {
     window.dispatchEvent(new CustomEvent('foodie_orders_updated', { detail: data }));
     window.dispatchEvent(new CustomEvent('foodie_tables_updated', { detail: data }));
-    if (data.action === 'created' || data.status === 'PENDING' || data.status === 'CONFIRMED' || data.status === 'PLACED') {
+    if (data.action === 'created' && data.order_id) {
       notifyOrderCreated({
         id: data.order_id,
-        order_number: data.order_number,
+        order_number: data.order_number || data.display_order_number || data.order_id,
         table: data.table,
-        total_amount: data.total_amount
+        total_amount: data.total_amount,
+        branch_id: data.branch_id || data.branchId
       });
     }
   }
@@ -136,7 +155,25 @@ async function connect() {
     delayMs = 2000;
     networkRetries = 0;
     refreshAttempted = false;
+    lastPong = Date.now();
+
+    // Start 25s ping heartbeat
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    heartbeatTimer = setInterval(() => {
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        if (Date.now() - lastPong > HEARTBEAT_TIMEOUT_MS) {
+          clearSocket();
+          connect();
+          return;
+        }
+        try {
+          socket.send(JSON.stringify({ type: 'ping' }));
+        } catch {}
+      }
+    }, HEARTBEAT_INTERVAL_MS);
+
     notify('open');
+    dispatchDebouncedSyncRefetch();
   };
 
   ws.onmessage = (event) => {
@@ -146,16 +183,25 @@ async function connect() {
     } catch {
       data = null;
     }
+    if (data?.type === 'pong') {
+      lastPong = Date.now();
+      return;
+    }
     dispatchLivePayload(data);
     notify('message', data);
   };
 
   ws.onclose = async (event) => {
+    if (heartbeatTimer) {
+      clearInterval(heartbeatTimer);
+      heartbeatTimer = null;
+    }
     if (socket === ws) socket = null;
     if (stopped) return;
 
-    const authFailed = AUTH_CLOSE_CODES.has(event.code) || (!opened && (event.code === 1006 || event.code === 1002));
-    if (authFailed && !refreshAttempted) {
+    // Genuine authentication / authorization close codes (4401, 4403)
+    const isAuthClose = AUTH_CLOSE_CODES.has(event.code);
+    if (isAuthClose && !refreshAttempted) {
       refreshAttempted = true;
       try {
         await refreshStaffSession();
@@ -167,23 +213,25 @@ async function connect() {
         return;
       }
     }
-    if (authFailed) {
+    if (isAuthClose) {
       stopped = true;
       notify('unauthorized');
       return;
     }
+
     if (!hasLiveSession()) return;
-    if (networkRetries >= MAX_NETWORK_RETRIES) {
-      notify('unavailable');
-      return;
-    }
+
     networkRetries += 1;
+    // Jittered backoff (0.85x to 1.15x) capped at MAX_DELAY_MS (25s)
+    const jitter = 0.85 + Math.random() * 0.3;
+    const scheduledDelay = Math.min(MAX_DELAY_MS, Math.round(delayMs * jitter));
+
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null;
       connect();
-    }, delayMs);
+    }, scheduledDelay);
     delayMs = Math.min(MAX_DELAY_MS, Math.round(delayMs * 1.5));
-    notify('reconnecting', { attempt: networkRetries, delayMs });
+    notify('reconnecting', { attempt: networkRetries, delayMs: scheduledDelay });
   };
 
   ws.onerror = () => {
@@ -193,11 +241,25 @@ async function connect() {
 
 export function startLiveSocket() {
   stopped = false;
-  if (!logoutBound && typeof window !== 'undefined') {
-    logoutBound = true;
-    window.addEventListener('foodie_logout', () => {
-      stopLiveSocket();
-    });
+  if (typeof window !== 'undefined') {
+    if (!logoutBound) {
+      logoutBound = true;
+      window.addEventListener('foodie_logout', () => {
+        stopLiveSocket();
+      });
+    }
+    if (!onlineBound) {
+      onlineBound = true;
+      window.addEventListener('online', () => {
+        if (!stopped && hasLiveSession()) {
+          if (!socket || socket.readyState === WebSocket.CLOSED) {
+            delayMs = 2000;
+            networkRetries = 0;
+            connect();
+          }
+        }
+      });
+    }
   }
   connect();
 }

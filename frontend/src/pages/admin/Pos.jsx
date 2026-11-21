@@ -395,10 +395,14 @@ export const Pos = () => {
       : (tables && tables.length > 0 ? tables : []);
 
     const targetTableId = ord?.tableId || ord?.table_id || (typeof ord?.table === 'object' ? ord?.table?.id : ord?.table);
+    const targetTableNum = tableService.getCanonicalTableNumber(
+      ord?.tableNumber || ord?.table_number || (typeof ord?.table === 'object' ? (ord.table?.number || ord.table?.table_number) : ord?.table) || ''
+    );
     const matchedTable = tableList.find(t => String(t.id) === String(targetTableId))
-      || (selectedTable && String(selectedTable.id) === String(targetTableId) ? selectedTable : null);
+      || (targetTableNum ? tableList.find(t => tableService.getCanonicalTableNumber(t.number || t.table_number || t.id) === targetTableNum) : null)
+      || (selectedTable && (String(selectedTable.id) === String(targetTableId) || tableService.getCanonicalTableNumber(selectedTable.number || selectedTable.table_number || selectedTable.id) === targetTableNum) ? selectedTable : null);
 
-    const fallbackNumber = ord?.tableNumber || ord?.table_number || (typeof ord?.table === 'string' ? ord?.table : ord?.table?.label) || '';
+    const fallbackNumber = targetTableNum || ord?.tableNumber || ord?.table_number || (typeof ord?.table === 'string' ? ord?.table : (ord?.table?.number || ord?.table?.label)) || '';
 
     const table = matchedTable || {
       id: targetTableId,
@@ -636,7 +640,8 @@ export const Pos = () => {
     if (!tables || tables.length === 0 || (!isContinue && !isTrack)) return;
 
     if (queryTableId) {
-      const found = tables.find(t => String(t.id) === String(queryTableId));
+      const found = tables.find(t => String(t.id) === String(queryTableId)) ||
+                    tables.find(t => tableService.getCanonicalTableNumber(t.number || t.table_number || t.id) === tableService.getCanonicalTableNumber(queryTableId));
       if (found) {
         setSelectedTable(found);
         setOrderType('DINE_IN');
@@ -2249,11 +2254,11 @@ export const Pos = () => {
             >
               
               {/* 1. Service Type Toggle: Dine-In vs Takeaway vs Self Service */}
-              <div className="d-flex align-items-center gap-1.5">
+              <div className="d-flex align-items-center gap-2">
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('DINE_IN')}
-                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-1.5 fw-semibold transition-all shadow-xs px-1"
+                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all shadow-xs px-2.5"
                   style={{
                     height: '40px',
                     borderRadius: '12px',
@@ -2272,7 +2277,7 @@ export const Pos = () => {
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('TAKEAWAY')}
-                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-1.5 fw-semibold transition-all shadow-xs px-1"
+                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all shadow-xs px-2.5"
                   style={{
                     height: '40px',
                     borderRadius: '12px',
@@ -2291,7 +2296,7 @@ export const Pos = () => {
                 <button
                   type="button"
                   onClick={() => handleToggleOrderType('SELF_SERVICE')}
-                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-1.5 fw-semibold transition-all shadow-xs px-1"
+                  className="btn flex-grow-1 d-flex align-items-center justify-content-center gap-2 fw-semibold transition-all shadow-xs px-2.5"
                   style={{
                     height: '40px',
                     borderRadius: '12px',
@@ -2607,26 +2612,26 @@ export const Pos = () => {
                           <div className="d-flex align-items-center gap-2.5 flex-shrink-0">
                             {/* Stepper */}
                             <div 
-                              className="d-flex align-items-center justify-content-between bg-white border px-1 shadow-xs flex-shrink-0"
-                              style={{ height: '28px', borderRadius: '14px', borderColor: '#CBD5E1', minWidth: '74px' }}
+                              className="d-flex align-items-center justify-content-between bg-white border px-1.5 shadow-xs flex-shrink-0"
+                              style={{ height: '30px', borderRadius: '15px', borderColor: '#CBD5E1', minWidth: '82px' }}
                             >
                               <button
                                 type="button"
                                 onClick={() => handleUpdateQuantity(idx, -1)}
                                 className="btn btn-link p-0 text-danger border-0 fw-bold d-flex align-items-center justify-content-center"
-                                style={{ width: '22px', height: '22px', textDecoration: 'none', fontSize: '15px', lineHeight: 1 }}
+                                style={{ width: '24px', height: '24px', textDecoration: 'none', fontSize: '15px', lineHeight: 1 }}
                                 title="Decrease quantity"
                               >
                                 −
                               </button>
-                              <span className="fw-bold small px-1 text-center" style={{ fontSize: '12px', minWidth: '18px' }}>
+                              <span className="fw-bold small px-1 text-center" style={{ fontSize: '12.5px', minWidth: '20px' }}>
                                 {item.quantity}
                               </span>
                               <button
                                 type="button"
                                 onClick={() => handleUpdateQuantity(idx, 1)}
                                 className="btn btn-link p-0 text-danger border-0 fw-bold d-flex align-items-center justify-content-center"
-                                style={{ width: '22px', height: '22px', textDecoration: 'none', fontSize: '15px', lineHeight: 1 }}
+                                style={{ width: '24px', height: '24px', textDecoration: 'none', fontSize: '15px', lineHeight: 1 }}
                                 title="Increase quantity"
                               >
                                 +
@@ -2724,7 +2729,7 @@ export const Pos = () => {
                 )}
 
                 {/* 6. Action Buttons Row:
-                    - When Dine-In: Confirm Order AND Proceed to Payment
+                    - When Dine-In: Confirm Order ONLY (Payment handled on settlement)
                     - When Takeaway: Confirm Order AND Proceed to Payment
                     - When Self Service: Hide Proceed to Payment, Show single primary action "Place Order & Print Bill"
                 */}
@@ -2756,6 +2761,34 @@ export const Pos = () => {
                         </>
                       )}
                     </button>
+                  ) : orderType === 'DINE_IN' ? (
+                    <button
+                      type="button"
+                      disabled={!canSubmitOrder || submittingOrder}
+                      onClick={() => handleSubmitOrder(false)}
+                      className="btn w-100 fw-bold d-flex align-items-center justify-content-center gap-2 text-white shadow-sm transition-all"
+                      style={{
+                        height: '44px',
+                        borderRadius: '12px',
+                        fontSize: '13.5px',
+                        backgroundColor: '#F20D2D',
+                        borderColor: '#F20D2D',
+                        borderWidth: '1.5px',
+                        borderStyle: 'solid',
+                        boxShadow: '0 4px 12px rgba(242, 13, 45, 0.25)',
+                        opacity: !canSubmitOrder ? 0.5 : 1
+                      }}
+                      title={!canSubmitOrder && !selectedTable ? "Please choose a table number to continue." : ""}
+                    >
+                      {submittingOrder ? (
+                        <span>Placing...</span>
+                      ) : (
+                        <>
+                          <FiSave size={16} />
+                          <span>Confirm Order</span>
+                        </>
+                      )}
+                    </button>
                   ) : (
                     <>
                       <button
@@ -2774,7 +2807,6 @@ export const Pos = () => {
                           color: '#F20D2D',
                           opacity: !canSubmitOrder ? 0.5 : 1
                         }}
-                        title={!canSubmitOrder && orderType === 'DINE_IN' && !selectedTable ? "Please choose a table number to continue." : ""}
                       >
                         {submittingOrder ? (
                           <span>Placing...</span>

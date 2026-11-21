@@ -1168,11 +1168,16 @@ export const CartProvider = ({ children }) => {
 
   const userRemovedCouponRef = useRef(false);
   const lastSubtotalRef = useRef(0);
+  const couponRef = useRef(coupon);
+  useEffect(() => {
+    couponRef.current = coupon;
+  }, [coupon]);
 
   // Auto-apply WELCOME100 when subtotal >= 700 & auto-revalidate applied coupon on cart change
   useEffect(() => {
     let isMounted = true;
     const checkAndAutoApplyCoupon = async () => {
+      const currentActiveCoupon = couponRef.current;
       const effectiveItems = getEffectiveItems();
       const breakdownNoCoupon = calculateBillDetails({
         items: effectiveItems,
@@ -1183,17 +1188,15 @@ export const CartProvider = ({ children }) => {
       });
       const currentSubtotal = breakdownNoCoupon.subtotal;
 
-      // Update last subtotal tracking (but don't automatically reset user's explicit coupon dismissal unless cart is emptied)
+      // Update last subtotal tracking (only reset user's coupon dismissal if cart previously had items and was emptied)
       if (Math.abs(currentSubtotal - lastSubtotalRef.current) > 0.01) {
+        if (lastSubtotalRef.current > 0 && currentSubtotal === 0) {
+          userRemovedCouponRef.current = false;
+          try {
+            sessionStorage.removeItem('foodie_user_dismissed_coupons');
+          } catch (e) {}
+        }
         lastSubtotalRef.current = currentSubtotal;
-      }
-
-      // If cart is emptied, reset the dismissal states so new orders can get the coupon again
-      if (currentSubtotal === 0) {
-        userRemovedCouponRef.current = false;
-        try {
-          sessionStorage.removeItem('foodie_user_dismissed_coupons');
-        } catch (e) {}
       }
 
       const userDismissed = userRemovedCouponRef.current || (typeof window !== 'undefined' && sessionStorage.getItem('foodie_user_dismissed_coupons') === '1');
@@ -1201,12 +1204,12 @@ export const CartProvider = ({ children }) => {
       const firstTime = await isFirstTimeCustomer(user);
 
       // If returning customer has WELCOME100 applied, remove it immediately
-      if (!firstTime && coupon && (coupon.isFirstTimeOffer || coupon.is_first_time_offer)) {
+      if (!firstTime && currentActiveCoupon && (currentActiveCoupon.isFirstTimeOffer || currentActiveCoupon.is_first_time_offer)) {
         if (isMounted) setCoupon(null);
         return;
       }
 
-      if (!coupon || coupon.isAutomatic) {
+      if (!currentActiveCoupon || currentActiveCoupon.isAutomatic) {
         const offers = await couponService.getCoupons().catch(() => []);
         const eligible = (offers || []).filter((offer) => {
           if (!offer.autoApply || offer.status === 'Inactive') return false;
@@ -1218,24 +1221,24 @@ export const CartProvider = ({ children }) => {
         const best = eligible[0];
         if (!isMounted) return;
         if (userDismissed) {
-          if (coupon?.isAutomatic) setCoupon(null);
+          if (currentActiveCoupon?.isAutomatic) setCoupon(null);
         } else if (best) {
-          if (!coupon || coupon.code !== best.code) {
+          if (!currentActiveCoupon || currentActiveCoupon.code !== best.code) {
             setCoupon({ ...best, isAutomatic: true });
             const branch = getActiveBranchId();
             if (branch) {
               api.post('/cart/coupon/', { branch: Number(branch), code: best.code }).catch(() => {});
             }
           }
-        } else if (coupon?.isAutomatic) {
+        } else if (currentActiveCoupon?.isAutomatic) {
           setCoupon(null);
         }
       }
 
-      if (coupon) {
+      if (currentActiveCoupon) {
         const breakdown = calculateBillDetails({
           items: effectiveItems,
-          coupon: coupon,
+          coupon: currentActiveCoupon,
           isTakeaway: isTakeawayActive(),
           gstRate: GST_RATE,
           isServiceChargeRemoved
@@ -1249,7 +1252,7 @@ export const CartProvider = ({ children }) => {
 
     checkAndAutoApplyCoupon();
     return () => { isMounted = false; };
-  }, [cartItems, coupon, user, isServiceChargeRemoved]);
+  }, [cartItems, user, isServiceChargeRemoved]);
 
   const applyCoupon = async (code) => {
     const codeUpper = (code || '').trim().toUpperCase();

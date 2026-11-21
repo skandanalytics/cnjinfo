@@ -107,7 +107,10 @@ class EmployeeSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("You cannot modify an employee with an equal or higher role.")
 
         # Branch rules: only owner-level roles may be branchless; branch-limited admins stay in their branch.
-        if branch is None and role not in (Employee.Role.SUPER_ADMIN, Employee.Role.ADMIN):
+        if role == Employee.Role.SUPER_ADMIN:
+            if branch is not None:
+                raise serializers.ValidationError({"branch": "Super Admin should not be assigned a fixed branch."})
+        elif branch is None:
             raise serializers.ValidationError({"branch": "Branch is required for this role."})
         if allowed is not None and (branch is None or branch.id != allowed):
             raise serializers.ValidationError({"branch": "You can only manage employees of your own branch."})

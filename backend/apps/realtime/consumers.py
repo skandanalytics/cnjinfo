@@ -46,6 +46,11 @@ class OrderEventsConsumer(AsyncJsonWebsocketConsumer):
     async def catalog_event(self, event):
         await self.send_json({k: v for k, v in event.items() if k != "type"})
 
+    async def receive_json(self, content, **kwargs):
+        msg_type = content.get("type") or content.get("action")
+        if msg_type == "ping":
+            await self.send_json({"type": "pong"})
+
     @database_sync_to_async
     def _user_from_token(self, raw):
         if not raw:

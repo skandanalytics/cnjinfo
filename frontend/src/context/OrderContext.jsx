@@ -35,13 +35,27 @@ export const OrderProvider = ({ children }) => {
     );
   };
 
+  const lastFetchTimeRef = useRef(0);
+  const lastFetchParamsRef = useRef('');
+
   const loadStaffOrders = useCallback(async (showLoading = false) => {
     if (!staffHasSession()) return;
     if (isFetchingRef.current) {
       pendingFetchRef.current = true;
       return;
     }
+
+    const currentBranch = getActiveBranchId();
+    const fetchKey = `${currentBranch || 'ALL'}_${user?.id || ''}`;
+    const now = Date.now();
+    // In-flight & rapid duplicate protection: if identical branch/user fetched in last 600ms without explicit showLoading, skip
+    if (!showLoading && fetchKey === lastFetchParamsRef.current && (now - lastFetchTimeRef.current < 600)) {
+      return;
+    }
+
     isFetchingRef.current = true;
+    lastFetchParamsRef.current = fetchKey;
+    lastFetchTimeRef.current = now;
     if (showLoading) setLoading(true);
     try {
       const { listOrdersForUi } = await import('../services/adminApi');
@@ -115,6 +129,7 @@ export const OrderProvider = ({ children }) => {
       }
     };
     window.addEventListener('foodie_orders_updated', handleOrdersUpdated);
+    window.addEventListener('foodie_tables_updated', handleOrdersUpdated);
     window.addEventListener('foodie_branch_selected', handleOrdersUpdated);
     window.addEventListener('foodie_data_sync_refetch', handleOrdersUpdated);
     window.addEventListener('storage', handleStorage);
@@ -122,6 +137,7 @@ export const OrderProvider = ({ children }) => {
     window.addEventListener('foodie_logout', handleLogout);
     return () => {
       window.removeEventListener('foodie_orders_updated', handleOrdersUpdated);
+      window.removeEventListener('foodie_tables_updated', handleOrdersUpdated);
       window.removeEventListener('foodie_branch_selected', handleOrdersUpdated);
       window.removeEventListener('foodie_data_sync_refetch', handleOrdersUpdated);
       window.removeEventListener('storage', handleStorage);
@@ -129,10 +145,13 @@ export const OrderProvider = ({ children }) => {
     };
   }, [isAuthenticated, user?.id, loadStaffOrders]);
 
+  const lastStaffPathRef = useRef('');
   useEffect(() => {
     const path = location.pathname || '';
     if (!staffHasSession()) return undefined;
-    if (path.includes('/kitchen') || path.includes('/orders') || path.includes('/tables') || path.includes('/dashboard') || path.includes('/pos')) {
+    const isStaffPath = path.includes('/kitchen') || path.includes('/orders') || path.includes('/tables') || path.includes('/dashboard') || path.includes('/pos');
+    if (isStaffPath && path !== lastStaffPathRef.current) {
+      lastStaffPathRef.current = path;
       loadStaffOrders(false);
     }
   }, [location.pathname, loadStaffOrders]);

@@ -18,6 +18,9 @@ LOCATION_ALIASES = {
     "rooftop terrace": "Rooftop Terrace",
     "rooftop": "Rooftop Terrace",
     "terrace": "Rooftop Terrace",
+    "window": "Indoor Main",
+    "patio": "Garden View",
+    "hall": "Indoor Main",
 }
 
 

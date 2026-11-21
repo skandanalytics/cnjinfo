@@ -213,6 +213,17 @@ def _apply_capture(payment, razorpay_payment_id, signature, event_id, event_type
                     "razorpay_payment_id": payment.razorpay_payment_id,
                 }
             )
+            try:
+                from apps.realtime.publish import publish_order_event
+                publish_order_event(rel)
+            except Exception:
+                pass
+
+    try:
+        from apps.realtime.publish import publish_order_event
+        publish_order_event(order)
+    except Exception:
+        pass
 
     _remember(event_id, event_type, payload, payment)
     return payment
@@ -306,5 +317,16 @@ def record_counter(staff_user, order_id, amount=None, method=None):
                     "paid_at": timezone.now(),
                 }
             )
+            try:
+                from apps.realtime.publish import publish_order_event
+                publish_order_event(rel)
+            except Exception:
+                pass
+
+    try:
+        from apps.realtime.publish import publish_order_event
+        publish_order_event(order)
+    except Exception:
+        pass
 
     return payment

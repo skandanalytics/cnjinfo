@@ -140,19 +140,35 @@ export const analyticsService = {
     const yearlyOrders = validOrders.filter(o => getOrderDate(o).getFullYear() === curYear);
     const yearlyRevenue = yearlyOrders.reduce((sum, o) => sum + getOrderNetRevenue(o), 0);
 
-    // Pending orders: exactly matching Pending tab in /admin/orders and New Tickets in Kitchen
+    // Helper to detect if an order is a suborder (continuation of a parent order)
+    const isSuborder = (o) => {
+      if (!o) return false;
+      if (o.parent_order_id || (typeof o.parent_order === 'object' && o.parent_order?.id) || o.parent_order || o.parentOrderId) {
+        return true;
+      }
+      if (o.continuation_index && Number(o.continuation_index) > 0) {
+        return true;
+      }
+      const disp = String(o.display_order_number || o.orderNumber || o.display_number || '');
+      if (disp.includes('.') && /^\d+\.\d+/.test(disp)) {
+        return true;
+      }
+      return false;
+    };
+
+    // Pending orders: exactly matching Pending tab in /admin/orders and New Tickets in Kitchen (root parent orders only)
     const isPendingStatus = (st) => {
       const s = String(st || '').toLowerCase().trim();
       return s === 'pending' || s === 'confirmed' || s === 'placed' || s === 'new' || s === 'ordered' || s === 'created' || !s;
     };
-    const pendingOrders = allOrders.filter(o => isPendingStatus(o.status)).length;
+    const pendingOrders = allOrders.filter(o => !isSuborder(o) && isPendingStatus(o.status)).length;
 
-    // Active / In Progress orders: Preparing, Ready, Serving, etc.
+    // Active / In Progress orders: Preparing, Ready, Serving, etc. (root parent orders only)
     const isInProgressStatus = (st) => {
       const s = String(st || '').toLowerCase().trim();
       return s === 'preparing' || s === 'ready' || s === 'serving' || s === 'served' || s === 'cooking' || s === 'accepted' || s === 'in_kitchen' || s === 'out_for_delivery';
     };
-    const activeOrders = allOrders.filter(o => isInProgressStatus(o.status)).length;
+    const activeOrders = allOrders.filter(o => !isSuborder(o) && isInProgressStatus(o.status)).length;
 
     // Available tables: synchronized directly with tableService.getTables() from Tables page
     const availableTables = (allTables || []).filter(t => {

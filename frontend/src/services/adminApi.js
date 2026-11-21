@@ -88,28 +88,12 @@ export function getSelectedAdminBranch(options = {}) {
       return u?.branchId ? cleanBranchParam(u.branchId) : null;
     }
     const stored = localStorage.getItem('foodie_admin_selected_branch') || 'ALL';
+    if (stored === 'ALL') {
+      return null;
+    }
     const cleanedStored = cleanBranchParam(stored);
     if (!cleanedStored) {
-      if (stored !== 'ALL') {
-        localStorage.removeItem('foodie_admin_selected_branch');
-        return null;
-      }
-      if (options?.allowAll) {
-        return null;
-      }
-      try {
-        const rawCached = localStorage.getItem('foodie_cached_branches');
-        if (rawCached) {
-          const branches = JSON.parse(rawCached);
-          if (Array.isArray(branches) && branches.length > 0) {
-            const primary = branches.find((b) => (b.is_primary || b.isMainBranch) && (b.status === 'Active' || b.is_active !== false)) ||
-                            branches.find((b) => b.is_primary || b.isMainBranch) ||
-                            branches.find((b) => b.status === 'Active' || b.is_active !== false) ||
-                            branches[0];
-            return primary ? cleanBranchParam(primary.id) : null;
-          }
-        }
-      } catch {}
+      localStorage.removeItem('foodie_admin_selected_branch');
       return null;
     }
     return cleanedStored;
@@ -337,7 +321,19 @@ export async function removeBranch(id) {
   const data = await staffJson(`/branches/${id}/`, { method: 'DELETE' });
   branchMemo = null;
   try {
+    const selected = localStorage.getItem('foodie_admin_selected_branch');
+    if (String(selected) === String(id)) {
+      localStorage.setItem('foodie_admin_selected_branch', 'ALL');
+      sessionStorage.setItem('foodie_admin_selected_branch', 'ALL');
+    }
+    const pub = localStorage.getItem('foodie_public_branch');
+    if (String(pub) === String(id)) {
+      localStorage.removeItem('foodie_public_branch');
+      sessionStorage.removeItem('foodie_public_branch');
+    }
+    localStorage.removeItem('foodie_cached_branches');
     window.dispatchEvent(new CustomEvent('foodie_branches_updated'));
+    window.dispatchEvent(new CustomEvent('foodie_branch_selected', { detail: { branchId: 'ALL' } }));
   } catch (e) {}
   return data;
 }
@@ -578,8 +574,8 @@ async function stockMap(branchId = null) {
 }
 
 export async function listFoods(branchId = null) {
-  let targetBranch = cleanBranchParam(branchId);
-  if (!targetBranch) {
+  let targetBranch = branchId === 'ALL' ? null : cleanBranchParam(branchId);
+  if (!targetBranch && branchId !== 'ALL') {
     targetBranch = getSelectedAdminBranch();
   }
   const query = targetBranch ? ('&branch=' + encodeURIComponent(targetBranch)) : '';
@@ -877,8 +873,11 @@ function mapCoupon(c) {
 }
 
 export async function listCoupons(branchId = null) {
+  if (branchId === 'ALL') {
+    return listOf(await staffJson('/coupons/')).map(mapCoupon);
+  }
   let targetBranch = cleanBranchParam(branchId);
-  if (!targetBranch) {
+  if (!targetBranch && branchId !== 'ALL') {
     targetBranch = getSelectedAdminBranch();
   }
   const query = targetBranch ? `?branch=${encodeURIComponent(targetBranch)}` : '';

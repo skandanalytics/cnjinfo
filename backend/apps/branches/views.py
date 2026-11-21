@@ -11,7 +11,7 @@ from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 
 from apps.accounts.mixins import AuditedMixin
-from apps.accounts.permissions import IsAdminLevel, IsOwnerLevel, IsStaffMember, StaffReadAdminWrite
+from apps.accounts.permissions import IsAdminLevel, IsOwnerLevel, IsStaffMember, IsSuperAdmin, StaffReadAdminWrite
 from apps.accounts.scoping import BranchScopedMixin, allowed_branch_id
 from apps.accounts.services import client_ip
 from apps.orders.models import Order
@@ -38,7 +38,7 @@ class BranchViewSet(CatalogBroadcastMixin, AuditedMixin, viewsets.ModelViewSet):
 
     def get_permissions(self):
         if self.action in ("create", "destroy"):
-            return [IsOwnerLevel()]
+            return [IsSuperAdmin()]
         if self.action in ("update", "partial_update"):
             return [IsAdminLevel()]
         return [IsStaffMember()]

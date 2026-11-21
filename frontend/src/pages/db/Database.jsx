@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { staffJson, clearStaffSession, getStaffAccess } from '../../services/staffClient';
 import { clearOrderNotifications } from '../../services/notificationService';
+import { purgeBranchCaches } from '../../hooks/useBranches';
 import { staffLogin } from '../../services/adminApi';
 import api from '../../config/api';
 
@@ -319,6 +320,7 @@ export default function DatabaseConsole() {
       }
       clearOrderNotifications();
       clearStaffSession();
+      purgeBranchCaches();
       setSession(null);
       setOverview(null);
       setViewer(null);

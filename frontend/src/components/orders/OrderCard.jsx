@@ -88,11 +88,20 @@ export const OrderCard = ({
             {isSelfService || String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'COUNTER_PAID' ? (
               <span className="fw-semibold ms-1" style={{ color: '#16A34A', fontSize: '12.5px' }}>Counter Paid</span>
             ) : String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PAID' || order.is_paid || order.isPaid ? (
-              <span className="fw-semibold ms-1" style={{ color: '#16A34A', fontSize: '12.5px' }}>Paid</span>
+              <span className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px', backgroundColor: '#DCFCE7', color: '#16A34A', border: '1px solid #BBF7D0' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#16A34A' }} />
+                Paid
+              </span>
             ) : (String(order.paymentStatus || order.payment_status || '').toUpperCase() === 'PENDING' || String(order.payment_method || '').toUpperCase() === 'UPI') ? (
-              <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle rounded-pill px-2 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>Pending Verification (UPI)</span>
+              <span className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px', backgroundColor: '#FEF3C7', color: '#B45309', border: '1px solid #FCD34D' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#D97706' }} />
+                Pending Verification
+              </span>
             ) : (
-              <span className="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-0.5 fw-semibold" style={{ fontSize: '11px' }}>Unpaid</span>
+              <span className="badge rounded-pill fw-semibold px-2.5 py-1 d-inline-flex align-items-center gap-1.5" style={{ fontSize: '11px', backgroundColor: '#FEE2E2', color: '#DC2626', border: '1px solid #FECACA' }}>
+                <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: '#DC2626' }} />
+                Unpaid
+              </span>
             )}
           </div>
         </div>
@@ -109,7 +118,7 @@ export const OrderCard = ({
               title="View E-Bill"
             >
               <FiEye size={13} className="flex-shrink-0" />
-              <span>Show Bill</span>
+              <span>View Bill</span>
             </button>
             <button 
               onClick={() => onViewDetails(order)} 

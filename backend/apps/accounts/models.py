@@ -114,7 +114,9 @@ class Employee(models.Model):
 
     def clean(self):
         from django.core.exceptions import ValidationError
-        if self.role not in (self.Role.SUPER_ADMIN, self.Role.ADMIN) and self.branch_id is None:
+        if self.role == self.Role.SUPER_ADMIN and self.branch_id is not None:
+            raise ValidationError({"branch": "Super Admin should not be assigned a fixed branch."})
+        if self.role != self.Role.SUPER_ADMIN and self.branch_id is None:
             raise ValidationError({"branch": "Branch is required for this role."})
 
 

@@ -188,13 +188,19 @@ export const Cart = () => {
     navigate('/customer/home');
   };
 
+  const getCouponCode = (c) => {
+    if (!c) return '';
+    if (typeof c === 'string') return c.trim().toUpperCase();
+    return String(c.code || c.coupon_code || c.coupon || c.voucher || '').trim().toUpperCase();
+  };
+
   const currentNetSubtotal = Math.round(Number(serverCart?.pricing?.merchandise_total ?? getSubtotal()) * 100) / 100;
   const appliedList = Array.isArray(serverCart?.pricing?.coupons) && serverCart.pricing.coupons.length > 0
     ? serverCart.pricing.coupons
     : (Array.isArray(coupon?.appliedList) && coupon.appliedList.length > 0
         ? coupon.appliedList
         : (coupon ? [coupon] : []));
-  const appliedCodes = new Set((appliedList || []).map(a => String(a?.code || '').trim().toUpperCase()).filter(Boolean));
+  const appliedCodes = new Set((appliedList || []).map(getCouponCode).filter(Boolean));
 
   const suggestion = availableCoupons
     .filter((row) => row.is_active !== false && row.status !== 'Inactive')
@@ -584,7 +590,10 @@ export const Cart = () => {
                       };
                     };
 
-                    const unappliedCoupons = (availableCoupons || []).filter(c => !appliedCodes.has(String(c?.code || '').trim().toUpperCase()));
+                    const unappliedCoupons = (availableCoupons || []).filter(c => {
+                      const code = getCouponCode(c);
+                      return code && !appliedCodes.has(code);
+                    });
                     const toDisplay = showAllCoupons ? unappliedCoupons : unappliedCoupons.slice(0, 4);
                     
                     return (

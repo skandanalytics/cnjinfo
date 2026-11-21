@@ -15,7 +15,7 @@ def create_admin():
         "name": "Phase 9 Admin",
         "user_type": User.UserType.EMPLOYEE,
         "is_staff": True,
-        "is_superuser": True
+        "is_superuser": False
     })
     
     if created or not user.has_usable_password():

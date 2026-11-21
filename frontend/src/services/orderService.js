@@ -2,7 +2,7 @@ import api, { clearApiCache } from './api';
 import { mockOrders } from '../data/mockData/orders';
 import { inventoryService } from './inventoryService';
 import { tableService } from './tableService';
-import { clearNotificationCache } from './notificationService';
+import { clearNotificationCache, notifyOrderCreated } from './notificationService';
 import { productService } from './productService';
 
 const _isValidNumericId = (id) => {
@@ -1446,12 +1446,13 @@ export const orderService = {
     }
 
     try {
-      const notifMsg = `New Order #${newOrderId} received! Table: ${orderTableInfo.tableNumber || 'N/A'}, Total: ₹${data.total}`;
-      const localNotif = { id: `local_${Date.now()}`, text: notifMsg, read: false, date: new Date().toISOString() };
-      const existingRaw = localStorage.getItem('foodie_live_order_notifications');
-      const existing = existingRaw ? JSON.parse(existingRaw) : [];
-      localStorage.setItem('foodie_live_order_notifications', JSON.stringify([localNotif, ...existing].slice(0, 50)));
-      clearNotificationCache();
+      notifyOrderCreated({
+        id: newOrderId,
+        order_number: newOrderId,
+        table: orderTableInfo.tableNumber || 'N/A',
+        total_amount: data.total,
+        branch_id: data.branch_id || data.branchId
+      });
     } catch (e) { }
 
     try {

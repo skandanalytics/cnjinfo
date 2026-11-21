@@ -58,6 +58,8 @@ export const Tables = () => {
 
   const isFetchingRef = React.useRef(false);
   const lastBranchRef = React.useRef(typeof window !== 'undefined' ? (localStorage.getItem('foodie_admin_selected_branch') || '') : '');
+  const targetBranchIdRef = React.useRef(targetBranchId);
+  React.useEffect(() => { targetBranchIdRef.current = targetBranchId; }, [targetBranchId]);
   const [trackingOrder, setTrackingOrder] = useState(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [viewingBillOrder, setViewingBillOrder] = useState(null);
@@ -120,9 +122,10 @@ export const Tables = () => {
     }
   };
 
-  const fetchTablesSilently = async () => {
+  const fetchTablesSilently = async (branchIdOverride = undefined) => {
+    const branchToUse = branchIdOverride !== undefined ? branchIdOverride : targetBranchIdRef.current;
     try {
-      const data = await tableService.getTables(targetBranchId);
+      const data = await tableService.getTables(branchToUse);
       if (Array.isArray(data)) {
         setTables(data);
         setTablesLoadError('');
@@ -131,7 +134,7 @@ export const Tables = () => {
       setTablesLoadError(tablesAuthMessage(e));
     }
     try {
-      const dishesData = await productService.getProducts(true, targetBranchId).catch(() => []);
+      const dishesData = await productService.getProducts(true, branchToUse).catch(() => []);
       const orderable = (dishesData || []).some((dish) => Number(dish.stock) > 0 && dish.status !== 'Out of Stock');
       setHasDishes(orderable);
     } catch {
@@ -146,21 +149,21 @@ export const Tables = () => {
       const nextBranch = String(e?.detail?.branchId ?? localStorage.getItem('foodie_admin_selected_branch') ?? '');
       if (lastBranchRef.current === nextBranch) return;
       lastBranchRef.current = nextBranch;
-      if (e?.detail?.branchId && e.detail.branchId !== 'ALL') {
-        setTargetBranchId(Number(e.detail.branchId));
-      } else {
-        setTargetBranchId(null);
-      }
+      const nextBranchId = (e?.detail?.branchId && e.detail.branchId !== 'ALL') ? Number(e.detail.branchId) : null;
+      setTargetBranchId(nextBranchId);
+      targetBranchIdRef.current = nextBranchId;
       fetchTables();
     };
     window.addEventListener('foodie_tables_updated', handleUpdated);
     window.addEventListener('foodie_orders_updated', handleUpdated);
     window.addEventListener('foodie_branch_selected', handleBranchSync);
+    window.addEventListener('foodie_data_sync_refetch', handleUpdated);
     window.addEventListener('storage', handleUpdated);
     return () => {
       window.removeEventListener('foodie_tables_updated', handleUpdated);
       window.removeEventListener('foodie_orders_updated', handleUpdated);
       window.removeEventListener('foodie_branch_selected', handleBranchSync);
+      window.removeEventListener('foodie_data_sync_refetch', handleUpdated);
       window.removeEventListener('storage', handleUpdated);
     };
   }, []);
